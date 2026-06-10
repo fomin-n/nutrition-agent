@@ -1,0 +1,95 @@
+import re
+from dataclasses import dataclass
+
+from app.schemas.nutrition import NutritionPer100g
+
+
+@dataclass(frozen=True)
+class FallbackFood:
+    name: str
+    calories_kcal: float
+    protein_g: float
+    fat_g: float
+    carbs_g: float
+    aliases: tuple[str, ...]
+
+    def as_nutrition(self) -> NutritionPer100g:
+        return NutritionPer100g(
+            food_name=self.name,
+            calories_kcal=self.calories_kcal,
+            protein_g=self.protein_g,
+            fat_g=self.fat_g,
+            carbs_g=self.carbs_g,
+            source="fallback",
+            source_id=self.name,
+        )
+
+
+FALLBACK_FOODS: tuple[FallbackFood, ...] = (
+    FallbackFood("cooked white rice", 130, 2.7, 0.3, 28.2, ("rice", "white rice", "cooked rice")),
+    FallbackFood("cooked pasta", 158, 5.8, 0.9, 30.9, ("pasta", "spaghetti", "noodles")),
+    FallbackFood("cooked buckwheat", 92, 3.4, 0.6, 19.9, ("buckwheat", "kasha")),
+    FallbackFood("chicken breast cooked", 165, 31.0, 3.6, 0.0, ("chicken", "chicken breast")),
+    FallbackFood("beef cooked", 250, 26.0, 15.0, 0.0, ("beef", "steak", "ground beef")),
+    FallbackFood("salmon cooked", 206, 22.0, 12.0, 0.0, ("salmon", "cooked salmon")),
+    FallbackFood("egg", 143, 12.6, 9.5, 0.7, ("egg", "eggs")),
+    FallbackFood("olive oil", 884, 0.0, 100.0, 0.0, ("olive oil", "oil")),
+    FallbackFood("butter", 717, 0.9, 81.1, 0.1, ("butter",)),
+    FallbackFood("potato boiled", 87, 1.9, 0.1, 20.1, ("potato", "boiled potato", "potatoes")),
+    FallbackFood("bread", 265, 9.0, 3.2, 49.0, ("bread", "toast", "slice of bread", "sourdough")),
+    FallbackFood("banana", 89, 1.1, 0.3, 22.8, ("banana", "bananas")),
+    FallbackFood("apple", 52, 0.3, 0.2, 13.8, ("apple", "apples")),
+    FallbackFood("tomato", 18, 0.9, 0.2, 3.9, ("tomato", "tomatoes")),
+    FallbackFood("cucumber", 15, 0.7, 0.1, 3.6, ("cucumber", "cucumbers")),
+    FallbackFood(
+        "mixed salad vegetables",
+        20,
+        1.2,
+        0.2,
+        4.0,
+        ("mixed salad vegetables", "salad vegetables", "lettuce", "green salad", "mixed salad"),
+    ),
+    FallbackFood("cheese", 402, 25.0, 33.0, 1.3, ("cheese", "cheddar", "hard cheese")),
+    FallbackFood("yogurt plain", 61, 3.5, 3.3, 4.7, ("yogurt", "plain yogurt", " yoghurt")),
+    FallbackFood("milk", 61, 3.2, 3.3, 4.8, ("milk", "whole milk")),
+    FallbackFood("oatmeal cooked", 71, 2.5, 1.5, 12.0, ("oatmeal", "porridge", "cooked oats")),
+    # Extra broad MVP fallbacks for common free-text meals.
+    FallbackFood("pizza", 266, 11.0, 10.0, 33.0, ("pizza", "slice pizza", "pizza slice")),
+    FallbackFood("hamburger", 254, 12.0, 10.0, 28.0, ("burger", "hamburger")),
+    FallbackFood("vegetable soup", 45, 2.0, 1.5, 6.5, ("soup", "vegetable soup")),
+)
+
+
+def normalize_food_query(query: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", query.lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def fallback_names() -> set[str]:
+    names: set[str] = set()
+    for food in FALLBACK_FOODS:
+        names.add(food.name)
+        names.update(food.aliases)
+    return names
+
+
+def lookup_fallback_food(query: str) -> NutritionPer100g | None:
+    normalized = normalize_food_query(query)
+    if not normalized:
+        return None
+
+    best: FallbackFood | None = None
+    best_alias_len = 0
+    for food in FALLBACK_FOODS:
+        aliases = (food.name, *food.aliases)
+        for alias in aliases:
+            normalized_alias = normalize_food_query(alias)
+            if normalized == normalized_alias:
+                return food.as_nutrition()
+            if (
+                re.search(rf"\b{re.escape(normalized_alias)}\b", normalized)
+                and len(normalized_alias) > best_alias_len
+            ):
+                best = food
+                best_alias_len = len(normalized_alias)
+    return best.as_nutrition() if best else None
