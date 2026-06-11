@@ -18,6 +18,8 @@ temp/
 temp_images/
 downloaded_images/
 telegram_images/
+reports/eval/*
+!reports/eval/.gitkeep
 *.jpg
 *.jpeg
 *.png

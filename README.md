@@ -105,6 +105,31 @@ Current checks include:
 - Unit tests for calculator aggregation, fallback lookup, graph routing, refusal behavior, auth, and secret hygiene.
 - A local adversarial eval suite for off-topic, prompt-injection, hacking, unsafe diet, and medical requests.
 - Mock evaluation mode that can run without API keys.
+- A tiny nutrition-quality eval using 3 rows derived from OpenIntro's public `fastfood` dataset.
+
+Run the adversarial safety eval:
+
+```bash
+uv run python -m app.evals.run_eval --mock
+```
+
+Run the tiny nutrition eval:
+
+```bash
+uv run python -m app.evals.run_nutrition_eval --max-examples 3
+```
+
+The nutrition eval uses the OpenIntro `fastfood` dataset because it is public, small, downloadable as CSV without authentication, and includes calories plus protein, fat, and carbohydrate values. The tiny committed sample lives in `app/evals/fastfood_tiny_sample.jsonl`; the full dataset is not committed. OpenIntro describes the dataset as 515 fast-food items with nutrition fields such as calories, total fat, total carbs, and protein. OpenIntro's license page says most OpenIntro resources are released under Creative Commons BY-SA 3.0; see the dataset and license pages for attribution details:
+
+- Dataset: https://www.openintro.org/data/index.php?data=fastfood
+- CSV: https://www.openintro.org/data/csv/fastfood.csv
+- License: https://www.openintro.org/license/
+
+By default, the nutrition eval runs exactly 3 examples with `use_llm=False`, so it exercises the deterministic/local graph path and does not call OpenAI. Processing more than 3 examples requires `--allow-more-examples`; using LLM-backed graph paths requires both `--use-llm` and `--allow-paid-api`.
+
+Metrics are intentionally simple: predicted calorie midpoint versus ground-truth calories, absolute error, percentage error, mean absolute calorie error, and macro errors for protein, fat, and carbs when present. Results are written to `reports/eval/` as timestamped JSON and Markdown files; generated result files are ignored by git.
+
+This first nutrition eval is a smoke test, not a benchmark. Fast-food menu rows describe full prepared items, while the default no-LLM parser may map them to generic ingredients with assumed portions. Portion estimates are recorded for debugging but not scored because the dataset does not include serving weights.
 
 Future evaluation targets:
 
@@ -164,4 +189,3 @@ uv run python -m app.evals.run_eval --mock
 Deployment is intentionally documented with placeholders only. Do not commit real server addresses, usernames, bot tokens, API keys, auth databases, logs, downloaded images, or environment files.
 
 See [AGENTS.md](AGENTS.md) for contributor-oriented technical notes.
-
