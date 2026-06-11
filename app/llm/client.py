@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     openai_critic_model: str = "gpt-4.1-mini"
     openai_moderation_enabled: bool = True
 
+    enable_phoenix_tracing: bool = False
+    phoenix_project_name: str = "nutrition-agent"
+    phoenix_collector_endpoint: str = "http://127.0.0.1:6006/v1/traces"
+
     nutrition_cache_dir: str = ".cache/nutrition-agent"
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"

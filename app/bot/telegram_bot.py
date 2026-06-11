@@ -15,10 +15,12 @@ from app.bot.handlers import (
     whoami,
 )
 from app.llm.client import get_settings, reveal_secret
+from app.observability.phoenix import configure_phoenix_tracing
 
 
 def build_application() -> Application:
     settings = get_settings()
+    configure_phoenix_tracing(settings)
     token = reveal_secret(settings.telegram_bot_token)
     if not token:
         raise RuntimeError(

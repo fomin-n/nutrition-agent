@@ -142,8 +142,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _process_and_reply(update: Update, *, text: str | None, image_path: str | None = None) -> None:
+    user = update.effective_user
+    chat = update.effective_chat
+    message = update.effective_message
     try:
-        answer = await asyncio.to_thread(process_request, text=text, image_path=image_path, source="telegram")
+        answer = await asyncio.to_thread(
+            process_request,
+            text=text,
+            image_path=image_path,
+            source="telegram",
+            user_id=user.id if user else None,
+            session_id=chat.id if chat else None,
+            trace_metadata={
+                "telegram_message_id": message.message_id if message else None,
+            },
+        )
     except Exception:
         LOGGER.exception("Failed to process Telegram message")
         answer = "I couldn’t process that safely. Please try again with a clear meal description or food photo."

@@ -99,6 +99,60 @@ Model names are configurable through environment variables so the project can mo
 
 External nutrition data can be incomplete or inconsistent, especially for packaged products. The app surfaces assumptions rather than claiming precision.
 
+## Phoenix Observability
+
+The project includes a minimal self-hosted Arize Phoenix setup for LangChain/LangGraph tracing. Phoenix is optional and disabled by default.
+
+Start Phoenix on the server:
+
+```bash
+./scripts/phoenix.sh start
+```
+
+Phoenix stores SQLite-backed data in the Docker volume `nutrition_agent_phoenix_data` and binds only to localhost:
+
+- `127.0.0.1:6006` for the UI and OTLP HTTP collector.
+- `127.0.0.1:4317` for the OTLP gRPC collector.
+
+Access the UI through an SSH tunnel:
+
+```bash
+ssh -L 6006:127.0.0.1:6006 <user>@<server-ip>
+```
+
+Then open:
+
+```text
+http://localhost:6006
+```
+
+Enable tracing for the bot by setting:
+
+```bash
+ENABLE_PHOENIX_TRACING=true
+PHOENIX_PROJECT_NAME=nutrition-agent
+PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces
+```
+
+If the app runs in Docker Compose on the same network as Phoenix, use `PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces` instead. If Phoenix is disabled or unavailable, the app logs a warning and continues without tracing.
+
+Useful commands:
+
+```bash
+./scripts/phoenix.sh status
+./scripts/phoenix.sh logs
+./scripts/phoenix.sh stop
+```
+
+Smoke check:
+
+1. Start Phoenix.
+2. Open the UI through the SSH tunnel.
+3. Enable tracing and restart the bot.
+4. Send one meal request.
+5. Confirm a trace appears under the `nutrition-agent` project.
+6. Disable tracing and confirm the bot still answers normally.
+
 ## Evaluation
 
 Current checks include:

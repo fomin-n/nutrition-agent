@@ -1,0 +1,18 @@
+services:
+  phoenix:
+    image: arizephoenix/phoenix:17.2.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6006:6006" # UI and OTLP HTTP collector
+      - "127.0.0.1:4317:4317" # OTLP gRPC collector
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+      PHOENIX_TELEMETRY_ENABLED: "false"
+      PHOENIX_ALLOW_EXTERNAL_RESOURCES: "false"
+      PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: "14"
+    volumes:
+      - phoenix_data:/mnt/data
+
+volumes:
+  phoenix_data:
+    name: nutrition_agent_phoenix_data

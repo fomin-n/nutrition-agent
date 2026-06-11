@@ -11,6 +11,7 @@ This document is for contributors and coding agents working on `nutrition-agent`
 - `app/auth/`: SQLite-backed Telegram authorization service.
 - `app/cli/`: operational CLI helpers such as access-key management.
 - `app/i18n.py`: lightweight English/Russian language detection and localized user-facing strings.
+- `app/observability/`: optional Phoenix/OpenInference tracing setup.
 - `app/tools/`: USDA, Open Food Facts, fallback nutrition, cache, and image helpers.
 - `app/schemas/`: Pydantic models for inputs, safety decisions, nutrition values, and outputs.
 - `app/evals/`: lightweight adversarial eval data and runner.
@@ -69,6 +70,14 @@ Settings are loaded from environment variables via `pydantic-settings`:
 The current MVP uses OpenAI models for structured classification/parsing and image recognition when enabled. Macro arithmetic, final formatting, and critic sanity checks are deterministic Python in the current implementation.
 
 The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
+
+## Phoenix Observability
+
+Phoenix tracing is optional and must be enabled explicitly with `ENABLE_PHOENIX_TRACING=true`. The self-hosted Compose file is `deploy/phoenix/docker-compose.yml`; it runs one `arizephoenix/phoenix:17.2.0` container with a named `nutrition_agent_phoenix_data` volume and localhost-only bindings for ports `6006` and `4317`.
+
+The app uses `arize-phoenix-otel` with `auto_instrument=True` and `openinference-instrumentation-langchain`, which also covers LangGraph. Trace context is attached around `process_request` with user ID, session ID, request language/type, model names, app version, and graph version. Do not add raw prompts, auth keys, tokens, usernames, or display names to trace metadata.
+
+Host-based deployment should use `PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces`. If the app is later moved into Docker Compose on the same network as Phoenix, use `http://phoenix:6006/v1/traces`.
 
 ## Authorization Design
 

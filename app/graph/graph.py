@@ -14,7 +14,13 @@ from app.graph.nodes.safety_gate import ask_clarification, input_moderation, ref
 from app.graph.nodes.synthesizer import synthesize_answer
 from app.graph.nodes.text_parser import parse_text_meal
 from app.graph.state import NutritionGraphState
+from app.i18n import detect_language
+from app.llm.client import get_settings
+from app.observability.phoenix import configure_phoenix_tracing, phoenix_trace_context
 from app.schemas.inputs import UserInput
+
+APP_VERSION = "0.1.0"
+GRAPH_VERSION = "nutrition-graph-v1"
 
 
 def build_graph():
@@ -93,19 +99,60 @@ def process_request(
     image_mime_type: str | None = None,
     source: str = "telegram",
     use_llm: bool = True,
+    user_id: str | int | None = None,
+    session_id: str | int | None = None,
+    trace_metadata: dict[str, str | int | float | bool | None] | None = None,
 ) -> str:
+    settings = get_settings()
+    configure_phoenix_tracing(settings)
     graph = get_compiled_graph()
-    result = graph.invoke(
-        {
-            "user_input": UserInput(
-                text=text,
-                image_path=image_path,
-                image_mime_type=image_mime_type,
-                source=source,  # type: ignore[arg-type]
-            ),
-            "use_llm": use_llm,
-        }
+    metadata = _trace_metadata(
+        text=text,
+        image_path=image_path,
+        source=source,
+        use_llm=use_llm,
+        settings=settings,
+        extra=trace_metadata,
     )
+    with phoenix_trace_context(user_id=user_id, session_id=session_id, metadata=metadata):
+        result = graph.invoke(
+            {
+                "user_input": UserInput(
+                    text=text,
+                    image_path=image_path,
+                    image_mime_type=image_mime_type,
+                    source=source,  # type: ignore[arg-type]
+                ),
+                "use_llm": use_llm,
+            }
+        )
     final = result.get("final_estimate")
     return final.text if final else "I couldn’t generate a response."
 
+
+def _trace_metadata(
+    *,
+    text: str | None,
+    image_path: str | None,
+    source: str,
+    use_llm: bool,
+    settings,
+    extra: dict[str, str | int | float | bool | None] | None,
+) -> dict[str, str | int | float | bool | None]:
+    has_text = bool(text)
+    has_image = bool(image_path)
+    request_type = "mixed" if has_text and has_image else "photo" if has_image else "text"
+    metadata: dict[str, str | int | float | bool | None] = {
+        "app_version": APP_VERSION,
+        "graph_version": GRAPH_VERSION,
+        "source": source,
+        "request_type": request_type,
+        "request_language": detect_language(text, has_image=has_image),
+        "use_llm": use_llm,
+        "openai_text_model": settings.openai_text_model,
+        "openai_vision_model": settings.openai_vision_model,
+        "openai_critic_model": settings.openai_critic_model,
+    }
+    if extra:
+        metadata.update(extra)
+    return metadata
