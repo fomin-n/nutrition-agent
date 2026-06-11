@@ -37,6 +37,18 @@ def test_graph_russian_nutrition_question_no_llm() -> None:
     assert "яйца" in answer
 
 
+def test_graph_russian_oatmeal_question_no_llm() -> None:
+    answer = process_request(
+        text="Сколько примерно калорий в 100г овсяной каши?",
+        source="test",
+        use_llm=False,
+    )
+    assert "Оценка калорий:" in answer
+    assert "овсянка" in answer
+    assert "Я могу оценивать только" not in answer
+    assert "I can only estimate" not in answer
+
+
 def test_graph_english_caesar_salad_no_llm() -> None:
     answer = process_request(
         text="Estimate calories and macros for a chicken Caesar salad",

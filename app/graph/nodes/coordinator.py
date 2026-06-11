@@ -51,6 +51,7 @@ FOOD_WORDS = fallback_names() | {
     "порция",
     "калория",
     "калории",
+    "калорий",
     "калорийность",
     "ккал",
     "белок",
@@ -58,7 +59,9 @@ FOOD_WORDS = fallback_names() | {
     "белки",
     "жир",
     "жиры",
+    "жиров",
     "углеводы",
+    "углеводов",
     "макросы",
     "нутриенты",
 }
@@ -125,6 +128,10 @@ def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:
             )
             if llm_decision.language == "unknown":
                 llm_decision.language = normalized.language
+            if local_decision.route in {"text_meal", "dish_photo", "image_with_text", "packaged_food"} and (
+                llm_decision.route == "off_topic"
+            ):
+                return {"scope_decision": local_decision}
             return {"scope_decision": llm_decision}
         except Exception:
             return {"scope_decision": local_decision}
@@ -238,7 +245,11 @@ def route(state: NutritionGraphState) -> NutritionGraphState:
 def _contains_food_signal(normalized_text: str) -> bool:
     if any(re.search(rf"\b{re.escape(word)}\b", normalized_text) for word in FOOD_WORDS):
         return True
-    return bool(re.search(r"\b\d+\s*(g|gram|grams|kg|oz|cup|cups|tbsp|tablespoon|slice|slices)\b", normalized_text))
+    unit_pattern = (
+        r"g|gram|grams|kg|oz|cup|cups|tbsp|tablespoon|slice|slices|"
+        r"г|гр|грамм|грамма|граммов|кг|чашка|чашки|чашек|кусок|куска|кусочка|ломтик|ломтика"
+    )
+    return bool(re.search(rf"\b\d+\s*({unit_pattern})\b", normalized_text))
 
 
 def _contains_meal_detail(normalized_text: str) -> bool:
@@ -273,6 +284,7 @@ def _contains_meal_detail(normalized_text: str) -> bool:
         "порция",
         "калория",
         "калории",
+        "калорий",
         "калорийность",
         "ккал",
         "белок",
@@ -280,7 +292,9 @@ def _contains_meal_detail(normalized_text: str) -> bool:
         "белки",
         "жир",
         "жиры",
+        "жиров",
         "углеводы",
+        "углеводов",
         "макросы",
         "нутриенты",
     }

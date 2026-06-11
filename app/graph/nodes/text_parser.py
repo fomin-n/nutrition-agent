@@ -166,9 +166,10 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
                 confidence="medium" if "assumed" in note else "high",
             )
         )
+        grams_unit = "г" if response_language(language) == "ru" else "g"
         assumptions.append(
             f"{_food_label(food.name, language)}: "
-            f"{round(grams_min)}-{round(grams_max)} g ({_localize_note(note, language)})."
+            f"{round(grams_min)}-{round(grams_max)} {grams_unit} ({_localize_note(note, language)})."
         )
 
     if not ingredients:
