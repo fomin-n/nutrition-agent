@@ -1,4 +1,5 @@
 from app.graph.state import NutritionGraphState
+from app.i18n import localize_clarification_question, state_language
 from app.llm.client import ModerationService, local_moderate_text
 from app.schemas.outputs import FinalEstimate
 from app.schemas.safety import ModerationDecision
@@ -17,8 +18,20 @@ def refuse(state: NutritionGraphState) -> NutritionGraphState:
     scope = state.get("scope_decision")
     moderation = state.get("input_moderation", ModerationDecision())
     unsafe = (scope and scope.is_unsafe) or not moderation.allowed
+    language = state_language(state)
 
-    if unsafe:
+    if language == "ru" and unsafe:
+        text = (
+            "Я могу оценивать калории и макронутриенты блюд по тексту или фото еды, "
+            "но не могу помогать с небезопасными диетами, медицинской нутритивной терапией, "
+            "взломом или извлечением служебных инструкций."
+        )
+    elif language == "ru":
+        text = (
+            "Я могу оценивать только примерные калории и макронутриенты блюд по описанию "
+            "или фото еды. С этим запросом я не могу помочь."
+        )
+    elif unsafe:
         text = (
             "I can estimate calories and macros for meals from text or food photos, "
             "but I can’t help with unsafe diet advice, medical nutrition therapy, "
@@ -43,6 +56,7 @@ def ask_clarification(state: NutritionGraphState) -> NutritionGraphState:
     scope = state.get("scope_decision")
     meal = state.get("meal")
     critic = state.get("critic_result")
+    language = state_language(state)
 
     question = None
     if critic and critic.clarification_question:
@@ -52,11 +66,18 @@ def ask_clarification(state: NutritionGraphState) -> NutritionGraphState:
     elif scope and scope.clarification_question:
         question = scope.clarification_question
     else:
-        question = "What foods are in the meal and roughly how much of each?"
+        question = None
+
+    question = localize_clarification_question(question, language)
+
+    if language == "ru":
+        text = f"Нужно еще немного информации для надежной оценки: {question}"
+    else:
+        text = f"I need one more detail to estimate this reliably: {question}"
 
     return {
         "final_estimate": FinalEstimate(
-            text=f"I need one more detail to estimate this reliably: {question}",
+            text=text,
             confidence="low",
             is_refusal=False,
             is_clarification=True,

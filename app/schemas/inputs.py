@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.i18n import LanguageCode
+
 
 class UserInput(BaseModel):
     """Raw request entering the graph."""
@@ -34,4 +36,4 @@ class NormalizedInput(BaseModel):
     image_mime_type: str | None = None
     has_text: bool = False
     has_image: bool = False
-
+    language: LanguageCode = "unknown"

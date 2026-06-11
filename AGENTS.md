@@ -10,6 +10,7 @@ This document is for contributors and coding agents working on `nutrition-agent`
 - `app/llm/`: settings, OpenAI/LangChain client setup, and structured-output helpers.
 - `app/auth/`: SQLite-backed Telegram authorization service.
 - `app/cli/`: operational CLI helpers such as access-key management.
+- `app/i18n.py`: lightweight English/Russian language detection and localized user-facing strings.
 - `app/tools/`: USDA, Open Food Facts, fallback nutrition, cache, and image helpers.
 - `app/schemas/`: Pydantic models for inputs, safety decisions, nutrition values, and outputs.
 - `app/evals/`: lightweight adversarial eval data and runner.
@@ -66,6 +67,8 @@ Settings are loaded from environment variables via `pydantic-settings`:
 - `OPENAI_MODERATION_ENABLED`
 
 The current MVP uses OpenAI models for structured classification/parsing and image recognition when enabled. Macro arithmetic, final formatting, and critic sanity checks are deterministic Python in the current implementation.
+
+The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
 
 ## Authorization Design
 
@@ -153,4 +156,3 @@ Do not commit real server addresses, usernames, hostnames, private paths, servic
 - Prefer Pydantic schemas for structured data.
 - Keep comments short and useful.
 - Do not introduce broad refactors while making narrow safety changes.
-

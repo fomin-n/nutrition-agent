@@ -2,6 +2,7 @@ import re
 
 from app.graph.nodes.image_recognizer import recognize_image_with_llm
 from app.graph.state import NutritionGraphState
+from app.i18n import LanguageCode, response_language
 from app.llm.client import has_openai_key
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import normalize_food_query
@@ -16,18 +17,24 @@ def recognize_packaging(state: NutritionGraphState) -> NutritionGraphState:
                     normalized.image_path,
                     normalized.image_mime_type,
                     caption=normalized.text,
+                    language=normalized.language,
                 )
             }
         except Exception:
             pass
-    return {"meal": recognize_packaging_locally(normalized.text or "")}
+    return {"meal": recognize_packaging_locally(normalized.text or "", language=normalized.language)}
 
 
-def recognize_packaging_locally(text: str) -> MealUnderstanding:
+def recognize_packaging_locally(text: str, *, language: LanguageCode = "unknown") -> MealUnderstanding:
     normalized = normalize_food_query(text)
     grams = _extract_grams(normalized) or 100.0
     product_name = _clean_product_name(text)
-    assumption = f"{product_name}: {round(grams * 0.9)}-{round(grams * 1.1)} g packaged-food serving."
+    if response_language(language) == "ru":
+        assumption = f"{product_name}: {round(grams * 0.9)}-{round(grams * 1.1)} g порция упакованного продукта."
+        notes = "упакованный продукт определен по подписи или OCR"
+    else:
+        assumption = f"{product_name}: {round(grams * 0.9)}-{round(grams * 1.1)} g packaged-food serving."
+        notes = "packaged product inferred from caption/OCR"
     return MealUnderstanding(
         dish_name=product_name,
         ingredients=[
@@ -35,7 +42,7 @@ def recognize_packaging_locally(text: str) -> MealUnderstanding:
                 name=product_name,
                 grams_min=grams * 0.9,
                 grams_max=grams * 1.1,
-                notes="packaged product inferred from caption/OCR",
+                notes=notes,
                 confidence="low" if product_name == "packaged food" else "medium",
             )
         ],
@@ -55,4 +62,3 @@ def _clean_product_name(text: str) -> str:
     cleaned = re.sub(r"(?i)\b(barcode|nutrition facts|label|packaged|package|wrapper|product)\b", " ", text)
     cleaned = " ".join(cleaned.split())
     return cleaned[:80] if cleaned else "packaged food"
-

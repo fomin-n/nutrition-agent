@@ -60,7 +60,7 @@ flowchart TD
 - **Telegram input** handles text messages and one photo with an optional caption.
 - **Authorization gate** blocks unauthenticated users before any model call, image download, nutrition lookup, or graph execution.
 - **Input moderation** applies conservative local checks and can use OpenAI moderation when configured.
-- **Scope classifier** decides whether the request is food-related, off-topic, unsafe, or needs clarification.
+- **Scope classifier** decides whether the request is food-related, off-topic, unsafe, or needs clarification. English and Russian meal requests are supported; image-only requests default to English responses.
 - **Coordinator/router** sends the request to a text, image, combined image+text, or packaged-food branch.
 - **Text meal parser** extracts ingredients and practical gram ranges from a written meal description.
 - **Image meal recognizer** uses a vision-capable model to identify visible food and estimate portion ranges.
@@ -79,6 +79,7 @@ Model names are configurable through environment variables so the project can mo
 - `OPENAI_VISION_MODEL`: food-photo recognition and image+caption interpretation.
 - `OPENAI_CRITIC_MODEL`: reserved for model-backed critic checks; the current MVP uses deterministic critic logic.
 - Answer synthesis is deterministic in the current MVP; the graph does not ask the model to invent totals or perform arithmetic.
+- User-facing estimates, clarifications, and refusals are localized for English and Russian text requests. If the user sends only an image, the default response language is English.
 
 ## Safety Design
 

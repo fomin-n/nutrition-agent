@@ -1,4 +1,5 @@
 from app.graph.state import NutritionGraphState
+from app.i18n import default_clarification_question, largest_portions_question, state_language
 from app.schemas.outputs import CriticResult, FinalEstimate
 
 
@@ -6,6 +7,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
     final = state.get("final_estimate")
     totals = state.get("totals")
     meal = state.get("meal")
+    language = state_language(state)
     issues: list[str] = []
 
     if final is None:
@@ -20,7 +22,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
                 action="clarify",
                 issues=["meal parser requested clarification"],
                 clarification_question=meal.clarification_question
-                or "What foods are in the meal and roughly how much of each?",
+                or default_clarification_question(language),
             )
         }
 
@@ -29,7 +31,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
             "critic_result": CriticResult(
                 action="clarify",
                 issues=["missing deterministic totals"],
-                clarification_question="What foods are in the meal and roughly how much of each?",
+                clarification_question=default_clarification_question(language),
             )
         }
 
@@ -39,7 +41,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
             "critic_result": CriticResult(
                 action="clarify",
                 issues=["zero calorie estimate"],
-                clarification_question="What foods are in the meal and roughly how much of each?",
+                clarification_question=default_clarification_question(language),
             )
         }
 
@@ -50,7 +52,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
             "critic_result": CriticResult(
                 action="clarify",
                 issues=["estimate range is too wide"],
-                clarification_question="Can you share approximate portion sizes for the largest items?",
+                clarification_question=largest_portions_question(language),
             )
         }
 
@@ -82,4 +84,3 @@ def apply_critic_revision(state: NutritionGraphState) -> NutritionGraphState:
     if result and result.revised_text and final:
         return {"final_estimate": FinalEstimate(**{**final.model_dump(), "text": result.revised_text})}
     return {}
-

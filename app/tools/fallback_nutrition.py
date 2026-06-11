@@ -26,42 +26,76 @@ class FallbackFood:
 
 
 FALLBACK_FOODS: tuple[FallbackFood, ...] = (
-    FallbackFood("cooked white rice", 130, 2.7, 0.3, 28.2, ("rice", "white rice", "cooked rice")),
-    FallbackFood("cooked pasta", 158, 5.8, 0.9, 30.9, ("pasta", "spaghetti", "noodles")),
-    FallbackFood("cooked buckwheat", 92, 3.4, 0.6, 19.9, ("buckwheat", "kasha")),
-    FallbackFood("chicken breast cooked", 165, 31.0, 3.6, 0.0, ("chicken", "chicken breast")),
-    FallbackFood("beef cooked", 250, 26.0, 15.0, 0.0, ("beef", "steak", "ground beef")),
-    FallbackFood("salmon cooked", 206, 22.0, 12.0, 0.0, ("salmon", "cooked salmon")),
-    FallbackFood("egg", 143, 12.6, 9.5, 0.7, ("egg", "eggs")),
-    FallbackFood("olive oil", 884, 0.0, 100.0, 0.0, ("olive oil", "oil")),
-    FallbackFood("butter", 717, 0.9, 81.1, 0.1, ("butter",)),
-    FallbackFood("potato boiled", 87, 1.9, 0.1, 20.1, ("potato", "boiled potato", "potatoes")),
-    FallbackFood("bread", 265, 9.0, 3.2, 49.0, ("bread", "toast", "slice of bread", "sourdough")),
-    FallbackFood("banana", 89, 1.1, 0.3, 22.8, ("banana", "bananas")),
-    FallbackFood("apple", 52, 0.3, 0.2, 13.8, ("apple", "apples")),
-    FallbackFood("tomato", 18, 0.9, 0.2, 3.9, ("tomato", "tomatoes")),
-    FallbackFood("cucumber", 15, 0.7, 0.1, 3.6, ("cucumber", "cucumbers")),
+    FallbackFood(
+        "cooked white rice",
+        130,
+        2.7,
+        0.3,
+        28.2,
+        ("rice", "white rice", "cooked rice", "рис", "риса", "рисом"),
+    ),
+    FallbackFood(
+        "cooked pasta",
+        158,
+        5.8,
+        0.9,
+        30.9,
+        ("pasta", "spaghetti", "noodles", "паста", "пасты", "пастой", "макароны", "макарон"),
+    ),
+    FallbackFood("cooked buckwheat", 92, 3.4, 0.6, 19.9, ("buckwheat", "kasha", "гречка", "гречки")),
+    FallbackFood(
+        "chicken breast cooked",
+        165,
+        31.0,
+        3.6,
+        0.0,
+        ("chicken", "chicken breast", "курица", "курицы", "курицей", "куриная грудка"),
+    ),
+    FallbackFood("beef cooked", 250, 26.0, 15.0, 0.0, ("beef", "steak", "ground beef", "говядина", "стейк")),
+    FallbackFood("salmon cooked", 206, 22.0, 12.0, 0.0, ("salmon", "cooked salmon", "лосось", "семга")),
+    FallbackFood("egg", 143, 12.6, 9.5, 0.7, ("egg", "eggs", "omelet", "omelette", "яйцо", "яйца", "яиц", "омлет", "омлете")),
+    FallbackFood("olive oil", 884, 0.0, 100.0, 0.0, ("olive oil", "oil", "оливковое масло", "масло")),
+    FallbackFood("butter", 717, 0.9, 81.1, 0.1, ("butter", "сливочное масло")),
+    FallbackFood("potato boiled", 87, 1.9, 0.1, 20.1, ("potato", "boiled potato", "potatoes", "картофель", "картошка")),
+    FallbackFood("bread", 265, 9.0, 3.2, 49.0, ("bread", "toast", "slice of bread", "sourdough", "хлеб", "тост")),
+    FallbackFood("banana", 89, 1.1, 0.3, 22.8, ("banana", "bananas", "банан", "банана")),
+    FallbackFood("apple", 52, 0.3, 0.2, 13.8, ("apple", "apples", "яблоко", "яблока")),
+    FallbackFood("tomato", 18, 0.9, 0.2, 3.9, ("tomato", "tomatoes", "помидор", "томат", "помидоры")),
+    FallbackFood("cucumber", 15, 0.7, 0.1, 3.6, ("cucumber", "cucumbers", "огурец", "огурцы")),
     FallbackFood(
         "mixed salad vegetables",
         20,
         1.2,
         0.2,
         4.0,
-        ("mixed salad vegetables", "salad vegetables", "lettuce", "green salad", "mixed salad"),
+        (
+            "mixed salad vegetables",
+            "salad vegetables",
+            "lettuce",
+            "green salad",
+            "mixed salad",
+            "salad",
+            "салат",
+            "салата",
+            "зеленый салат",
+            "зелёный салат",
+        ),
     ),
-    FallbackFood("cheese", 402, 25.0, 33.0, 1.3, ("cheese", "cheddar", "hard cheese")),
-    FallbackFood("yogurt plain", 61, 3.5, 3.3, 4.7, ("yogurt", "plain yogurt", " yoghurt")),
-    FallbackFood("milk", 61, 3.2, 3.3, 4.8, ("milk", "whole milk")),
-    FallbackFood("oatmeal cooked", 71, 2.5, 1.5, 12.0, ("oatmeal", "porridge", "cooked oats")),
+    FallbackFood("cheese", 402, 25.0, 33.0, 1.3, ("cheese", "cheddar", "hard cheese", "сыр", "сыра", "сыром")),
+    FallbackFood("yogurt plain", 61, 3.5, 3.3, 4.7, ("yogurt", "plain yogurt", " yoghurt", "йогурт")),
+    FallbackFood("milk", 61, 3.2, 3.3, 4.8, ("milk", "whole milk", "молоко", "молока")),
+    FallbackFood("oatmeal cooked", 71, 2.5, 1.5, 12.0, ("oatmeal", "porridge", "cooked oats", "овсянка", "каша")),
     # Extra broad MVP fallbacks for common free-text meals.
-    FallbackFood("pizza", 266, 11.0, 10.0, 33.0, ("pizza", "slice pizza", "pizza slice")),
-    FallbackFood("hamburger", 254, 12.0, 10.0, 28.0, ("burger", "hamburger")),
-    FallbackFood("vegetable soup", 45, 2.0, 1.5, 6.5, ("soup", "vegetable soup")),
+    FallbackFood("pizza", 266, 11.0, 10.0, 33.0, ("pizza", "slice pizza", "pizza slice", "пицца", "пиццы")),
+    FallbackFood("hamburger", 254, 12.0, 10.0, 28.0, ("burger", "hamburger", "бургер", "гамбургер")),
+    FallbackFood("vegetable soup", 45, 2.0, 1.5, 6.5, ("soup", "vegetable soup", "суп", "овощной суп")),
 )
 
 
 def normalize_food_query(query: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9\s]", " ", query.lower())
+    cleaned = query.lower().replace("ё", "е")
+    cleaned = re.sub(r"[^\w\s]", " ", cleaned, flags=re.UNICODE)
+    cleaned = cleaned.replace("_", " ")
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
