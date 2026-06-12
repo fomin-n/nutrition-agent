@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from app.schemas.nutrition import NutritionPer100g
+from app.schemas.nutrition import NutritionCandidate, NutritionPer100g, NutritionValues
 from app.tools.cache import JsonFileCache
 
 LOGGER = logging.getLogger(__name__)
@@ -15,10 +15,16 @@ class OpenFoodFactsClient:
         self.timeout_seconds = timeout_seconds
 
     def search_product(self, product_name: str) -> NutritionPer100g | None:
+        candidates = self.search_products(product_name, page_size=1)
+        if not candidates:
+            return None
+        return candidates[0].to_per_100g()
+
+    def search_products(self, product_name: str, *, page_size: int = 5) -> list[NutritionCandidate]:
         cache_key = f"off:search:{product_name.lower()}"
         cached = self.cache.get(cache_key)
         if cached:
-            return _parse_off_product(cached)
+            return [_parse_off_product(product) for product in _cached_products(cached)]
 
         try:
             with httpx.Client(timeout=self.timeout_seconds) as client:
@@ -29,7 +35,7 @@ class OpenFoodFactsClient:
                         "search_simple": 1,
                         "action": "process",
                         "json": 1,
-                        "page_size": 1,
+                        "page_size": page_size,
                     },
                     headers={"User-Agent": "nutrition-agent/0.1"},
                 )
@@ -37,16 +43,19 @@ class OpenFoodFactsClient:
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             LOGGER.warning("Open Food Facts product search failed for %s: %s", product_name, exc)
-            return None
+            return []
 
         products = payload.get("products") or []
         if not products:
-            return None
-        product = products[0]
-        self.cache.set(cache_key, product)
-        return _parse_off_product(product)
+            return []
+        self.cache.set(cache_key, {"products": products})
+        return [_parse_off_product(product) for product in products if isinstance(product, dict)]
 
     def lookup_barcode(self, barcode: str) -> NutritionPer100g | None:
+        candidate = self.get_barcode_candidate(barcode)
+        return candidate.to_per_100g() if candidate else None
+
+    def get_barcode_candidate(self, barcode: str) -> NutritionCandidate | None:
         cache_key = f"off:barcode:{barcode}"
         cached = self.cache.get(cache_key)
         if cached:
@@ -71,7 +80,14 @@ class OpenFoodFactsClient:
         return _parse_off_product(product)
 
 
-def _parse_off_product(product: dict[str, Any]) -> NutritionPer100g | None:
+def _cached_products(cached: dict[str, Any]) -> list[dict[str, Any]]:
+    products = cached.get("products")
+    if isinstance(products, list):
+        return [product for product in products if isinstance(product, dict)]
+    return [cached]
+
+
+def _parse_off_product(product: dict[str, Any]) -> NutritionCandidate:
     nutriments = product.get("nutriments") or {}
 
     def number(*keys: str) -> float | None:
@@ -89,18 +105,42 @@ def _parse_off_product(product: dict[str, Any]) -> NutritionPer100g | None:
     protein = number("proteins_100g", "proteins")
     fat = number("fat_100g", "fat")
     carbs = number("carbohydrates_100g", "carbohydrates")
-    if None in (calories, protein, fat, carbs):
-        return None
-
-    name = str(product.get("product_name") or product.get("generic_name") or "packaged food")
-    source_id = str(product.get("code")) if product.get("code") else None
-    return NutritionPer100g(
-        food_name=name,
+    values = NutritionValues(
         calories_kcal=calories,
         protein_g=protein,
         fat_g=fat,
-        carbs_g=carbs,
-        source="open_food_facts",
-        source_id=source_id,
+        carbohydrate_g=carbs,
+        fiber_g=number("fiber_100g", "fiber"),
+        sugar_g=number("sugars_100g", "sugars"),
+        sodium_mg=_sodium_mg(number("sodium_100g", "sodium")),
     )
 
+    name = str(product.get("product_name") or product.get("generic_name") or "packaged food")
+    source_id = str(product.get("code")) if product.get("code") else None
+    return NutritionCandidate(
+        source="open_food_facts",
+        source_id=source_id,
+        name=name,
+        brand=str(product.get("brands")) if product.get("brands") else None,
+        food_type="branded",
+        description=str(product.get("generic_name")) if product.get("generic_name") else None,
+        serving_description=str(product.get("serving_size")) if product.get("serving_size") else None,
+        metric_serving_amount=None,
+        metric_serving_unit=None,
+        calories_kcal=values.calories_kcal,
+        protein_g=values.protein_g,
+        fat_g=values.fat_g,
+        carbohydrate_g=values.carbohydrate_g,
+        fiber_g=values.fiber_g,
+        sugar_g=values.sugar_g,
+        sodium_mg=values.sodium_mg,
+        values_per_100g=values if values.has_required_macros() else None,
+        source_confidence="medium",
+        metadata={"quantity": product.get("quantity"), "categories": product.get("categories")},
+    )
+
+
+def _sodium_mg(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return value * 1000

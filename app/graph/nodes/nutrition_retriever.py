@@ -1,54 +1,63 @@
 import logging
-import re
 
 from app.graph.state import NutritionGraphState
-from app.llm.client import get_settings, reveal_secret
-from app.schemas.nutrition import IngredientEstimate, IngredientNutrition, NutritionPer100g
-from app.tools.cache import JsonFileCache
-from app.tools.fallback_nutrition import lookup_fallback_food
-from app.tools.open_food_facts_client import OpenFoodFactsClient
-from app.tools.usda_client import UsdaClient
+from app.schemas.nutrition import IngredientEstimate, IngredientNutrition, NutritionCandidate
+from app.tools.food_query import normalize_food_description
+from app.tools.nutrition_tools import (
+    NutritionSourceRouter,
+    generic_fallback_candidate,
+    get_default_router,
+)
 
 LOGGER = logging.getLogger(__name__)
 
 
 class NutritionRetriever:
-    def __init__(self) -> None:
-        settings = get_settings()
-        cache = JsonFileCache(settings.nutrition_cache_dir)
-        self.usda = UsdaClient(reveal_secret(settings.usda_api_key), cache)
-        self.off = OpenFoodFactsClient(cache)
+    def __init__(self, router: NutritionSourceRouter | None = None) -> None:
+        self.router = router or get_default_router()
 
-    def lookup(self, ingredient: IngredientEstimate, *, packaged: bool = False) -> IngredientNutrition:
-        query = ingredient.name
-        nutrition: NutritionPer100g | None = None
+    def lookup(
+        self,
+        ingredient: IngredientEstimate,
+        *,
+        source_route: str | None = None,
+        language: str | None = None,
+    ) -> IngredientNutrition:
+        query = normalize_food_description(
+            ingredient.name,
+            language=language,
+            source_route=source_route,
+        )
+        selected = self.router.best_candidate(query)
         warning: str | None = None
+        if selected is None:
+            selected = generic_fallback_candidate(ingredient.name)
+            warning = f"No database match for {ingredient.name}; used generic mixed-food fallback."
+            LOGGER.info("Nutrition retrieval fallback reason=no_source_result query=%r", ingredient.name)
 
-        if packaged:
-            barcode = _extract_barcode(query)
-            nutrition = self.off.lookup_barcode(barcode) if barcode else self.off.search_product(query)
+        per_100g = selected.to_per_100g()
+        if per_100g is None:
+            selected = generic_fallback_candidate(ingredient.name)
+            per_100g = selected.to_per_100g()
+            warning = f"No usable per-100g nutrition for {ingredient.name}; used generic mixed-food fallback."
 
-        if nutrition is None:
-            nutrition = lookup_fallback_food(query)
-
-        if nutrition is None:
-            nutrition = self.usda.search_food(query)
-
-        if nutrition is None and not packaged:
-            nutrition = self.off.search_product(query)
-
-        if nutrition is None:
-            nutrition = _generic_unknown_food(query)
-            warning = f"No database match for {query}; used generic mixed-food fallback."
-
+        LOGGER.info(
+            "Nutrition selected ingredient=%r canonical=%r source=%s source_id=%s score=%s",
+            ingredient.name,
+            query.canonical_query,
+            selected.source,
+            selected.source_id,
+            selected.match_score,
+        )
         return IngredientNutrition(
             ingredient_name=ingredient.name,
-            matched_food_name=nutrition.food_name,
+            matched_food_name=per_100g.food_name,
             grams_min=ingredient.grams_min,
             grams_max=ingredient.grams_max,
-            per_100g=nutrition,
-            source=nutrition.source,
+            per_100g=per_100g,
+            source=per_100g.source,
             warning=warning,
+            candidate=_public_candidate_debug(selected),
         )
 
 
@@ -57,26 +66,29 @@ def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
     if meal is None:
         return {"ingredient_nutrition": []}
 
+    scope = state.get("scope_decision")
+    normalized = state.get("normalized_input")
+    source_route = scope.route if scope else None
+    language = normalized.language if normalized else None
     retriever = NutritionRetriever()
-    packaged = state.get("scope_decision") is not None and state["scope_decision"].route == "packaged_food"
-    items = [retriever.lookup(ingredient, packaged=packaged) for ingredient in meal.ingredients]
+    items = [
+        retriever.lookup(
+            ingredient,
+            source_route=source_route,
+            language=language,
+        )
+        for ingredient in meal.ingredients
+    ]
     return {"ingredient_nutrition": items}
 
 
-def _extract_barcode(text: str) -> str | None:
-    match = re.search(r"\b(\d{8,14})\b", text)
-    return match.group(1) if match else None
-
-
-def _generic_unknown_food(query: str) -> NutritionPer100g:
-    LOGGER.info("Using generic mixed-food fallback for unmatched ingredient: %s", query)
-    return NutritionPer100g(
-        food_name="generic mixed food",
-        calories_kcal=180,
-        protein_g=8,
-        fat_g=7,
-        carbs_g=20,
-        source="generic_fallback",
-        source_id="generic_mixed_food",
+def _public_candidate_debug(candidate: NutritionCandidate) -> NutritionCandidate:
+    return candidate.model_copy(
+        update={
+            "metadata": {
+                key: value
+                for key, value in candidate.metadata.items()
+                if key in {"data_type", "food_category", "quantity", "categories", "publication_date"}
+            }
+        }
     )
-

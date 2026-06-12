@@ -12,7 +12,7 @@ This document is for contributors and coding agents working on `nutrition-agent`
 - `app/cli/`: operational CLI helpers such as access-key management.
 - `app/i18n.py`: lightweight English/Russian language detection and localized user-facing strings.
 - `app/observability/`: optional Phoenix/OpenInference tracing setup.
-- `app/tools/`: USDA, Open Food Facts, fallback nutrition, cache, and image helpers.
+- `app/tools/`: USDA, FatSecret, Open Food Facts, fallback nutrition, retrieval ranking, cache, and image helpers.
 - `app/schemas/`: Pydantic models for inputs, safety decisions, nutrition values, and outputs.
 - `app/evals/`: lightweight adversarial eval data and runner.
 - `tests/`: offline unit tests.
@@ -53,7 +53,7 @@ Structured schemas live under `app/schemas/`:
 
 - `inputs.py`: raw and normalized user input.
 - `safety.py`: moderation decisions, scope routes, confidence values, and refusals.
-- `nutrition.py`: ingredient estimates, per-100 g nutrition, matched ingredient nutrition, and macro ranges.
+- `nutrition.py`: ingredient estimates, normalized nutrition candidates, per-100 g nutrition, matched ingredient nutrition, and macro ranges.
 - `outputs.py`: final estimate and critic result.
 
 Any model output that changes routing or calculation inputs should be parsed through a schema.
@@ -105,7 +105,7 @@ python -m app.cli.auth revoke-user <telegram_user_id>
 
 LLMs should not calculate totals. They may extract structured ingredients and estimated gram ranges. The deterministic calculator:
 
-- maps each ingredient to per-100 g calories, protein, fat, and carbs
+- maps each ingredient to a normalized provider candidate and then to per-100 g calories, protein, fat, and carbs
 - scales each nutrient by `grams_min` and `grams_max`
 - aggregates ingredient ranges
 - rounds calories to practical 10 kcal increments
@@ -114,11 +114,26 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 ## Data Source Adapters
 
 - `fallback_nutrition.py`: small local table for common foods.
-- `usda_client.py`: USDA FoodData Central search with cache and nutrient-name normalization.
+- `food_query.py`: deterministic English/Russian query normalization, brand/restaurant/region extraction, and query-kind classification.
+- `nutrition_tools.py`: provider router and explicit tool functions such as `search_fatsecret_foods`, `get_fatsecret_food`, `search_usda_foods`, `get_usda_food`, and `retrieve_nutrition_candidates`.
+- `nutrition_ranking.py`: deterministic candidate ranking with score components.
+- `fatsecret_client.py`: FatSecret OAuth2 client-credentials auth and Basic `foods.search` / `food.get` method calls. Do not persist raw FatSecret responses, tokens, credentials, or full nutrition records in snapshots.
+- `usda_client.py`: USDA FoodData Central search and details retrieval with cache, data-type routing, and nutrient normalization.
 - `open_food_facts_client.py`: Open Food Facts product lookup for packaged foods.
 - `cache.py`: JSON file cache.
 
 External data should be treated as untrusted and potentially incomplete.
+
+Provider credentials are optional and independently disabled:
+
+- `USDA_API_KEY`
+- `FATSECRET_CLIENT_ID`
+- `FATSECRET_CLIENT_SECRET`
+- `ENABLE_USDA`
+- `ENABLE_FATSECRET`
+- `ENABLE_OPEN_FOOD_FACTS`
+
+Never log or trace API keys, FatSecret client secrets, access tokens, or Authorization headers. Provider failures must degrade to another provider or explicit fallback rather than failing the whole user request.
 
 ## Tests And Evals
 
@@ -128,6 +143,7 @@ Run:
 uv run pytest
 uv run ruff check .
 uv run python -m app.evals.run_eval --mock
+uv run python -m app.evals.run_retrieval_smoke
 ```
 
 Tests must run without real API keys.
@@ -142,6 +158,8 @@ Deployment variables should be supplied by the target environment, not committed
 - `TELEGRAM_BOT_TOKEN`
 - `BOT_AUTH_SECRET`
 - optional `USDA_API_KEY`
+- optional `FATSECRET_CLIENT_ID`
+- optional `FATSECRET_CLIENT_SECRET`
 - optional model overrides
 - optional `AUTH_DB_PATH`
 

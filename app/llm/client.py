@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     bot_auth_secret: SecretStr | None = None
     usda_api_key: SecretStr | None = None
+    fatsecret_client_id: SecretStr | None = None
+    fatsecret_client_secret: SecretStr | None = None
 
     openai_text_model: str = "gpt-4.1-mini"
     openai_vision_model: str = "gpt-4.1-mini"
@@ -35,6 +37,10 @@ class Settings(BaseSettings):
     nutrition_cache_dir: str = ".cache/nutrition-agent"
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
+
+    enable_usda: bool = True
+    enable_fatsecret: bool = True
+    enable_open_food_facts: bool = True
 
 
 @lru_cache(maxsize=1)

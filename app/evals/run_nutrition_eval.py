@@ -190,7 +190,27 @@ def _serialize_meal(meal: MealUnderstanding | None) -> list[dict[str, Any]]:
 
 
 def _serialize_ingredient_nutrition(item: IngredientNutrition) -> dict[str, Any]:
-    return item.model_dump(mode="json")
+    dumped = item.model_dump(mode="json")
+    candidate = dumped.get("candidate")
+    if isinstance(candidate, dict):
+        dumped["candidate"] = {
+            "source": candidate.get("source"),
+            "source_id": candidate.get("source_id"),
+            "name": candidate.get("name"),
+            "brand": candidate.get("brand"),
+            "food_type": candidate.get("food_type"),
+            "match_score": candidate.get("match_score"),
+            "score_components": candidate.get("score_components"),
+            "metadata": candidate.get("metadata"),
+        }
+    if dumped.get("source") == "fatsecret":
+        dumped["per_100g"] = {
+            "food_name": dumped.get("matched_food_name"),
+            "source": "fatsecret",
+            "source_id": dumped.get("per_100g", {}).get("source_id"),
+            "redacted": "FatSecret nutrition values are not persisted in eval reports.",
+        }
+    return dumped
 
 
 def _serialize_totals(totals: NutritionTotals | None) -> dict[str, Any] | None:

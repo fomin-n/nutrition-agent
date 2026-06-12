@@ -65,7 +65,7 @@ flowchart TD
 - **Text meal parser** extracts ingredients and practical gram ranges from a written meal description.
 - **Image meal recognizer** uses a vision-capable model to identify visible food and estimate portion ranges.
 - **Packaging/OCR recognizer** supports a basic packaged-food branch for product names, labels, and future barcode/OCR work.
-- **Nutrition retrieval** looks up per-100 g nutrition values using the local fallback table, USDA FoodData Central when configured, and Open Food Facts for packaged products.
+- **Nutrition retrieval** normalizes provider results into ranked candidates from USDA FoodData Central, FatSecret, Open Food Facts, and local fallback sources, then passes only safe per-100 g values to the deterministic calculator.
 - **Deterministic macro calculator** computes calories, protein, fat, and carbs from ingredient gram ranges and nutrition data.
 - **Answer synthesizer** formats the result with ranges, assumptions, warnings, and confidence.
 - **Critic/sanity checker** catches missing detail, inconsistent ranges, and overly wide estimates before output.
@@ -93,9 +93,14 @@ Model names are configurable through environment variables so the project can mo
 
 ## Data Sources
 
-- Local fallback nutrition table for common foods.
-- USDA FoodData Central lookup when `USDA_API_KEY` is configured.
-- Open Food Facts lookup for packaged-food style requests.
+- USDA FoodData Central lookup when `USDA_API_KEY` is configured. Generic ingredients prefer Foundation/SR Legacy data, and prepared dishes prefer FNDDS where relevant.
+- FatSecret Platform API lookup when `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are configured. Branded products and restaurant menu items prefer FatSecret first.
+- Open Food Facts lookup remains available for packaged-food fallback.
+- Local fallback nutrition table for common foods and an explicit generic fallback when no provider returns usable data.
+
+Provider outputs are normalized into a common candidate schema with serving metadata, per-100 g values when safely available, and deterministic ranking score components. The app does not persist FatSecret raw API responses or tokens.
+
+See [docs/nutrition-retrieval.md](docs/nutrition-retrieval.md) for the audit, runtime call chain, provider priority, and known limitations.
 
 External nutrition data can be incomplete or inconsistent, especially for packaged products. The app surfaces assumptions rather than claiming precision.
 
@@ -219,6 +224,11 @@ Required environment variables:
 Optional environment variables:
 
 - `USDA_API_KEY`
+- `FATSECRET_CLIENT_ID`
+- `FATSECRET_CLIENT_SECRET`
+- `ENABLE_USDA`
+- `ENABLE_FATSECRET`
+- `ENABLE_OPEN_FOOD_FACTS`
 - `OPENAI_TEXT_MODEL`
 - `OPENAI_VISION_MODEL`
 - `OPENAI_CRITIC_MODEL`
@@ -237,6 +247,14 @@ Run checks:
 uv run pytest
 uv run ruff check .
 uv run python -m app.evals.run_eval --mock
+uv run python -m app.evals.run_retrieval_smoke
+```
+
+Live nutrition-provider tests are disabled by default. To run them intentionally:
+
+```bash
+RUN_LIVE_NUTRITION_TESTS=1 uv run pytest tests/test_live_nutrition_providers.py
+uv run python -m app.evals.run_retrieval_smoke --live
 ```
 
 ## Deployment
