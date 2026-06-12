@@ -9,7 +9,7 @@ SOURCE_PRIORITY: dict[str, dict[str, float]] = {
         "usda": 0.35,
         "fatsecret": 0.18,
         "open_food_facts": 0.05,
-        "fallback": 0.12,
+        "fallback": 0.18,
         "generic_fallback": -0.25,
     },
     "standard_prepared_dish": {
@@ -155,6 +155,7 @@ def _preparation_penalty(query: NormalizedFoodQuery, candidate: NutritionCandida
         "microwaved",
         "fried",
         "canned",
+        "candied",
         "sweetened",
         "imitation",
     }

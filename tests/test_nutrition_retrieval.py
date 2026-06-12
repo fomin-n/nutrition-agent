@@ -59,6 +59,37 @@ def test_candidate_ranking_prefers_brand_match_and_complete_macros() -> None:
     assert ranked[0].score_components["brand"] > 0
 
 
+def test_candidate_ranking_prefers_plain_fallback_over_unrequested_candied_match() -> None:
+    query = normalize_food_description("apple")
+    candidates = [
+        NutritionCandidate(
+            source="usda",
+            source_id="candied-apple",
+            name="Apple, candied",
+            food_type="prepared",
+            metric_serving_amount=100,
+            metric_serving_unit="g",
+            values_per_100g=NutritionValues(calories_kcal=134, protein_g=1.3, carbohydrate_g=29.6, fat_g=2.1),
+        ),
+        NutritionCandidate(
+            source="fallback",
+            source_id="apple",
+            name="apple",
+            food_type="generic",
+            metric_serving_amount=100,
+            metric_serving_unit="g",
+            values_per_100g=NutritionValues(calories_kcal=52, protein_g=0.3, carbohydrate_g=13.8, fat_g=0.2),
+        ),
+    ]
+
+    ranked = rank_candidates(candidates, query)
+
+    assert ranked[0].source == "fallback"
+    assert ranked[0].name == "apple"
+    assert ranked[0].score_components["preparation"] == 0.0
+    assert ranked[1].score_components["preparation"] < 0.0
+
+
 def test_ml_serving_is_not_converted_to_per_100g() -> None:
     candidate = NutritionCandidate(
         source="fatsecret",
