@@ -49,6 +49,18 @@ def test_graph_russian_oatmeal_question_no_llm() -> None:
     assert "I can only estimate" not in answer
 
 
+def test_graph_russian_apple_question_with_typo_no_llm() -> None:
+    answer = process_request(
+        text="Сколько калрий в одном зелёном яблоке?",
+        source="test",
+        use_llm=False,
+    )
+    assert "Оценка калорий:" in answer
+    assert "яблоко" in answer
+    assert "Я могу оценивать только" not in answer
+    assert "I can only estimate" not in answer
+
+
 def test_graph_english_caesar_salad_no_llm() -> None:
     answer = process_request(
         text="Estimate calories and macros for a chicken Caesar salad",

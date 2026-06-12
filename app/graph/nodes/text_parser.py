@@ -121,7 +121,13 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     language = state["normalized_input"].language
     if state.get("use_llm", True) and has_openai_key():
         try:
-            return {"meal": parse_text_with_llm(text, language=language)}
+            llm_meal = parse_text_with_llm(text, language=language)
+            if llm_meal.ingredients and not llm_meal.needs_clarification:
+                return {"meal": llm_meal}
+            local_meal = parse_text_locally(text, language=language)
+            if local_meal.ingredients:
+                return {"meal": local_meal}
+            return {"meal": llm_meal}
         except Exception:
             return {"meal": parse_text_locally(text, language=language)}
     return {"meal": parse_text_locally(text, language=language)}

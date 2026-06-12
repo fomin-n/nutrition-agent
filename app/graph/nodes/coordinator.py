@@ -12,7 +12,7 @@ from app.llm.structured import invoke_structured_text, read_prompt
 from app.schemas.safety import ModerationDecision, RouteName, ScopeDecision
 from app.tools.fallback_nutrition import fallback_names, normalize_food_query
 
-FOOD_WORDS = fallback_names() | {
+RAW_FOOD_WORDS = fallback_names() | {
     "ate",
     "eaten",
     "meal",
@@ -52,8 +52,11 @@ FOOD_WORDS = fallback_names() | {
     "калория",
     "калории",
     "калорий",
+    "калрий",
     "калорийность",
     "ккал",
+    "бжу",
+    "кбжу",
     "белок",
     "белка",
     "белки",
@@ -65,6 +68,94 @@ FOOD_WORDS = fallback_names() | {
     "макросы",
     "нутриенты",
 }
+
+FOOD_WORDS = {normalized for word in RAW_FOOD_WORDS if (normalized := normalize_food_query(word))}
+
+GENERIC_INTENT_WORDS = {
+    "ate",
+    "eaten",
+    "meal",
+    "breakfast",
+    "lunch",
+    "dinner",
+    "snack",
+    "plate",
+    "bowl",
+    "portion",
+    "serving",
+    "calorie",
+    "calories",
+    "kcal",
+    "protein",
+    "carbs",
+    "fat",
+    "macros",
+    "еда",
+    "блюдо",
+    "прием пищи",
+    "приём пищи",
+    "завтрак",
+    "обед",
+    "ужин",
+    "перекус",
+    "тарелка",
+    "порция",
+    "калория",
+    "калории",
+    "калорий",
+    "калрий",
+    "калорийность",
+    "ккал",
+    "бжу",
+    "кбжу",
+    "белок",
+    "белка",
+    "белки",
+    "жир",
+    "жиры",
+    "жиров",
+    "углеводы",
+    "углеводов",
+    "макросы",
+    "нутриенты",
+}
+GENERIC_INTENT_WORDS = {
+    normalized for word in GENERIC_INTENT_WORDS if (normalized := normalize_food_query(word))
+}
+
+RUSSIAN_FOOD_STEMS = {
+    "банан",
+    "бургер",
+    "гамбургер",
+    "говядин",
+    "греч",
+    "йогурт",
+    "картоф",
+    "картош",
+    "куриц",
+    "курин",
+    "лосос",
+    "макарон",
+    "молок",
+    "огур",
+    "овощ",
+    "овсян",
+    "омлет",
+    "паст",
+    "пицц",
+    "помидор",
+    "салат",
+    "сахар",
+    "сметан",
+    "томат",
+    "творог",
+    "фрукт",
+    "яблок",
+}
+
+RUSSIAN_NUTRITION_INTENT_RE = re.compile(
+    r"\b(калор\w*|калр\w*|ккал|бжу|кбжу|белк\w*|жир\w*|углевод\w*|макро\w*|нутриент\w*)\b"
+)
 
 PACKAGED_WORDS = {
     "barcode",
@@ -129,7 +220,7 @@ def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:
             if llm_decision.language == "unknown":
                 llm_decision.language = normalized.language
             if local_decision.route in {"text_meal", "dish_photo", "image_with_text", "packaged_food"} and (
-                llm_decision.route == "off_topic"
+                llm_decision.route in {"off_topic", "needs_clarification"}
             ):
                 return {"scope_decision": local_decision}
             return {"scope_decision": llm_decision}
@@ -245,6 +336,10 @@ def route(state: NutritionGraphState) -> NutritionGraphState:
 def _contains_food_signal(normalized_text: str) -> bool:
     if any(re.search(rf"\b{re.escape(word)}\b", normalized_text) for word in FOOD_WORDS):
         return True
+    if _contains_russian_food_stem(normalized_text):
+        return True
+    if RUSSIAN_NUTRITION_INTENT_RE.search(normalized_text):
+        return True
     unit_pattern = (
         r"g|gram|grams|kg|oz|cup|cups|tbsp|tablespoon|slice|slices|"
         r"г|гр|грамм|грамма|граммов|кг|чашка|чашки|чашек|кусок|куска|кусочка|ломтик|ломтика"
@@ -253,53 +348,15 @@ def _contains_food_signal(normalized_text: str) -> bool:
 
 
 def _contains_meal_detail(normalized_text: str) -> bool:
-    generic_intent_words = {
-        "ate",
-        "eaten",
-        "meal",
-        "breakfast",
-        "lunch",
-        "dinner",
-        "snack",
-        "plate",
-        "bowl",
-        "portion",
-        "serving",
-        "calorie",
-        "calories",
-        "kcal",
-        "protein",
-        "carbs",
-        "fat",
-        "macros",
-        "еда",
-        "блюдо",
-        "прием пищи",
-        "приём пищи",
-        "завтрак",
-        "обед",
-        "ужин",
-        "перекус",
-        "тарелка",
-        "порция",
-        "калория",
-        "калории",
-        "калорий",
-        "калорийность",
-        "ккал",
-        "белок",
-        "белка",
-        "белки",
-        "жир",
-        "жиры",
-        "жиров",
-        "углеводы",
-        "углеводов",
-        "макросы",
-        "нутриенты",
-    }
+    if _contains_russian_food_stem(normalized_text):
+        return True
     return any(
         re.search(rf"\b{re.escape(word)}\b", normalized_text)
         for word in FOOD_WORDS
-        if word not in generic_intent_words
+        if word not in GENERIC_INTENT_WORDS
     )
+
+
+def _contains_russian_food_stem(normalized_text: str) -> bool:
+    tokens = re.findall(r"[а-я]+", normalized_text)
+    return any(token.startswith(stem) for token in tokens for stem in RUSSIAN_FOOD_STEMS)

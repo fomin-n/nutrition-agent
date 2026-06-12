@@ -30,6 +30,16 @@ def test_scope_classifier_accepts_russian_oatmeal_question() -> None:
     assert decision.language == "ru"
 
 
+def test_scope_classifier_accepts_russian_apple_question_with_typo() -> None:
+    decision = classify_scope_locally(
+        "Сколько калрий в одном зелёном яблоке?",
+        has_image=False,
+        has_text=True,
+    )
+    assert decision.route == "text_meal"
+    assert decision.language == "ru"
+
+
 def test_scope_classifier_keeps_local_food_route_when_llm_marks_off_topic(monkeypatch) -> None:
     monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
     monkeypatch.setattr(
@@ -48,6 +58,39 @@ def test_scope_classifier_keeps_local_food_route_when_llm_marks_off_topic(monkey
         {
             "normalized_input": NormalizedInput(
                 text="Сколько примерно калорий в 100г овсяной каши?",
+                has_text=True,
+                has_image=False,
+                language="ru",
+            ),
+            "input_moderation": ModerationDecision(),
+            "use_llm": True,
+        }
+    )
+
+    decision = result["scope_decision"]
+    assert decision.route == "text_meal"
+    assert decision.is_food_related
+
+
+def test_scope_classifier_keeps_local_food_route_when_llm_requests_clarification(monkeypatch) -> None:
+    monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
+    monkeypatch.setattr(
+        coordinator,
+        "invoke_structured_text",
+        lambda **_: ScopeDecision(
+            route="needs_clarification",
+            is_food_related=True,
+            needs_clarification=True,
+            reason="mock clarification",
+            confidence="high",
+            language="ru",
+        ),
+    )
+
+    result = scope_classifier(
+        {
+            "normalized_input": NormalizedInput(
+                text="Сколько калрий в одном зелёном яблоке?",
                 has_text=True,
                 has_image=False,
                 language="ru",
