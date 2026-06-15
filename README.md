@@ -71,6 +71,24 @@ flowchart TD
 - **Critic/sanity checker** catches missing detail, inconsistent ranges, and overly wide estimates before output.
 - **Output moderation** prevents unsafe or out-of-scope final content.
 
+## Memory
+
+The bot has a lightweight memory layer in `app/memory/service.py`. It is intentionally SQLite-backed and deterministic; there is no vector database or unconstrained agent loop.
+
+- Short-term memory is keyed by `(user_id, conversation_id)`, where Telegram uses the user ID and chat ID passed into `process_request`. This keeps users and separate chats isolated.
+- Short-term memory stores recent user/assistant messages, a compact older-summary string, and one current unresolved nutrition task such as `chicken` with missing `cut`, `quantity`, or `preparation`.
+- Follow-up answers are resolved before the graph runs. For example, after “How many calories are in chicken?” the bot stores the unresolved chicken task; “100 g, fried.” becomes “chicken, 100 g, fried” internally, so the bot only asks for the still-missing cut.
+- Long-term memory stores only stable nutrition context extracted from user text: allergies, dietary preferences, measurement preferences, and recurring goals. It does not promote every message into long-term memory.
+- Conversation compaction keeps the most recent 10 messages by default. When a conversation exceeds 16 messages, older messages are appended to a bounded plain-text summary, capped at 2000 characters by default.
+- SQLite writes use short transactions with `BEGIN IMMEDIATE`, WAL mode, and composite keys, so concurrent requests cannot mix users or corrupt a conversation record.
+
+Memory configuration:
+
+- `MEMORY_DB_PATH`: optional SQLite path. Defaults to `memory.sqlite3` next to `AUTH_DB_PATH`.
+- `MEMORY_RECENT_MESSAGES`: recent short-term messages to retain, default `10`.
+- `MEMORY_SUMMARIZE_AFTER_MESSAGES`: compaction threshold, default `16`.
+- `MEMORY_SUMMARY_MAX_CHARS`: compact summary character cap, default `2000`.
+
 ## Model Map
 
 Model names are configurable through environment variables so the project can move with API availability:
@@ -234,6 +252,10 @@ Optional environment variables:
 - `OPENAI_CRITIC_MODEL`
 - `OPENAI_MODERATION_ENABLED`
 - `AUTH_DB_PATH`
+- `MEMORY_DB_PATH`
+- `MEMORY_RECENT_MESSAGES`
+- `MEMORY_SUMMARIZE_AFTER_MESSAGES`
+- `MEMORY_SUMMARY_MAX_CHARS`
 
 Generate a local access key:
 

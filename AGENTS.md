@@ -71,6 +71,18 @@ The current MVP uses OpenAI models for structured classification/parsing and ima
 
 The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
 
+## Memory Design
+
+Conversation and user memory live in `app/memory/service.py`.
+
+- Short-term memory is stored in SQLite, scoped by `(user_id, conversation_id)`, and loaded in `process_request` before graph execution.
+- Telegram currently maps `user_id` to the Telegram user ID and `conversation_id` to the chat ID.
+- The memory layer may rewrite short follow-up text into an effective meal description only when there is an unresolved task for the same user/conversation.
+- Older short-term messages compact into a bounded summary after `MEMORY_SUMMARIZE_AFTER_MESSAGES`; the most recent `MEMORY_RECENT_MESSAGES` are retained verbatim.
+- Long-term memory stores extracted stable nutrition facts only: allergies, dietary preferences, measurement preferences, and recurring goals. Do not store every message as long-term memory.
+- The default memory database is `memory.sqlite3` next to `AUTH_DB_PATH`; override with `MEMORY_DB_PATH` when needed.
+- Use SQLite transactions and composite keys for memory writes. Do not add a vector database unless there is a concrete retrieval need that the current memory schema cannot satisfy.
+
 ## Phoenix Observability
 
 Phoenix tracing is optional and must be enabled explicitly with `ENABLE_PHOENIX_TRACING=true`. The self-hosted Compose file is `deploy/phoenix/docker-compose.yml`; it runs one `arizephoenix/phoenix:17.2.0` container with a named `nutrition_agent_phoenix_data` volume and localhost-only bindings for ports `6006` and `4317`.
@@ -160,6 +172,7 @@ Deployment variables should be supplied by the target environment, not committed
 - optional `USDA_API_KEY`
 - optional `FATSECRET_CLIENT_ID`
 - optional `FATSECRET_CLIENT_SECRET`
+- optional `MEMORY_DB_PATH`
 - optional model overrides
 - optional `AUTH_DB_PATH`
 

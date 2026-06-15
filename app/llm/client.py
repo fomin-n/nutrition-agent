@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     nutrition_cache_dir: str = ".cache/nutrition-agent"
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
+    memory_db_path: str | None = None
+    memory_recent_messages: int = 10
+    memory_summarize_after_messages: int = 16
+    memory_summary_max_chars: int = 2000
 
     enable_usda: bool = True
     enable_fatsecret: bool = True

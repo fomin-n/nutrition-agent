@@ -16,6 +16,7 @@ from app.graph.nodes.text_parser import parse_text_meal
 from app.graph.state import NutritionGraphState
 from app.i18n import detect_language
 from app.llm.client import get_settings
+from app.memory.service import MemoryService, get_memory_service
 from app.observability.phoenix import configure_phoenix_tracing, phoenix_trace_context
 from app.schemas.inputs import UserInput
 
@@ -102,12 +103,23 @@ def process_request(
     user_id: str | int | None = None,
     session_id: str | int | None = None,
     trace_metadata: dict[str, str | int | float | bool | None] | None = None,
+    memory_service: MemoryService | None = None,
 ) -> str:
     settings = get_settings()
     configure_phoenix_tracing(settings)
     graph = get_compiled_graph()
+    memory_context = None
+    prepared_memory_input = None
+    effective_text = text
+    conversation_id = session_id if session_id is not None else user_id
+    if user_id is not None and conversation_id is not None:
+        memory_service = memory_service or get_memory_service()
+        memory_context = memory_service.load_context(user_id, conversation_id)
+        prepared_memory_input = memory_service.prepare_input(text, memory_context)
+        effective_text = prepared_memory_input.effective_text
+
     metadata = _trace_metadata(
-        text=text,
+        text=effective_text,
         image_path=image_path,
         source=source,
         use_llm=use_llm,
@@ -118,16 +130,28 @@ def process_request(
         result = graph.invoke(
             {
                 "user_input": UserInput(
-                    text=text,
+                    text=effective_text,
                     image_path=image_path,
                     image_mime_type=image_mime_type,
                     source=source,  # type: ignore[arg-type]
                 ),
                 "use_llm": use_llm,
+                "memory_context": memory_context.model_dump() if memory_context else {},
             }
         )
     final = result.get("final_estimate")
-    return final.text if final else "I couldn’t generate a response."
+    answer = final.text if final else "I couldn’t generate a response."
+    if user_id is not None and conversation_id is not None and memory_service is not None:
+        memory_service.record_turn(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            user_text=text,
+            assistant_text=answer,
+            effective_text=effective_text,
+            final_state=result,
+            prepared_task=prepared_memory_input.unresolved_task if prepared_memory_input else None,
+        )
+    return answer
 
 
 def _trace_metadata(

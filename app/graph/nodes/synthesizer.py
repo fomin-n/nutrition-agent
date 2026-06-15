@@ -1,5 +1,10 @@
 from app.graph.state import NutritionGraphState
-from app.i18n import default_clarification_question, response_language, state_language
+from app.i18n import (
+    default_clarification_question,
+    localize_clarification_question,
+    response_language,
+    state_language,
+)
 from app.schemas.nutrition import MealUnderstanding, NutritionTotals
 from app.schemas.outputs import FinalEstimate
 from app.schemas.safety import Confidence
@@ -10,7 +15,12 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
     totals = state.get("totals")
     language = state_language(state)
     if meal is None or totals is None or not meal.ingredients:
-        question = default_clarification_question(language)
+        question = localize_clarification_question(
+            meal.clarification_question if meal else None,
+            language,
+        )
+        if not question:
+            question = default_clarification_question(language)
         if language == "ru":
             text = f"Нужно еще немного информации для надежной оценки: {question}"
         else:

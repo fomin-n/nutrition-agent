@@ -18,4 +18,4 @@ class NutritionGraphState(TypedDict, total=False):
     critic_result: CriticResult
     errors: list[str]
     use_llm: bool
-
+    memory_context: dict
