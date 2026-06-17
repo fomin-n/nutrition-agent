@@ -66,6 +66,7 @@ class CandidateScore(BaseModel):
 class NutritionCandidate(BaseModel):
     source: FoodSource
     source_id: str | None = None
+    serving_id: str | None = None
     name: str
     brand: str | None = None
     food_type: FoodType = "unknown"
@@ -89,6 +90,10 @@ class NutritionCandidate(BaseModel):
     match_score: float | None = None
     score_components: dict[str, float] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def stable_identity(self) -> str:
+        return ":".join((self.source, self.source_id or "unknown", self.serving_id or "default"))
 
     def to_per_100g(self) -> NutritionPer100g | None:
         values = self.values_per_100g
@@ -114,6 +119,44 @@ class IngredientNutrition(BaseModel):
     source: str
     warning: str | None = None
     candidate: NutritionCandidate | None = None
+
+
+class CandidateValidationResult(BaseModel):
+    accepted: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
+class CandidateDiagnostic(BaseModel):
+    identity: str
+    source: str
+    source_id: str | None = None
+    serving_id: str | None = None
+    name: str
+    score: float | None = None
+    values_per_100g: NutritionValues | None = None
+    validation: CandidateValidationResult
+
+
+class RetrievalFailure(BaseModel):
+    ingredient_name: str
+    canonical_query: str
+    reason: str
+
+
+class RetrievalDiagnostic(BaseModel):
+    request_id: str | None = None
+    ingredient_name: str
+    canonical_query: str
+    food_category: str
+    product_variant: str
+    amount_min_g: float
+    amount_max_g: float
+    provider_queries: list[str] = Field(default_factory=list)
+    candidates: list[CandidateDiagnostic] = Field(default_factory=list)
+    selected_identity: str | None = None
+    fallback_path: str | None = None
+    calculated_totals: dict[str, Any] | None = None
+    raw_context: dict[str, Any] | None = None
 
 
 class MacroRange(BaseModel):

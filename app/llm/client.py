@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     phoenix_collector_endpoint: str = "http://127.0.0.1:6006/v1/traces"
 
     nutrition_cache_dir: str = ".cache/nutrition-agent"
+    nutrition_diagnostics_include_raw: bool = False
+    nutrition_diagnostics_max_payload_chars: int = 2000
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
     memory_db_path: str | None = None

@@ -13,6 +13,19 @@ QueryKind = Literal[
     "user_composite_meal",
     "photo_derived_food",
 ]
+FoodCategory = Literal["food", "sugary_soft_drink", "zero_sugar_soft_drink", "unknown"]
+ProductVariant = Literal["regular", "zero_sugar", "unknown"]
+
+
+@dataclass(frozen=True)
+class ProductAliasProfile:
+    canonical_product: str
+    brand: str
+    category: FoodCategory
+    variant: ProductVariant
+    aliases: tuple[str, ...]
+    default_serving_amount: float | None = None
+    default_serving_unit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -28,6 +41,72 @@ class NormalizedFoodQuery:
     quantity: float | None = None
     unit: str | None = None
     region: str | None = None
+    food_category: FoodCategory = "unknown"
+    product_variant: ProductVariant = "unknown"
+    default_serving_amount: float | None = None
+    default_serving_unit: str | None = None
+
+
+PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = (
+    ProductAliasProfile(
+        canonical_product="Coca-Cola Zero Sugar",
+        brand="Coca-Cola",
+        category="zero_sugar_soft_drink",
+        variant="zero_sugar",
+        aliases=(
+            "coca cola zero sugar",
+            "coca-cola zero sugar",
+            "coca cola zero",
+            "coca-cola zero",
+            "coke zero",
+            "cola zero",
+            "diet coke",
+            "diet cola",
+            "coca cola light",
+            "coca-cola light",
+            "coke light",
+            "cola light",
+            "кока кола зеро",
+            "кока-кола зеро",
+            "кола зеро",
+            "кока кола без сахара",
+            "кока-кола без сахара",
+            "кола без сахара",
+            "кока кола лайт",
+            "кока-кола лайт",
+            "кола лайт",
+        ),
+        default_serving_amount=330,
+        default_serving_unit="ml",
+    ),
+    ProductAliasProfile(
+        canonical_product="Coca-Cola",
+        brand="Coca-Cola",
+        category="sugary_soft_drink",
+        variant="regular",
+        aliases=(
+            "coca cola",
+            "coca-cola",
+            "cocacola",
+            "coke",
+            "regular cola soft drink",
+            "regular cola",
+            "cola",
+            "кока кола",
+            "кока-кола",
+            "кока колы",
+            "кока-колы",
+            "кока коле",
+            "кока-коле",
+            "кола",
+            "колы",
+            "коле",
+            "колу",
+        ),
+        default_serving_amount=330,
+        default_serving_unit="ml",
+    ),
+)
 
 
 BRAND_ALIASES = {
@@ -116,12 +195,15 @@ def normalize_food_description(
     detected_language = language or detect_language(original)
     normalized = normalize_food_query(original)
     quantity, unit = _extract_quantity(normalized)
-    brand = _find_alias(normalized, BRAND_ALIASES)
+    product = _find_product(normalized)
+    brand = product.brand if product else _find_alias(normalized, BRAND_ALIASES)
     restaurant = _find_alias(normalized, RESTAURANT_ALIASES)
     if restaurant is None and (re.search(r"\bbig mac\b", normalized) or re.search(r"\bбиг мак\b", normalized)):
         restaurant = "McDonald's"
     region = _find_alias(normalized, REGION_ALIASES)
-    canonical_query, preparation = _canonical_query(normalized)
+    canonical_query, preparation = (
+        (product.canonical_product, None) if product else _canonical_query(normalized)
+    )
 
     if brand and normalize_food_query(brand) in normalize_food_query(canonical_query):
         canonical_query = re.sub(
@@ -155,6 +237,10 @@ def normalize_food_description(
         quantity=quantity,
         unit=unit,
         region=region,
+        food_category=product.category if product else "unknown",
+        product_variant=product.variant if product else "unknown",
+        default_serving_amount=product.default_serving_amount if product else None,
+        default_serving_unit=product.default_serving_unit if product else None,
     )
 
 
@@ -219,4 +305,13 @@ def _find_alias(normalized: str, aliases: dict[str, str]) -> str | None:
         normalized_alias = normalize_food_query(alias)
         if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized):
             return value
+    return None
+
+
+def _find_product(normalized: str) -> ProductAliasProfile | None:
+    for product in PRODUCT_ALIASES:
+        for alias in sorted(product.aliases, key=len, reverse=True):
+            normalized_alias = normalize_food_query(alias)
+            if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized):
+                return product
     return None

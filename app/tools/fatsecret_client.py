@@ -274,6 +274,7 @@ def _parse_food_details(food: dict[str, Any], *, region: str | None, language: s
     return NutritionCandidate(
         source="fatsecret",
         source_id=str(food.get("food_id")) if food.get("food_id") else None,
+        serving_id=str(serving.get("serving_id")) if serving.get("serving_id") else None,
         name=str(food.get("food_name") or "FatSecret food"),
         brand=_string_or_none(food.get("brand_name")),
         food_type=_fatsecret_food_type(food),

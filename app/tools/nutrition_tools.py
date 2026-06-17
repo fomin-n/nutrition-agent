@@ -1,17 +1,31 @@
 import logging
+from dataclasses import dataclass
 from functools import lru_cache
 
 from app.llm.client import get_settings, reveal_secret
-from app.schemas.nutrition import NutritionCandidate, NutritionPer100g, NutritionValues
+from app.schemas.nutrition import (
+    CandidateValidationResult,
+    NutritionCandidate,
+    NutritionPer100g,
+    NutritionValues,
+)
 from app.tools.cache import JsonFileCache
 from app.tools.fallback_nutrition import lookup_fallback_food, normalize_food_query
 from app.tools.fatsecret_client import FatSecretAuthClient, FatSecretClient
 from app.tools.food_query import NormalizedFoodQuery, normalize_food_description
 from app.tools.nutrition_ranking import rank_candidates
+from app.tools.nutrition_validation import validate_candidate
 from app.tools.open_food_facts_client import OpenFoodFactsClient
 from app.tools.usda_client import UsdaClient, data_types_for_query_kind
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CandidateSelection:
+    selected: NutritionCandidate | None
+    candidates: list[NutritionCandidate]
+    validations: list[CandidateValidationResult]
 
 
 class NutritionSourceRouter:
@@ -51,10 +65,20 @@ class NutritionSourceRouter:
         return ranked
 
     def best_candidate(self, query: NormalizedFoodQuery) -> NutritionCandidate | None:
-        for candidate in self.retrieve_candidates(query):
-            if candidate.to_per_100g() is not None:
-                return candidate
-        return None
+        return self.select_candidate(query).selected
+
+    def select_candidate(self, query: NormalizedFoodQuery) -> CandidateSelection:
+        candidates = self.retrieve_candidates(query)
+        validations = [validate_candidate(candidate, query) for candidate in candidates]
+        selected = next(
+            (
+                candidate
+                for candidate, validation in zip(candidates, validations, strict=True)
+                if validation.accepted
+            ),
+            None,
+        )
+        return CandidateSelection(selected=selected, candidates=candidates, validations=validations)
 
     def _provider_order(self, query: NormalizedFoodQuery) -> list[str]:
         if query.query_kind in {"branded_product", "restaurant_menu_item"}:
@@ -67,7 +91,7 @@ class NutritionSourceRouter:
         if self.fatsecret is None or not self.fatsecret.enabled:
             return []
         search_results: list[NutritionCandidate] = []
-        for search_query in _provider_search_queries(query):
+        for search_query in provider_search_queries(query):
             search_results.extend(
                 self.fatsecret.search_foods(
                     search_query,
@@ -95,7 +119,7 @@ class NutritionSourceRouter:
         if self.usda is None or not self.usda.enabled:
             return []
         candidates: list[NutritionCandidate] = []
-        for search_query in _provider_search_queries(query):
+        for search_query in provider_search_queries(query):
             candidates.extend(
                 self.usda.search_foods(
                     search_query,
@@ -190,7 +214,7 @@ def _fallback_candidate(query: NormalizedFoodQuery) -> NutritionCandidate | None
     return candidate_from_per_100g(per_100g, source="fallback")
 
 
-def _provider_search_queries(query: NormalizedFoodQuery) -> list[str]:
+def provider_search_queries(query: NormalizedFoodQuery) -> list[str]:
     queries = [query.canonical_query]
     normalized = normalize_food_query(query.canonical_query)
     if " with " in f" {normalized} ":

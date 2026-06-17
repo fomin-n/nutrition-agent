@@ -14,6 +14,26 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
     meal = state.get("meal")
     totals = state.get("totals")
     language = state_language(state)
+    failures = state.get("retrieval_failures", [])
+    if failures:
+        foods = ", ".join(failure.ingredient_name for failure in failures[:3])
+        if language == "ru":
+            text = (
+                f"Не удалось найти надежные данные о питательной ценности для: {foods}. "
+                "Уточните бренд, размер порции или пришлите фото этикетки."
+            )
+        else:
+            text = (
+                f"I couldn't find reliable nutrition data for: {foods}. "
+                "Please provide the brand, serving size, or a photo of the nutrition label."
+            )
+        return {
+            "final_estimate": FinalEstimate(
+                text=text,
+                confidence="low",
+                is_clarification=True,
+            )
+        }
     if meal is None or totals is None or not meal.ingredients:
         question = localize_clarification_question(
             meal.clarification_question if meal else None,

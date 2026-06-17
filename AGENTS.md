@@ -126,13 +126,14 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 ## Data Source Adapters
 
 - `fallback_nutrition.py`: small local table for common foods.
-- `food_query.py`: deterministic English/Russian query normalization, brand/restaurant/region extraction, and query-kind classification.
+- `food_query.py`: deterministic English/Russian query normalization, centralized product aliases, brand/restaurant/region extraction, category/variant metadata, and query-kind classification.
 - `nutrition_tools.py`: provider router and explicit tool functions such as `search_fatsecret_foods`, `get_fatsecret_food`, `search_usda_foods`, `get_usda_food`, and `retrieve_nutrition_candidates`.
 - `nutrition_ranking.py`: deterministic candidate ranking with score components.
+- `nutrition_validation.py`: semantic candidate validation, including beverage macro and regular/zero-sugar checks.
 - `fatsecret_client.py`: FatSecret OAuth2 client-credentials auth and Basic `foods.search` / `food.get` method calls. Do not persist raw FatSecret responses, tokens, credentials, or full nutrition records in snapshots.
 - `usda_client.py`: USDA FoodData Central search and details retrieval with cache, data-type routing, and nutrient normalization.
 - `open_food_facts_client.py`: Open Food Facts product lookup for packaged foods.
-- `cache.py`: JSON file cache.
+- `cache.py`: versioned-key JSON file cache with atomic replacement and key-digest diagnostics.
 
 External data should be treated as untrusted and potentially incomplete.
 
@@ -146,6 +147,7 @@ Provider credentials are optional and independently disabled:
 - `ENABLE_OPEN_FOOD_FACTS`
 
 Never log or trace API keys, FatSecret client secrets, access tokens, or Authorization headers. Provider failures must degrade to another provider or explicit fallback rather than failing the whole user request.
+Do not use `generic_mixed_food` for branded products, beverages, or unknown single ingredients. If providers and an explicit food/category fallback fail validation, return a localized reliable-match clarification.
 
 ## Tests And Evals
 

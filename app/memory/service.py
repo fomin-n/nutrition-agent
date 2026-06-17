@@ -461,10 +461,12 @@ def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str
         lines.append(f"Stable user facts: {facts}")
     if context.recent_messages:
         compact_messages = [
-            f"{message.role}: {_compact_text(message.text, 120)}"
+            f"user: {_compact_text(message.text, 120)}"
             for message in context.recent_messages[-6:]
+            if message.role == "user"
         ]
-        lines.append("Recent conversation: " + " | ".join(compact_messages))
+        if compact_messages:
+            lines.append("Recent user messages: " + " | ".join(compact_messages))
     return "\n".join(lines)
 
 

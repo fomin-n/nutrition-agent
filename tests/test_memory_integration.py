@@ -120,3 +120,35 @@ def test_followup_memory_does_not_cross_users(tmp_path) -> None:
     )
 
     assert "What foods are in the meal" in answer
+
+
+def test_standalone_cola_request_is_not_contaminated_by_previous_foods(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        nutrition_retriever,
+        "get_default_router",
+        lambda: NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None),
+    )
+    memory = MemoryService(tmp_path / "memory.sqlite3")
+    requests = (
+        "100 g fried chicken breast",
+        "Coca-Cola 330 ml",
+        "Big Mac",
+        "Сколько калорий в банке колы?",
+    )
+
+    answers = [
+        process_request(
+            text=text,
+            source="test",
+            use_llm=False,
+            user_id=1,
+            session_id=10,
+            memory_service=memory,
+        )
+        for text in requests
+    ]
+
+    assert "140-140 kcal" in answers[1]
+    assert "140-140 ккал" in answers[3]
+    assert "Белки: 0-0 г" in answers[3]
+    assert "chicken" not in answers[3].lower()

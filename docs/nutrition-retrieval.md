@@ -1,6 +1,12 @@
 # Nutrition Retrieval Audit
 
-Last updated: 2026-06-12.
+Last updated: 2026-06-18.
+
+## Coca-Cola Integrity Incident
+
+On 2026-06-18, Russian `Кола` was not canonicalized as a branded soft drink. USDA returned no result, FatSecret was unavailable, Open Food Facts was skipped for the resulting generic query, and the old `generic_mixed_food` profile (180 kcal, 8 g protein, 7 g fat, and 20 g carbohydrate per 100 g) was scaled to 330 g. This produced the internally consistent but invalid result of approximately 590 kcal, 26 g protein, 23 g fat, and 66 g carbohydrate.
+
+The fix is structural: English and Russian regular/zero-sugar cola forms now use centralized product aliases with category and variant metadata. Regular cola has an explicit 42 kcal and 10.6 g carbohydrate per 100 ml fallback; zero-sugar cola is separate. A can defaults to 330 ml, and only recorded water-density beverage profiles may convert ml to calculator grams using a documented 1 g/ml assumption.
 
 ## Current Runtime Call Chain
 
@@ -149,9 +155,11 @@ Score components are stored on each `NutritionCandidate` for debugging.
 - FatSecret unavailable: USDA, Open Food Facts where applicable, and fallback continue.
 - USDA unavailable: FatSecret and fallback continue.
 - Rate limits and 5xx errors are logged in sanitized form and do not reach the user.
-- No exact match returns lower-confidence ranked candidates when possible.
-- No usable source candidate uses `generic_fallback` and adds a warning.
-- Millilitres are not silently treated as grams; a candidate without safe per-100 g gram values is not used for deterministic calculation.
+- Every complete candidate is validated before selection. Sugary soft drinks must have negligible protein/fat and carbohydrate-dominant energy; regular and zero-sugar variants cannot cross-match.
+- No exact match returns a lower-ranked candidate only when that candidate passes semantic validation.
+- `generic_fallback` is limited to composite/photo-derived foods. It is forbidden for branded products, beverages, and unknown single ingredients.
+- When no candidate or explicit food/category fallback passes validation, the graph returns a localized clarification asking for brand, serving size, or a nutrition-label photo.
+- Millilitres are not silently treated as grams. The only conversion is for a recorded water-density beverage profile with the assumption attached to the meal output.
 
 ## Observability
 
@@ -162,6 +170,10 @@ Provider operations create OpenTelemetry spans when tracing is configured:
 - sanitized query or source ID;
 - provider-level result count through structured logs;
 - selected candidate source, source ID, and score through structured logs.
+
+Each graph invocation has a UUID. Structured retrieval diagnostics include the canonical query, category/variant, requested amount, provider queries, candidate `source:source_id:serving_id` identities, per-100 g values, scores, validation decisions, selected identity, fallback path, and deterministic totals. Raw user context is disabled by default with `NUTRITION_DIAGNOSTICS_INCLUDE_RAW=false`; when explicitly enabled it is redacted and bounded by `NUTRITION_DIAGNOSTICS_MAX_PAYLOAD_CHARS`.
+
+Cache keys include provider, source version, canonical query, query parameters, and therefore product variant. Writes use atomic file replacement. Logs expose only cache hit state and a SHA-256 key digest, never credentials or raw responses.
 
 Never trace or log:
 
@@ -191,5 +203,5 @@ CIQUAL is a strong future local source for foods commonly consumed in France and
 - FatSecret localization is not assumed. Russian queries are searched with canonical English terms when available.
 - Restaurant matching depends on provider coverage and deterministic brand/restaurant signals.
 - Composite meals still rely on parser decomposition and portion estimates; retrieval does not solve portion uncertainty.
-- Open Food Facts caching predates this audit and should be reviewed before heavier use.
+- Raw provider payloads are not retained for diagnostics; only bounded candidate metadata is available under the explicit raw diagnostics flag.
 - No large local CIQUAL database is committed.

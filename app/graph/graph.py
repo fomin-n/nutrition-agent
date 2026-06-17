@@ -1,4 +1,5 @@
 from functools import lru_cache
+from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
@@ -112,6 +113,7 @@ def process_request(
     prepared_memory_input = None
     effective_text = text
     conversation_id = session_id if session_id is not None else user_id
+    request_id = str(uuid4())
     if user_id is not None and conversation_id is not None:
         memory_service = memory_service or get_memory_service()
         memory_context = memory_service.load_context(user_id, conversation_id)
@@ -126,6 +128,7 @@ def process_request(
         settings=settings,
         extra=trace_metadata,
     )
+    metadata["request_id"] = request_id
     with phoenix_trace_context(user_id=user_id, session_id=session_id, metadata=metadata):
         result = graph.invoke(
             {
@@ -137,6 +140,7 @@ def process_request(
                 ),
                 "use_llm": use_llm,
                 "memory_context": memory_context.model_dump() if memory_context else {},
+                "request_id": request_id,
             }
         )
     final = result.get("final_estimate")

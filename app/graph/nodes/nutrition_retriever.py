@@ -1,15 +1,35 @@
+import json
 import logging
+from dataclasses import dataclass
 
 from app.graph.state import NutritionGraphState
-from app.schemas.nutrition import IngredientEstimate, IngredientNutrition, NutritionCandidate
+from app.llm.client import get_settings
+from app.schemas.nutrition import (
+    CandidateDiagnostic,
+    IngredientEstimate,
+    IngredientNutrition,
+    NutritionCandidate,
+    RetrievalDiagnostic,
+    RetrievalFailure,
+)
 from app.tools.food_query import normalize_food_description
 from app.tools.nutrition_tools import (
     NutritionSourceRouter,
     generic_fallback_candidate,
     get_default_router,
+    provider_search_queries,
 )
+from app.tools.nutrition_validation import validate_candidate
+from app.tools.provider_utils import redacted_text
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LookupOutcome:
+    item: IngredientNutrition | None
+    failure: RetrievalFailure | None
+    diagnostic: RetrievalDiagnostic
 
 
 class NutritionRetriever:
@@ -22,24 +42,108 @@ class NutritionRetriever:
         *,
         source_route: str | None = None,
         language: str | None = None,
-    ) -> IngredientNutrition:
+    ) -> IngredientNutrition | None:
+        return self.lookup_with_diagnostics(
+            ingredient,
+            source_route=source_route,
+            language=language,
+        ).item
+
+    def lookup_with_diagnostics(
+        self,
+        ingredient: IngredientEstimate,
+        *,
+        source_route: str | None = None,
+        language: str | None = None,
+        request_id: str | None = None,
+        raw_input: str | None = None,
+    ) -> LookupOutcome:
         query = normalize_food_description(
             ingredient.name,
             language=language,
             source_route=source_route,
         )
-        selected = self.router.best_candidate(query)
+        selection = self.router.select_candidate(query)
+        selected = selection.selected
         warning: str | None = None
+        fallback_path: str | None = None
+        if selected is None and query.query_kind in {"user_composite_meal", "photo_derived_food"}:
+            generic = generic_fallback_candidate(ingredient.name)
+            validation = validate_candidate(generic, query)
+            selection.candidates.append(generic)
+            selection.validations.append(validation)
+            if validation.accepted:
+                selected = generic
+                fallback_path = "generic_mixed_food_for_composite_or_photo"
+                warning = f"No source match for {ingredient.name}; used a generic composite-food fallback."
+        if selected is not None and selected.source == "fallback":
+            fallback_path = "explicit_category_or_food_fallback"
+
+        settings = get_settings()
+        raw_context = None
+        if settings.nutrition_diagnostics_include_raw:
+            limit = settings.nutrition_diagnostics_max_payload_chars
+            raw_context = {
+                "user_input": redacted_text(raw_input or "")[:limit],
+                "candidate_metadata": [
+                    _public_candidate_debug(candidate).metadata
+                    for candidate in selection.candidates
+                ],
+            }
+        diagnostic = RetrievalDiagnostic(
+            request_id=request_id,
+            ingredient_name=ingredient.name,
+            canonical_query=query.canonical_query,
+            food_category=query.food_category,
+            product_variant=query.product_variant,
+            amount_min_g=ingredient.grams_min,
+            amount_max_g=ingredient.grams_max,
+            provider_queries=provider_search_queries(query),
+            candidates=[
+                CandidateDiagnostic(
+                    identity=candidate.stable_identity,
+                    source=candidate.source,
+                    source_id=candidate.source_id,
+                    serving_id=candidate.serving_id,
+                    name=candidate.name,
+                    score=candidate.match_score,
+                    values_per_100g=candidate.values_per_100g,
+                    validation=validation,
+                )
+                for candidate, validation in zip(
+                    selection.candidates,
+                    selection.validations,
+                    strict=True,
+                )
+            ],
+            selected_identity=selected.stable_identity if selected else None,
+            fallback_path=fallback_path,
+            raw_context=raw_context,
+        )
+        LOGGER.info("Nutrition retrieval diagnostic=%s", json.dumps(diagnostic.model_dump(), ensure_ascii=True))
+
         if selected is None:
-            selected = generic_fallback_candidate(ingredient.name)
-            warning = f"No database match for {ingredient.name}; used generic mixed-food fallback."
-            LOGGER.info("Nutrition retrieval fallback reason=no_source_result query=%r", ingredient.name)
+            failure = RetrievalFailure(
+                ingredient_name=ingredient.name,
+                canonical_query=query.canonical_query,
+                reason="no_semantically_valid_candidate",
+            )
+            LOGGER.warning(
+                "Nutrition retrieval failed request_id=%s canonical=%r reason=%s",
+                request_id,
+                query.canonical_query,
+                failure.reason,
+            )
+            return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
 
         per_100g = selected.to_per_100g()
         if per_100g is None:
-            selected = generic_fallback_candidate(ingredient.name)
-            per_100g = selected.to_per_100g()
-            warning = f"No usable per-100g nutrition for {ingredient.name}; used generic mixed-food fallback."
+            failure = RetrievalFailure(
+                ingredient_name=ingredient.name,
+                canonical_query=query.canonical_query,
+                reason="selected_candidate_missing_per_100g_values",
+            )
+            return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
 
         LOGGER.info(
             "Nutrition selected ingredient=%r canonical=%r source=%s source_id=%s score=%s",
@@ -49,7 +153,7 @@ class NutritionRetriever:
             selected.source_id,
             selected.match_score,
         )
-        return IngredientNutrition(
+        item = IngredientNutrition(
             ingredient_name=ingredient.name,
             matched_food_name=per_100g.food_name,
             grams_min=ingredient.grams_min,
@@ -59,6 +163,7 @@ class NutritionRetriever:
             warning=warning,
             candidate=_public_candidate_debug(selected),
         )
+        return LookupOutcome(item=item, failure=None, diagnostic=diagnostic)
 
 
 def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
@@ -71,15 +176,21 @@ def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
     source_route = scope.route if scope else None
     language = normalized.language if normalized else None
     retriever = NutritionRetriever()
-    items = [
-        retriever.lookup(
+    outcomes = [
+        retriever.lookup_with_diagnostics(
             ingredient,
             source_route=source_route,
             language=language,
+            request_id=state.get("request_id"),
+            raw_input=normalized.text if normalized else None,
         )
         for ingredient in meal.ingredients
     ]
-    return {"ingredient_nutrition": items}
+    return {
+        "ingredient_nutrition": [outcome.item for outcome in outcomes if outcome.item is not None],
+        "retrieval_failures": [outcome.failure for outcome in outcomes if outcome.failure is not None],
+        "retrieval_diagnostics": [outcome.diagnostic for outcome in outcomes],
+    }
 
 
 def _public_candidate_debug(candidate: NutritionCandidate) -> NutritionCandidate:

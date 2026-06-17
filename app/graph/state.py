@@ -1,7 +1,13 @@
 from typing import TypedDict
 
 from app.schemas.inputs import NormalizedInput, UserInput
-from app.schemas.nutrition import IngredientNutrition, MealUnderstanding, NutritionTotals
+from app.schemas.nutrition import (
+    IngredientNutrition,
+    MealUnderstanding,
+    NutritionTotals,
+    RetrievalDiagnostic,
+    RetrievalFailure,
+)
 from app.schemas.outputs import CriticResult, FinalEstimate
 from app.schemas.safety import ModerationDecision, ScopeDecision
 
@@ -19,3 +25,6 @@ class NutritionGraphState(TypedDict, total=False):
     errors: list[str]
     use_llm: bool
     memory_context: dict
+    request_id: str
+    retrieval_failures: list[RetrievalFailure]
+    retrieval_diagnostics: list[RetrievalDiagnostic]

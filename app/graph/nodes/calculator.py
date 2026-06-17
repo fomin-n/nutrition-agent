@@ -1,5 +1,10 @@
+import json
+import logging
+
 from app.graph.state import NutritionGraphState
 from app.schemas.nutrition import IngredientNutrition, MacroRange, NutritionTotals
+
+LOGGER = logging.getLogger(__name__)
 
 
 def calculate_totals(items: list[IngredientNutrition]) -> NutritionTotals:
@@ -43,7 +48,27 @@ def calculate_totals(items: list[IngredientNutrition]) -> NutritionTotals:
 
 def calculate_macros(state: NutritionGraphState) -> NutritionGraphState:
     items = state.get("ingredient_nutrition", [])
-    return {"totals": calculate_totals(items)}
+    totals = calculate_totals(items)
+    diagnostics = [
+        diagnostic.model_copy(update={"calculated_totals": totals.model_dump()})
+        for diagnostic in state.get("retrieval_diagnostics", [])
+    ]
+    LOGGER.info(
+        "Nutrition calculation diagnostic=%s",
+        json.dumps(
+            {
+                "request_id": state.get("request_id"),
+                "selected_identities": [
+                    diagnostic.selected_identity
+                    for diagnostic in diagnostics
+                    if diagnostic.selected_identity
+                ],
+                "totals": totals.model_dump(),
+            },
+            ensure_ascii=True,
+        ),
+    )
+    return {"totals": totals, "retrieval_diagnostics": diagnostics}
 
 
 def _round_calories(value: float) -> int:
@@ -60,4 +85,3 @@ def dedupe(values: list[str]) -> list[str]:
             seen.add(value)
             result.append(value)
     return result
-

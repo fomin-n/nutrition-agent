@@ -4,6 +4,7 @@ from app.memory.service import (
     MemoryConfig,
     MemoryService,
     extract_long_term_facts,
+    memory_context_prompt,
 )
 
 
@@ -89,3 +90,19 @@ def test_extract_long_term_facts_stores_stable_nutrition_context_only() -> None:
     assert ("allergy", "peanuts", "peanuts") in facts
     assert ("measurement_preference", "units", "metric") in facts
     assert ("goal", "gain_muscle", "gain muscle") in facts
+
+
+def test_parser_memory_prompt_excludes_previous_assistant_estimates(tmp_path) -> None:
+    service = MemoryService(tmp_path / "memory.sqlite3")
+    service.record_turn(
+        user_id=1,
+        conversation_id=10,
+        user_text="Estimate an apple",
+        assistant_text="Estimated calories: 999 kcal",
+    )
+
+    prompt = memory_context_prompt(service.load_context(1, 10))
+
+    assert "Estimate an apple" in prompt
+    assert "999" not in prompt
+    assert "assistant" not in prompt

@@ -166,6 +166,11 @@ def _parse_usda_food(food: dict[str, Any]) -> NutritionCandidate | None:
     return NutritionCandidate(
         source="usda",
         source_id=str(food.get("fdcId")) if food.get("fdcId") else None,
+        serving_id=(
+            str(serving.get("id") or serving.get("foodPortionId"))
+            if serving and (serving.get("id") or serving.get("foodPortionId"))
+            else None
+        ),
         name=name,
         brand=brand,
         food_type=food_type,

@@ -117,7 +117,7 @@ def test_retriever_uses_ranked_candidate() -> None:
         values_per_100g=NutritionValues(calories_kcal=89, protein_g=1.1, carbohydrate_g=23, fat_g=0.3),
     )
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
-    router.best_candidate = lambda query: query_candidate  # type: ignore[method-assign]
+    router.retrieve_candidates = lambda query: [query_candidate]  # type: ignore[method-assign]
 
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="banana", grams_min=100, grams_max=100))
 
@@ -126,12 +126,11 @@ def test_retriever_uses_ranked_candidate() -> None:
     assert item.candidate is not None
 
 
-def test_retriever_generic_fallback_when_no_sources() -> None:
+def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))
 
-    assert item.source == "generic_fallback"
-    assert item.warning is not None
+    assert item is None
 
 
 def test_secret_redaction() -> None:

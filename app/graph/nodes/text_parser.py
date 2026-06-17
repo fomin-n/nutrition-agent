@@ -34,6 +34,8 @@ DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
     "yogurt plain": (125, 200),
     "milk": (200, 300),
     "oatmeal cooked": (180, 280),
+    "Coca-Cola": (330, 330),
+    "Coca-Cola Zero Sugar": (330, 330),
     "pizza": (100, 160),
     "hamburger": (180, 280),
     "vegetable soup": (250, 400),
@@ -110,6 +112,8 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "yogurt plain": "йогурт",
         "milk": "молоко",
         "oatmeal cooked": "овсянка",
+        "Coca-Cola": "Coca-Cola",
+        "Coca-Cola Zero Sugar": "Coca-Cola без сахара",
         "pizza": "пицца",
         "hamburger": "бургер",
         "vegetable soup": "овощной суп",
@@ -184,6 +188,14 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     assumptions: list[str] = []
 
     for food in FALLBACK_FOODS:
+        has_zero_marker = any(
+            marker in normalized
+            for marker in (" zero", " diet", " light", "sugar free", "без сахара", "зеро", "лайт")
+        )
+        if food.name == "Coca-Cola" and has_zero_marker:
+            continue
+        if food.name == "Coca-Cola Zero Sugar" and not has_zero_marker:
+            continue
         aliases = sorted((food.name, *food.aliases), key=len, reverse=True)
         if not any(re.search(rf"\b{re.escape(normalize_food_query(alias))}\b", normalized) for alias in aliases):
             continue
@@ -225,6 +237,14 @@ def _estimate_grams_for_food(normalized_text: str, canonical: str, aliases: list
     alias_patterns = [re.escape(normalize_food_query(alias)) for alias in aliases]
     alias_pattern = "|".join(alias_patterns)
     gram_units = _unit_pattern(("g", "gram", "grams", "kg", "oz", "ounce", "ounces", "г", "гр", "грамм", "грамма", "граммов"))
+
+    if canonical in {"Coca-Cola", "Coca-Cola Zero Sugar"}:
+        volume_match = re.search(r"\b(\d+(?:[.,]\d+)?)\s*(ml|milliliter|milliliters|мл)\b", normalized_text)
+        if volume_match:
+            amount_ml = float(volume_match.group(1).replace(",", "."))
+            return amount_ml, amount_ml, "volume converted at assumed beverage density of 1 g/ml"
+        if re.search(r"\b(can|банка|банке|банку|банки)\b", normalized_text):
+            return 330, 330, "assumed standard 330 ml can at beverage density of 1 g/ml"
 
     explicit_after = re.search(
         rf"\b(\d+(?:\.\d+)?)\s*({gram_units})\s+(?:of\s+)?(?:{alias_pattern})\b",
@@ -306,6 +326,10 @@ def _localize_note(note: str, language: LanguageCode | None) -> str:
         return "оценено по количеству яиц"
     if note == "assumed standard portion":
         return "принята стандартная порция"
+    if note == "volume converted at assumed beverage density of 1 g/ml":
+        return "объем пересчитан при принятой плотности напитка 1 г/мл"
+    if note == "assumed standard 330 ml can at beverage density of 1 g/ml":
+        return "принята стандартная банка 330 мл и плотность напитка 1 г/мл"
     if note.startswith("estimated from ") and note.endswith(" count"):
         unit = note.removeprefix("estimated from ").removesuffix(" count")
         return f"оценено по количеству порций ({unit})"

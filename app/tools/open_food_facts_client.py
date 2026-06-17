@@ -5,6 +5,7 @@ import httpx
 
 from app.schemas.nutrition import NutritionCandidate, NutritionPer100g, NutritionValues
 from app.tools.cache import JsonFileCache
+from app.tools.fallback_nutrition import normalize_food_query
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class OpenFoodFactsClient:
         return candidates[0].to_per_100g()
 
     def search_products(self, product_name: str, *, page_size: int = 5) -> list[NutritionCandidate]:
-        cache_key = f"off:search:{product_name.lower()}"
+        cache_key = f"off:search:v2:{normalize_food_query(product_name)}:page_size={page_size}"
         cached = self.cache.get(cache_key)
         if cached:
             return [_parse_off_product(product) for product in _cached_products(cached)]
@@ -56,7 +57,7 @@ class OpenFoodFactsClient:
         return candidate.to_per_100g() if candidate else None
 
     def get_barcode_candidate(self, barcode: str) -> NutritionCandidate | None:
-        cache_key = f"off:barcode:{barcode}"
+        cache_key = f"off:barcode:v2:{barcode}"
         cached = self.cache.get(cache_key)
         if cached:
             return _parse_off_product(cached)
