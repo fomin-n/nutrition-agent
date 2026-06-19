@@ -1,12 +1,22 @@
 # Nutrition Retrieval Audit
 
-Last updated: 2026-06-18.
+Last updated: 2026-06-19.
 
 ## Coca-Cola Integrity Incident
 
 On 2026-06-18, Russian `Кола` was not canonicalized as a branded soft drink. USDA returned no result, FatSecret was unavailable, Open Food Facts was skipped for the resulting generic query, and the old `generic_mixed_food` profile (180 kcal, 8 g protein, 7 g fat, and 20 g carbohydrate per 100 g) was scaled to 330 g. This produced the internally consistent but invalid result of approximately 590 kcal, 26 g protein, 23 g fat, and 66 g carbohydrate.
 
 The fix is structural: English and Russian regular/zero-sugar cola forms now use centralized product aliases with category and variant metadata. Regular cola has an explicit 42 kcal and 10.6 g carbohydrate per 100 ml fallback; zero-sugar cola is separate. A can defaults to 330 ml, and only recorded water-density beverage profiles may convert ml to calculator grams using a documented 1 g/ml assumption.
+
+## Cyrillic Branded-Snack Retrieval
+
+Russian transliterations such as `Сникерс`, `Твикс`, and `Баунти` previously remained Cyrillic generic queries. Global provider records are predominantly English, so no candidate was returned and the reliable-match guard correctly requested clarification. The failure was canonicalization and query coverage, not scope routing or response localization.
+
+High-confidence international products now use the same deterministic product registry as cola. Each profile carries Russian/English aliases, canonical English name, brand, product type, standard serving, and a bounded list of provider query expansions. For example, `Сникерсе` produces `Snickers`, `Snickers bar`, and `Snickers chocolate bar`, while diagnostics retain every generated query. No extra LLM or search API call is added.
+
+Snickers, Twix, and Bounty also have explicit per-100 g fallback profiles. A stated package weight is used exactly; otherwise a standard 50 g Snickers/Twix or 57 g Bounty serving is assumed. Candidate validation requires the requested product identity, plausible chocolate-bar calories/macros, and no unrequested edition such as ice cream or protein variants. Market-specific recipes can differ, so label photos remain the preferred path for unusual editions.
+
+Two-product calorie questions are formatted as comparisons using independently retrieved/calculated values. They are not aggregated as a meal total.
 
 ## Current Runtime Call Chain
 
@@ -130,6 +140,7 @@ Examples:
 - `биг мак во Франции` -> `McDonald's Big Mac`, restaurant `McDonald's`, region `FR`;
 - `Danone Skyr 850 г` -> brand `Danone`, query kind `branded_product`;
 - `борщ со сметаной` -> `borscht with sour cream`.
+- `Сникерс 50g` -> canonical `Snickers`, brand `Snickers`, product type `chocolate bar`, plus English provider-query expansions.
 
 Brand names are preserved instead of translated.
 
@@ -155,7 +166,7 @@ Score components are stored on each `NutritionCandidate` for debugging.
 - FatSecret unavailable: USDA, Open Food Facts where applicable, and fallback continue.
 - USDA unavailable: FatSecret and fallback continue.
 - Rate limits and 5xx errors are logged in sanitized form and do not reach the user.
-- Every complete candidate is validated before selection. Sugary soft drinks must have negligible protein/fat and carbohydrate-dominant energy; regular and zero-sugar variants cannot cross-match.
+- Every complete candidate is validated before selection. Sugary soft drinks must have negligible protein/fat and carbohydrate-dominant energy; regular and zero-sugar variants cannot cross-match. Curated chocolate bars must match the canonical product identity and plausible category ranges.
 - No exact match returns a lower-ranked candidate only when that candidate passes semantic validation.
 - `generic_fallback` is limited to composite/photo-derived foods. It is forbidden for branded products, beverages, and unknown single ingredients.
 - When no candidate or explicit food/category fallback passes validation, the graph returns a localized clarification asking for brand, serving size, or a nutrition-label photo.

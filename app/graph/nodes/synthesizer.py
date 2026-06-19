@@ -1,3 +1,6 @@
+import re
+
+from app.graph.nodes.calculator import calculate_totals
 from app.graph.state import NutritionGraphState
 from app.i18n import (
     default_clarification_question,
@@ -54,6 +57,17 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
         }
 
     confidence = _combined_confidence(meal, totals)
+    items = state.get("ingredient_nutrition", [])
+    normalized = state.get("normalized_input")
+    if len(items) >= 2 and _is_comparison_request(normalized.text if normalized else ""):
+        return {
+            "final_estimate": FinalEstimate(
+                text=_format_calorie_comparison(items, language=language, confidence=confidence),
+                confidence=confidence,
+                is_refusal=False,
+                is_clarification=False,
+            )
+        }
     assumptions = meal.assumptions or [
         f"{item.ingredient_name}: {round(item.grams_min)}-{round(item.grams_max)} g."
         for item in state.get("ingredient_nutrition", [])
@@ -116,3 +130,64 @@ def _combined_confidence(meal: MealUnderstanding, totals: NutritionTotals) -> Co
     if totals.warnings:
         return "low"
     return meal.confidence
+
+
+def _is_comparison_request(text: str) -> bool:
+    normalized = text.lower().replace("ё", "е")
+    patterns = (
+        r"\bгде\s+больше\s+калор",
+        r"\bв\s+чем\s+больше\s+калор",
+        r"\bчто\s+калорийн",
+        r"\bwhich\s+(?:one\s+)?has\s+more\s+calor",
+        r"\bwhat\s+has\s+more\s+calor",
+        r"\bmore\s+calories",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _format_calorie_comparison(items, *, language: str, confidence: Confidence) -> str:
+    rows = []
+    for item in items:
+        item_totals = calculate_totals([item])
+        midpoint = (item_totals.calories_kcal.min + item_totals.calories_kcal.max) / 2
+        rows.append((item.matched_food_name, item.grams_min, item.grams_max, item_totals, midpoint))
+
+    top_midpoint = max(row[4] for row in rows)
+    winners = [row for row in rows if top_midpoint - row[4] <= max(10, top_midpoint * 0.05)]
+    language = response_language(language)
+    if language == "ru":
+        lines = ["Сравнение калорийности:"]
+        for name, grams_min, grams_max, item_totals, _ in rows:
+            weight = _format_weight(grams_min, grams_max, "г")
+            calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
+            lines.append(f"* {name} ({weight}): {calories} ккал")
+        if len(winners) > 1:
+            lines.append("Калорийность примерно одинаковая с учетом округления и различий между рынками.")
+        else:
+            lines.append(f"Больше калорий в {winners[0][0]}.")
+        lines.append(f"Уверенность: {_confidence_label(confidence, language)}")
+        return "\n".join(lines)
+
+    lines = ["Calorie comparison:"]
+    for name, grams_min, grams_max, item_totals, _ in rows:
+        weight = _format_weight(grams_min, grams_max, "g")
+        calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
+        lines.append(f"* {name} ({weight}): {calories} kcal")
+    if len(winners) > 1:
+        lines.append("They are approximately equal after rounding and market variation.")
+    else:
+        lines.append(f"{winners[0][0]} has more calories.")
+    lines.append(f"Confidence: {confidence}")
+    return "\n".join(lines)
+
+
+def _format_weight(minimum: float, maximum: float, unit: str) -> str:
+    if minimum == maximum:
+        return f"{minimum:.0f} {unit}"
+    return f"{minimum:.0f}-{maximum:.0f} {unit}"
+
+
+def _format_range(minimum: float, maximum: float) -> str:
+    if minimum == maximum:
+        return f"{minimum:.0f}"
+    return f"{minimum:.0f}-{maximum:.0f}"

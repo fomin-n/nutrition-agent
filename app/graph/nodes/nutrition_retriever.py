@@ -96,6 +96,7 @@ class NutritionRetriever:
             canonical_query=query.canonical_query,
             food_category=query.food_category,
             product_variant=query.product_variant,
+            product_type=query.product_type,
             amount_min_g=ingredient.grams_min,
             amount_max_g=ingredient.grams_max,
             provider_queries=provider_search_queries(query),

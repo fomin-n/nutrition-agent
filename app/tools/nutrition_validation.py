@@ -1,5 +1,6 @@
 from app.schemas.nutrition import CandidateValidationResult, NutritionCandidate
-from app.tools.food_query import NormalizedFoodQuery
+from app.tools.fallback_nutrition import normalize_food_query
+from app.tools.food_query import NormalizedFoodQuery, product_profile_for_canonical
 
 
 def validate_candidate(
@@ -24,6 +25,27 @@ def validate_candidate(
         query.query_kind == "branded_product" or query.food_category != "unknown"
     ):
         reasons.append("generic_fallback_not_allowed_for_product_or_category")
+
+    candidate_haystack = normalize_food_query(
+        " ".join(
+            part
+            for part in (candidate.name, candidate.brand, candidate.description)
+            if part
+        )
+    )
+    if query.food_category == "chocolate_bar":
+        expected_product = normalize_food_query(query.canonical_query)
+        profile = product_profile_for_canonical(query.canonical_query)
+        identity_aliases = (profile.canonical_product, *profile.aliases) if profile else (query.canonical_query,)
+        if not any(normalize_food_query(alias) in candidate_haystack for alias in identity_aliases):
+            reasons.append("chocolate_bar_product_identity_mismatch")
+        if not 300 <= calories <= 650:
+            reasons.append("chocolate_bar_calories_out_of_range")
+        if protein > 20 or not 5 <= fat <= 50 or not 30 <= carbs <= 85:
+            reasons.append("chocolate_bar_macros_out_of_range")
+        variant_terms = ("ice cream", "protein", "white", "brownie", "dark chocolate")
+        if any(term in candidate_haystack and term not in expected_product for term in variant_terms):
+            reasons.append("unrequested_chocolate_bar_variant")
 
     name = candidate.name.lower()
     zero_terms = ("zero", "diet", "sugar free", "sugar-free", "без сахара", "зеро")

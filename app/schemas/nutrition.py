@@ -149,6 +149,7 @@ class RetrievalDiagnostic(BaseModel):
     canonical_query: str
     food_category: str
     product_variant: str
+    product_type: str | None = None
     amount_min_g: float
     amount_max_g: float
     provider_queries: list[str] = Field(default_factory=list)

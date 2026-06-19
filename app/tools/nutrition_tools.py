@@ -211,12 +211,30 @@ def _fallback_candidate(query: NormalizedFoodQuery) -> NutritionCandidate | None
     per_100g = lookup_fallback_food(query.canonical_query) or lookup_fallback_food(query.original)
     if per_100g is None:
         return None
-    return candidate_from_per_100g(per_100g, source="fallback")
+    candidate = candidate_from_per_100g(per_100g, source="fallback")
+    if query.query_kind == "branded_product":
+        return candidate.model_copy(
+            update={
+                "brand": query.brand,
+                "food_type": "branded",
+                "metadata": {
+                    "food_category": query.food_category,
+                    "product_variant": query.product_variant,
+                    "product_type": query.product_type,
+                },
+            }
+        )
+    return candidate
 
 
 def provider_search_queries(query: NormalizedFoodQuery) -> list[str]:
-    queries = [query.canonical_query]
+    queries = [query.canonical_query, *query.query_expansions]
     normalized = normalize_food_query(query.canonical_query)
+    original_normalized = normalize_food_query(query.original)
+    if original_normalized != normalized and len(original_normalized.split()) <= 6:
+        queries.append(query.original)
+    if query.quantity and query.unit in {"g", "gram", "grams", "г", "гр", "грамм", "грамма", "граммов"}:
+        queries.append(f"{query.canonical_query} {query.quantity:g}g")
     if " with " in f" {normalized} ":
         primary = normalized.split(" with ", maxsplit=1)[0].strip()
         if primary:

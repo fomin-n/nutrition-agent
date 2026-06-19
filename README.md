@@ -115,11 +115,13 @@ Model names are configurable through environment variables so the project can mo
 - USDA FoodData Central lookup when `USDA_API_KEY` is configured. Generic ingredients prefer Foundation/SR Legacy data, and prepared dishes prefer FNDDS where relevant.
 - FatSecret Platform API lookup when `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are configured. Branded products and restaurant menu items prefer FatSecret first.
 - Open Food Facts lookup remains available for packaged-food fallback.
-- Local fallback nutrition table for common foods and explicit category profiles such as regular and zero-sugar cola.
+- Local fallback nutrition table for common foods and explicit category profiles such as regular/zero-sugar cola and standard Snickers, Twix, and Bounty bars.
 
 Provider outputs are normalized into a common candidate schema with a stable `source + source_id + serving_id` identity, serving metadata, per-100 g values when safely available, and deterministic ranking score components. Unknown single ingredients, branded products, and beverages never use the generic mixed-food fallback; the bot asks for a brand, serving, or label when no semantically valid candidate exists. The app does not persist FatSecret raw API responses or tokens.
 
 Regular Coca-Cola aliases in English and Russian normalize to one branded sugary-soft-drink product. A can defaults to 330 ml, and volume is converted to calculator grams only for this recorded water-density beverage profile. Candidate validation rejects soft-drink records with implausible protein/fat or a regular/zero-sugar mismatch.
+
+Common international packaged products use a small deterministic alias registry before provider lookup. Russian forms such as `Сникерс`, `Сникерсе`, `Твикс`, `Твиксе`, and `Баунти` map to canonical English product names and bounded provider-query expansions such as `Snickers bar`. Explicit package weights are used exactly; otherwise the documented standard product serving is assumed. If structured providers fail, a product-specific per-100 g profile is used instead of `generic_mixed_food`. Values may differ by market or variant, so unusual editions still require a label photo.
 
 Retrieval diagnostics log the request UUID, canonical query, amount, provider queries, candidate identities, scores, validation reasons, selected identity, fallback path, and calculated totals. Raw user context is excluded by default. Set `NUTRITION_DIAGNOSTICS_INCLUDE_RAW=true` only during a controlled investigation; `NUTRITION_DIAGNOSTICS_MAX_PAYLOAD_CHARS` bounds and redacts that context.
 

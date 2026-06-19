@@ -13,7 +13,13 @@ QueryKind = Literal[
     "user_composite_meal",
     "photo_derived_food",
 ]
-FoodCategory = Literal["food", "sugary_soft_drink", "zero_sugar_soft_drink", "unknown"]
+FoodCategory = Literal[
+    "food",
+    "chocolate_bar",
+    "sugary_soft_drink",
+    "zero_sugar_soft_drink",
+    "unknown",
+]
 ProductVariant = Literal["regular", "zero_sugar", "unknown"]
 
 
@@ -24,6 +30,8 @@ class ProductAliasProfile:
     category: FoodCategory
     variant: ProductVariant
     aliases: tuple[str, ...]
+    product_type: str | None = None
+    query_expansions: tuple[str, ...] = ()
     default_serving_amount: float | None = None
     default_serving_unit: str | None = None
 
@@ -45,6 +53,8 @@ class NormalizedFoodQuery:
     product_variant: ProductVariant = "unknown"
     default_serving_amount: float | None = None
     default_serving_unit: str | None = None
+    product_type: str | None = None
+    query_expansions: tuple[str, ...] = ()
 
 
 PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = (
@@ -76,6 +86,7 @@ PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = (
             "кока-кола лайт",
             "кола лайт",
         ),
+        product_type="soft drink",
         default_serving_amount=330,
         default_serving_unit="ml",
     ),
@@ -103,8 +114,58 @@ PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = (
             "коле",
             "колу",
         ),
+        product_type="soft drink",
         default_serving_amount=330,
         default_serving_unit="ml",
+    ),
+    ProductAliasProfile(
+        canonical_product="Snickers",
+        brand="Snickers",
+        category="chocolate_bar",
+        variant="regular",
+        aliases=(
+            "snickers",
+            "snickers bar",
+            "сникерс",
+            "сникерса",
+            "сникерсе",
+            "сникерсом",
+            "сникерсу",
+        ),
+        product_type="chocolate bar",
+        query_expansions=("Snickers bar", "Snickers chocolate bar"),
+        default_serving_amount=50,
+        default_serving_unit="g",
+    ),
+    ProductAliasProfile(
+        canonical_product="Twix",
+        brand="Twix",
+        category="chocolate_bar",
+        variant="regular",
+        aliases=(
+            "twix",
+            "twix bar",
+            "твикс",
+            "твикса",
+            "твиксе",
+            "твиксом",
+            "твиксу",
+        ),
+        product_type="chocolate bar",
+        query_expansions=("Twix bar", "Twix chocolate bar"),
+        default_serving_amount=50,
+        default_serving_unit="g",
+    ),
+    ProductAliasProfile(
+        canonical_product="Bounty",
+        brand="Bounty",
+        category="chocolate_bar",
+        variant="regular",
+        aliases=("bounty", "bounty bar", "баунти"),
+        product_type="coconut chocolate bar",
+        query_expansions=("Bounty bar", "Bounty coconut chocolate bar"),
+        default_serving_amount=57,
+        default_serving_unit="g",
     ),
 )
 
@@ -241,6 +302,8 @@ def normalize_food_description(
         product_variant=product.variant if product else "unknown",
         default_serving_amount=product.default_serving_amount if product else None,
         default_serving_unit=product.default_serving_unit if product else None,
+        product_type=product.product_type if product else None,
+        query_expansions=product.query_expansions if product else (),
     )
 
 
@@ -315,3 +378,15 @@ def _find_product(normalized: str) -> ProductAliasProfile | None:
             if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized):
                 return product
     return None
+
+
+def product_profile_for_canonical(name: str) -> ProductAliasProfile | None:
+    normalized_name = normalize_food_query(name)
+    return next(
+        (
+            product
+            for product in PRODUCT_ALIASES
+            if normalize_food_query(product.canonical_product) == normalized_name
+        ),
+        None,
+    )

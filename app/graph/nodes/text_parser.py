@@ -12,6 +12,7 @@ from app.llm.structured import invoke_structured_text, read_prompt
 from app.memory.service import derive_unresolved_task, memory_context_prompt
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
+from app.tools.food_query import product_profile_for_canonical
 
 DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
     "cooked white rice": (150, 220),
@@ -112,6 +113,9 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "yogurt plain": "йогурт",
         "milk": "молоко",
         "oatmeal cooked": "овсянка",
+        "Snickers": "Snickers",
+        "Twix": "Twix",
+        "Bounty": "Bounty",
         "Coca-Cola": "Coca-Cola",
         "Coca-Cola Zero Sugar": "Coca-Cola без сахара",
         "pizza": "пицца",
@@ -237,6 +241,16 @@ def _estimate_grams_for_food(normalized_text: str, canonical: str, aliases: list
     alias_patterns = [re.escape(normalize_food_query(alias)) for alias in aliases]
     alias_pattern = "|".join(alias_patterns)
     gram_units = _unit_pattern(("g", "gram", "grams", "kg", "oz", "ounce", "ounces", "г", "гр", "грамм", "грамма", "граммов"))
+    product_profile = product_profile_for_canonical(canonical)
+
+    if product_profile and product_profile.category == "chocolate_bar":
+        explicit_weight = re.search(rf"\b(\d+(?:[.,]\d+)?)\s*({gram_units})\b", normalized_text)
+        if explicit_weight:
+            amount = _explicit_gram_amount(explicit_weight.group(0), gram_units)
+            return amount, amount, "explicit packaged weight"
+        if product_profile.default_serving_amount:
+            amount = product_profile.default_serving_amount
+            return amount, amount, "assumed standard packaged serving"
 
     if canonical in {"Coca-Cola", "Coca-Cola Zero Sugar"}:
         volume_match = re.search(r"\b(\d+(?:[.,]\d+)?)\s*(ml|milliliter|milliliters|мл)\b", normalized_text)
@@ -326,6 +340,10 @@ def _localize_note(note: str, language: LanguageCode | None) -> str:
         return "оценено по количеству яиц"
     if note == "assumed standard portion":
         return "принята стандартная порция"
+    if note == "explicit packaged weight":
+        return "использован указанный вес упаковки"
+    if note == "assumed standard packaged serving":
+        return "принят стандартный вес батончика"
     if note == "volume converted at assumed beverage density of 1 g/ml":
         return "объем пересчитан при принятой плотности напитка 1 г/мл"
     if note == "assumed standard 330 ml can at beverage density of 1 g/ml":
