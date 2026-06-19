@@ -23,6 +23,7 @@ reports/eval/*
 *.jpg
 *.jpeg
 *.png
+!docs/assets/nutrition-agent-cover.png
 .venv/
 venv/
 __pycache__/

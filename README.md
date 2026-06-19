@@ -1,5 +1,7 @@
 # nutrition-agent
 
+![NutritionAgent cover](docs/assets/nutrition-agent-cover.png)
+
 `nutrition-agent` is an experimental agentic nutrition-estimation bot. It accepts a meal description and, optionally, a food photo through Telegram, then returns an approximate calorie and macronutrient range with explicit assumptions.
 
 The project is designed as an engineering MVP: language and vision models help classify and structure uncertain meal input, while calorie and macro arithmetic is deterministic Python.
