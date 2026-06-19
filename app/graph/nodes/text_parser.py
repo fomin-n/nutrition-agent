@@ -12,7 +12,7 @@ from app.llm.structured import invoke_structured_text, read_prompt
 from app.memory.service import derive_unresolved_task, memory_context_prompt
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
-from app.tools.food_query import product_profile_for_canonical
+from app.tools.food_query import product_profile_for_canonical, product_profiles_in_text
 
 DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
     "cooked white rice": (150, 220),
@@ -129,18 +129,23 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     text = state["normalized_input"].text or ""
     language = state["normalized_input"].language
     memory_note = memory_context_prompt(state.get("memory_context"))
+    local_meal = parse_text_locally(text, language=language)
+    product_profiles = product_profiles_in_text(text)
+    expected_products = {profile.canonical_product for profile in product_profiles}
+    parsed_products = {ingredient.name for ingredient in local_meal.ingredients}
+    if expected_products and parsed_products == expected_products:
+        return {"meal": local_meal}
     if state.get("use_llm", True) and has_openai_key():
         try:
             llm_meal = parse_text_with_llm(text, language=language, memory_note=memory_note)
             if llm_meal.ingredients and not llm_meal.needs_clarification:
                 return {"meal": llm_meal}
-            local_meal = parse_text_locally(text, language=language)
             if local_meal.ingredients:
                 return {"meal": local_meal}
             return {"meal": llm_meal}
         except Exception:
-            return {"meal": parse_text_locally(text, language=language)}
-    return {"meal": parse_text_locally(text, language=language)}
+            return {"meal": local_meal}
+    return {"meal": local_meal}
 
 
 def parse_text_with_llm(
@@ -158,6 +163,7 @@ def parse_text_with_llm(
         f"Detected user language: {language}.\n"
         "Use the same language for human-readable ingredient names, assumptions, and clarification_question. "
         "Return ingredients with practical grams_min and grams_max. "
+        "Keep a recognizable packaged product as one ingredient; do not decompose it into recipe components. "
         "If portion information is missing but a standard portion is reasonable, use that and list it as an assumption."
     )
     return invoke_structured_text(

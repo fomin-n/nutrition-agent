@@ -380,6 +380,30 @@ def _find_product(normalized: str) -> ProductAliasProfile | None:
     return None
 
 
+def product_profiles_in_text(text: str) -> tuple[ProductAliasProfile, ...]:
+    normalized = normalize_food_query(text)
+    matches: list[tuple[int, int, int, ProductAliasProfile]] = []
+    for product in PRODUCT_ALIASES:
+        best_match: tuple[int, int, int, ProductAliasProfile] | None = None
+        for alias in product.aliases:
+            normalized_alias = normalize_food_query(alias)
+            match = re.search(rf"\b{re.escape(normalized_alias)}\b", normalized)
+            if match is None:
+                continue
+            candidate = (len(normalized_alias), match.start(), match.end(), product)
+            if best_match is None or candidate[0] > best_match[0]:
+                best_match = candidate
+        if best_match:
+            matches.append(best_match)
+
+    selected: list[tuple[int, int, ProductAliasProfile]] = []
+    for _, start, end, product in sorted(matches, key=lambda item: item[0], reverse=True):
+        if any(start < selected_end and end > selected_start for selected_start, selected_end, _ in selected):
+            continue
+        selected.append((start, end, product))
+    return tuple(product for _, _, product in sorted(selected, key=lambda item: item[0]))
+
+
 def product_profile_for_canonical(name: str) -> ProductAliasProfile | None:
     normalized_name = normalize_food_query(name)
     return next(
