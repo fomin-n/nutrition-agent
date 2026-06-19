@@ -9,7 +9,7 @@ from app.i18n import (
 )
 from app.llm.client import get_settings, has_openai_key
 from app.llm.structured import invoke_structured_text, read_prompt
-from app.memory.service import derive_unresolved_task, memory_context_prompt
+from app.memory.service import UnresolvedTask, derive_unresolved_task, memory_context_prompt
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
 from app.tools.food_query import product_profile_for_canonical, product_profiles_in_text
@@ -130,6 +130,8 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     language = state["normalized_input"].language
     memory_note = memory_context_prompt(state.get("memory_context"))
     local_meal = parse_text_locally(text, language=language)
+    if local_meal.needs_clarification and derive_unresolved_task(text) is not None:
+        return {"meal": local_meal}
     product_profiles = product_profiles_in_text(text)
     expected_products = {profile.canonical_product for profile in product_profiles}
     parsed_products = {ingredient.name for ingredient in local_meal.ingredients}
@@ -181,14 +183,16 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     if (
         unresolved_task is not None
         and unresolved_task.missing_fields
-        and _is_chicken_only_request(normalized)
+        and _requires_explicit_details(unresolved_task)
+        and _is_single_food_request(normalized, unresolved_task)
     ):
         return MealUnderstanding(
             ingredients=[],
             assumptions=[],
             confidence="low",
             needs_clarification=True,
-            clarification_question=_chicken_clarification_question(
+            clarification_question=_task_clarification_question(
+                unresolved_task,
                 unresolved_task.missing_fields,
                 language,
             ),
@@ -360,11 +364,20 @@ def _localize_note(note: str, language: LanguageCode | None) -> str:
     return note
 
 
-def _is_chicken_only_request(normalized_text: str) -> bool:
-    if not any(term in normalized_text for term in ("chicken", "куриц", "курин")):
-        return False
+def _requires_explicit_details(task: UnresolvedTask) -> bool:
+    return (task.canonical_query or task.food_name) in {"chicken", "fish", "rice", "yogurt"}
+
+
+def _is_single_food_request(normalized_text: str, task: UnresolvedTask) -> bool:
+    task_names = {
+        "chicken": "chicken breast cooked",
+        "rice": "cooked white rice",
+        "yogurt": "yogurt plain",
+        "fish": "salmon cooked",
+    }
+    allowed_food = task_names.get(task.canonical_query or task.food_name)
     for food in FALLBACK_FOODS:
-        if food.name == "chicken breast cooked":
+        if food.name == allowed_food:
             continue
         aliases = (food.name, *food.aliases)
         if any(
@@ -375,21 +388,27 @@ def _is_chicken_only_request(normalized_text: str) -> bool:
     return True
 
 
-def _chicken_clarification_question(missing_fields: list[str], language: LanguageCode | None) -> str:
+def _task_clarification_question(
+    task: UnresolvedTask,
+    missing_fields: list[str],
+    language: LanguageCode | None,
+) -> str:
     labels_en = {
         "cut": "what cut of chicken it was",
-        "quantity": "how much chicken there was",
+        "subtype": "what type of fish it was",
+        "quantity": f"how much {task.food_name} there was",
         "preparation": "how it was prepared",
     }
     labels_ru = {
         "cut": "какая часть курицы",
-        "quantity": "сколько было курицы",
-        "preparation": "как она была приготовлена",
+        "subtype": "какой это был вид рыбы",
+        "quantity": "какой был вес или размер порции",
+        "preparation": "как продукт был приготовлен",
     }
     if response_language(language) == "ru":
         labels = [labels_ru[field] for field in missing_fields if field in labels_ru]
         return "Уточните, пожалуйста: " + ", ".join(labels) + "."
     labels = [labels_en[field] for field in missing_fields if field in labels_en]
-    if len(labels) == 3:
+    if task.food_name == "chicken" and len(labels) == 3:
         return "What cut of chicken, how much, and how was it prepared?"
     return "Please clarify " + ", ".join(labels) + "."

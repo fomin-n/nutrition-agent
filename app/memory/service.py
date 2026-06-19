@@ -9,9 +9,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.i18n import LanguageCode, detect_language
-from app.llm.client import get_settings
+from app.llm.client import get_settings, local_moderate_text
 from app.schemas.outputs import FinalEstimate
-from app.tools.fallback_nutrition import normalize_food_query
+from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
+from app.tools.food_query import normalize_food_description, product_profiles_in_text
 
 MessageRole = Literal["user", "assistant"]
 
@@ -39,10 +40,15 @@ class MemoryFact(BaseModel):
 class UnresolvedTask(BaseModel):
     kind: str = "nutrition_estimate"
     food_name: str
+    canonical_query: str | None = None
+    brand: str | None = None
+    subtype: str | None = None
+    variant: str | None = None
     language: LanguageCode = "unknown"
     quantity: str | None = None
     preparation: str | None = None
     cut: str | None = None
+    required_fields: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
     original_text: str = ""
     updated_at: str
@@ -378,11 +384,15 @@ def derive_unresolved_task(text: str | None) -> UnresolvedTask | None:
         return None
     language = detect_language(text)
     normalized = normalize_food_query(text)
-    if not _mentions_chicken(normalized):
+    target = _identify_food_target(normalized)
+    if target is None:
         return None
     task = UnresolvedTask(
-        food_name="chicken",
+        food_name=target["food_name"],
+        canonical_query=target["canonical_query"],
+        brand=target["brand"],
         language=language,
+        required_fields=target["required_fields"],
         original_text=text,
         updated_at=_now(),
     )
@@ -452,8 +462,10 @@ def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str
         missing = ", ".join(task.missing_fields) or "none"
         lines.append(
             "Current unresolved task: "
-            f"{task.food_name}; quantity={task.quantity or 'unknown'}; "
+            f"{task.canonical_query or task.food_name}; brand={task.brand or 'unknown'}; "
+            f"subtype={task.subtype or 'unknown'}; quantity={task.quantity or 'unknown'}; "
             f"preparation={task.preparation or 'unknown'}; cut={task.cut or 'unknown'}; "
+            f"variant={task.variant or 'unknown'}; "
             f"missing={missing}."
         )
     if context.facts:
@@ -482,20 +494,52 @@ def _final_estimate(final_state: dict[str, Any] | None) -> FinalEstimate | None:
 
 
 def _looks_like_followup(text: str, task: UnresolvedTask) -> bool:
+    if not local_moderate_text(text).allowed:
+        return False
     normalized = normalize_food_query(text)
     if not normalized:
         return False
+
     fields = _extract_task_fields(normalized)
+    target = _identify_food_target(normalized)
+    if target is not None and not _targets_are_compatible(task, target, fields):
+        return False
+    if _looks_like_new_request(normalized) and target is None:
+        return False
+
     token_count = len(normalized.split())
-    if any(fields.values()):
-        return token_count <= 10 or _mentions_chicken(normalized)
-    return "cut" in task.missing_fields and _extract_cut(normalized) is not None
+    if token_count > 12:
+        return False
+
+    supplied_fields = {name for name, value in fields.items() if value}
+    if target is not None and _targets_are_compatible(task, target, fields):
+        return True
+    if not supplied_fields:
+        return False
+
+    expected = set(task.missing_fields)
+    return bool(supplied_fields & expected) or bool(supplied_fields & {"brand", "variant"})
 
 
 def _merge_task_fields(task: UnresolvedTask, text: str) -> UnresolvedTask:
-    fields = _extract_task_fields(normalize_food_query(text))
+    normalized = normalize_food_query(text)
+    fields = _extract_task_fields(normalized)
+    target = _identify_food_target(normalized)
+    canonical_query = task.canonical_query
+    food_name = task.food_name
+    if fields["subtype"]:
+        canonical_query = _subtype_query(fields["subtype"])
+        food_name = fields["subtype"]
+    elif target is not None and _targets_are_compatible(task, target, fields):
+        canonical_query = target["canonical_query"] or canonical_query
+
     merged = task.model_copy(
         update={
+            "food_name": food_name,
+            "canonical_query": canonical_query,
+            "brand": fields["brand"] or task.brand,
+            "subtype": fields["subtype"] or task.subtype,
+            "variant": fields["variant"] or task.variant,
             "quantity": fields["quantity"] or task.quantity,
             "preparation": fields["preparation"] or task.preparation,
             "cut": fields["cut"] or task.cut,
@@ -506,70 +550,74 @@ def _merge_task_fields(task: UnresolvedTask, text: str) -> UnresolvedTask:
 
 
 def _refresh_missing_fields(task: UnresolvedTask) -> UnresolvedTask:
-    missing: list[str] = []
-    if task.food_name == "chicken":
-        if not task.cut:
-            missing.append("cut")
-        if not task.quantity:
-            missing.append("quantity")
-        if not task.preparation:
-            missing.append("preparation")
-    elif not task.quantity:
-        missing.append("quantity")
+    required_fields = task.required_fields or _legacy_required_fields(task)
+    missing = [field for field in required_fields if not getattr(task, field, None)]
     return task.model_copy(update={"missing_fields": missing, "updated_at": _now()})
 
 
 def _task_to_text(task: UnresolvedTask) -> str:
     parts = [_food_text(task)]
+    if task.variant:
+        parts.append(_localized_variant(task.variant, task.language))
     if task.quantity:
         parts.append(task.quantity)
     if task.preparation:
-        parts.append(task.preparation)
+        parts.append(_localized_preparation(task.preparation, task.language))
     return ", ".join(part for part in parts if part)
 
 
 def _food_text(task: UnresolvedTask) -> str:
-    if task.food_name != "chicken":
-        return task.food_name
-    if task.cut and task.cut not in {"chicken"}:
-        return f"chicken {task.cut}"
-    return "chicken"
+    language = task.language
+    if task.subtype:
+        food = _localized_food(task.subtype, language)
+    elif task.food_name == "chicken" and task.cut:
+        food = _localized_chicken_cut(task.cut, language)
+    else:
+        food = _localized_food(task.canonical_query or task.food_name, language)
+    if task.brand and normalize_food_query(task.brand) not in normalize_food_query(food):
+        return f"{task.brand} {food}"
+    return food
 
 
 def _extract_task_fields(normalized: str) -> dict[str, str | None]:
+    query = normalize_food_description(normalized)
     return {
         "quantity": _extract_quantity(normalized),
         "preparation": _extract_preparation(normalized),
         "cut": _extract_cut(normalized),
+        "subtype": _extract_subtype(normalized),
+        "brand": query.brand,
+        "variant": _extract_variant(normalized),
     }
 
 
 def _extract_quantity(normalized: str) -> str | None:
     match = re.search(
-        r"\b(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|oz|ounce|ounces|г|гр|грамм|грамма|граммов|кг)\b",
+        r"\b(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|oz|ounce|ounces|ml|milliliter|milliliters|"
+        r"cup|cups|serving|servings|can|cans|г|гр|грамм|грамма|граммов|кг|мл|чашка|чашки|"
+        r"порция|порции|банка|банки)\b",
         normalized,
     )
-    if not match:
-        return None
-    return f"{match.group(1).replace(',', '.')} {match.group(2)}"
+    if match:
+        return f"{match.group(1).replace(',', '.')} {match.group(2)}"
+    count_match = re.search(
+        r"\b(one|a|одна|один|одно)\s+(can|serving|cup|банка|порция|чашка)\b",
+        normalized,
+    )
+    return f"1 {count_match.group(2)}" if count_match else None
 
 
 def _extract_preparation(normalized: str) -> str | None:
     preparation_terms = {
-        "fried": ("fried",),
-        "grilled": ("grilled",),
-        "baked": ("baked", "roasted"),
-        "boiled": ("boiled",),
-        "raw": ("raw",),
-        "cooked": ("cooked",),
-        "жарен": ("жарен", "пожарен"),
-        "гриль": ("гриль",),
-        "запеч": ("запеч",),
-        "варен": ("варен", "отвар"),
-        "сыр": ("сыр",),
+        "fried": (r"\bfried\b", r"\bжарен\w*\b", r"\bпожарен\w*\b"),
+        "grilled": (r"\bgrilled\b", r"\bгрил\w*\b"),
+        "baked": (r"\bbaked\b", r"\broasted\b", r"\bзапеч\w*\b"),
+        "boiled": (r"\bboiled\b", r"\bварен\w*\b", r"\bотвар\w*\b"),
+        "raw": (r"\braw\b", r"\bсыр(?:ой|ая|ое|ые|ого|ому|ым|ых)\b"),
+        "cooked": (r"\bcooked\b", r"\bготов\w*\b"),
     }
-    for value, terms in preparation_terms.items():
-        if any(term in normalized for term in terms):
+    for value, patterns in preparation_terms.items():
+        if any(re.search(pattern, normalized) for pattern in patterns):
             return value
     return None
 
@@ -587,8 +635,186 @@ def _extract_cut(normalized: str) -> str | None:
     return None
 
 
-def _mentions_chicken(normalized: str) -> bool:
-    return any(term in normalized for term in ("chicken", "куриц", "курин"))
+def _extract_subtype(normalized: str) -> str | None:
+    subtype_terms = {
+        "salmon": (r"\bsalmon\b", r"\bлосос\w*\b", r"\bсемг\w*\b"),
+        "tuna": (r"\btuna\b", r"\bтунц\w*\b"),
+        "cod": (r"\bcod\b", r"\bтреск\w*\b"),
+        "trout": (r"\btrout\b", r"\bфорел\w*\b"),
+    }
+    for value, patterns in subtype_terms.items():
+        if any(re.search(pattern, normalized) for pattern in patterns):
+            return value
+    return None
+
+
+def _extract_variant(normalized: str) -> str | None:
+    if any(
+        re.search(pattern, normalized)
+        for pattern in (
+            r"\bzero\b",
+            r"\bdiet\b",
+            r"\blight\b",
+            r"\bsugar free\b",
+            r"\bбез сахара\b",
+            r"\bзеро\b",
+            r"\bлайт\b",
+        )
+    ):
+        return "zero_sugar"
+    return None
+
+
+def _identify_food_target(normalized: str) -> dict[str, Any] | None:
+    if re.search(r"\b(chicken|куриц\w*|курин\w*)\b", normalized):
+        return _target("chicken", "chicken", ["cut", "quantity", "preparation"])
+    if re.search(r"\b(fish|рыб\w*)\b", normalized):
+        return _target("fish", "fish", ["subtype", "quantity", "preparation"])
+    if re.search(r"\b(rice|рис\w*)\b", normalized):
+        return _target("rice", "rice", ["quantity", "preparation"])
+    if re.search(r"\b(yogurt|yoghurt|йогурт\w*)\b", normalized):
+        brand = normalize_food_description(normalized).brand
+        return _target("yogurt", "yogurt", ["quantity"], brand=brand)
+
+    product_profiles = product_profiles_in_text(normalized)
+    if product_profiles:
+        product = product_profiles[0]
+        required = [] if product.default_serving_amount else ["quantity"]
+        if product.category == "chocolate_bar":
+            required = ["quantity"]
+        return _target(
+            product.canonical_product,
+            product.canonical_product,
+            required,
+            brand=product.brand,
+        )
+
+    matched_food = _matched_fallback_food(normalized)
+    if matched_food:
+        return _target(matched_food, matched_food, ["quantity"])
+    return None
+
+
+def _target(
+    food_name: str,
+    canonical_query: str,
+    required_fields: list[str],
+    *,
+    brand: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "food_name": food_name,
+        "canonical_query": canonical_query,
+        "brand": brand,
+        "required_fields": required_fields,
+    }
+
+
+def _matched_fallback_food(normalized: str) -> str | None:
+    matches: list[tuple[int, str]] = []
+    for food in FALLBACK_FOODS:
+        for alias in (food.name, *food.aliases):
+            normalized_alias = normalize_food_query(alias)
+            if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized):
+                matches.append((len(normalized_alias), food.name))
+    return max(matches, default=(0, ""))[1] or None
+
+
+def _targets_are_compatible(
+    task: UnresolvedTask,
+    target: dict[str, Any],
+    fields: dict[str, str | None],
+) -> bool:
+    task_names = {
+        normalize_food_query(task.food_name),
+        normalize_food_query(task.canonical_query or ""),
+    }
+    target_names = {
+        normalize_food_query(target["food_name"]),
+        normalize_food_query(target["canonical_query"]),
+    }
+    if task_names & target_names:
+        return True
+    if task.food_name == "fish" and fields.get("subtype"):
+        return True
+    if task.food_name == "chicken" and fields.get("cut"):
+        return True
+    return bool(task.brand and task.brand == target.get("brand"))
+
+
+def _looks_like_new_request(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(how many|how much|estimate|calculate|what can you do|"
+            r"сколько|оцени|рассчитай|что ты умеешь|что можешь)\b",
+            normalized,
+        )
+        or "?" in normalized
+    )
+
+
+def _legacy_required_fields(task: UnresolvedTask) -> list[str]:
+    if task.food_name == "chicken":
+        return ["cut", "quantity", "preparation"]
+    return ["quantity"]
+
+
+def _subtype_query(subtype: str) -> str:
+    return {
+        "salmon": "salmon",
+        "tuna": "tuna",
+        "cod": "cod",
+        "trout": "trout",
+    }.get(subtype, subtype)
+
+
+def _localized_food(food: str, language: LanguageCode) -> str:
+    if language != "ru":
+        return food
+    return {
+        "chicken": "курица",
+        "fish": "рыба",
+        "rice": "рис",
+        "yogurt": "йогурт",
+        "salmon": "лосось",
+        "tuna": "тунец",
+        "cod": "треска",
+        "trout": "форель",
+        "cooked white rice": "рис",
+        "yogurt plain": "йогурт",
+        "chicken breast cooked": "курица",
+        "salmon cooked": "лосось",
+    }.get(food, food)
+
+
+def _localized_chicken_cut(cut: str, language: LanguageCode) -> str:
+    if language != "ru":
+        return f"chicken {cut}"
+    return {
+        "breast": "куриная грудка",
+        "thigh": "куриное бедро",
+        "wing": "куриное крыло",
+        "leg": "куриная ножка",
+    }.get(cut, "курица")
+
+
+def _localized_preparation(preparation: str, language: LanguageCode) -> str:
+    if language != "ru":
+        return preparation
+    return {
+        "fried": "жареный",
+        "grilled": "на гриле",
+        "baked": "запеченный",
+        "boiled": "вареный",
+        "raw": "сырой",
+        "cooked": "приготовленный",
+    }.get(preparation, preparation)
+
+
+def _localized_variant(variant: str, language: LanguageCode) -> str:
+    if variant == "zero_sugar":
+        return "без сахара" if language == "ru" else "zero sugar"
+    return variant
 
 
 def _user_memory_text(text: str | None) -> str:

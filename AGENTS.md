@@ -77,7 +77,8 @@ Conversation and user memory live in `app/memory/service.py`.
 
 - Short-term memory is stored in SQLite, scoped by `(user_id, conversation_id)`, and loaded in `process_request` before graph execution.
 - Telegram currently maps `user_id` to the Telegram user ID and `conversation_id` to the chat ID.
-- The memory layer may rewrite short follow-up text into an effective meal description only when there is an unresolved task for the same user/conversation.
+- The memory layer may rewrite short follow-up text into an effective meal description only when there is an unresolved task for the same user/conversation. Pending tasks support generic foods and products with canonical food, brand, subtype, variant, quantity, preparation, and cut fields.
+- Follow-up merging is deterministic and conservative. Only short compatible answers are merged; distinct food questions, off-topic requests, and locally detected unsafe or prompt-injection text must continue through the graph unchanged.
 - Older short-term messages compact into a bounded summary after `MEMORY_SUMMARIZE_AFTER_MESSAGES`; the most recent `MEMORY_RECENT_MESSAGES` are retained verbatim.
 - Long-term memory stores extracted stable nutrition facts only: allergies, dietary preferences, measurement preferences, and recurring goals. Do not store every message as long-term memory.
 - The default memory database is `memory.sqlite3` next to `AUTH_DB_PATH`; override with `MEMORY_DB_PATH` when needed.
