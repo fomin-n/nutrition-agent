@@ -12,7 +12,7 @@ class UserInput(BaseModel):
     text: str | None = Field(default=None, description="User text or photo caption.")
     image_path: str | None = Field(default=None, description="Temporary local image path.")
     image_mime_type: str | None = Field(default=None, description="Best-effort image MIME type.")
-    source: Literal["telegram", "cli", "test"] = "telegram"
+    source: Literal["telegram", "cli", "test", "phoenix_eval"] = "telegram"
 
     @field_validator("text")
     @classmethod

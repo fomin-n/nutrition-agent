@@ -194,6 +194,27 @@ Current checks include:
 - A local adversarial eval suite for off-topic, prompt-injection, hacking, unsafe diet, and medical requests.
 - Mock evaluation mode that can run without API keys.
 - A tiny nutrition-quality eval using 3 rows derived from OpenIntro's public `fastfood` dataset.
+- A committed 110-case English/Russian golden regression set with 100 single-turn and 10 conversation-memory examples.
+
+Run the deterministic 17-case golden smoke split:
+
+```bash
+uv run python -m app.evals.run_golden_eval \
+  --dataset evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl \
+  --split smoke
+```
+
+Run the full golden split by replacing `smoke` with `golden`. Reports are written as Markdown and JSON under `reports/eval/`; exact reference prose is not scored. Behavior, required/forbidden text, and calorie-range overlap determine pass/fail, while macro range checks are advisory. The default is offline and no-LLM; use `--live-providers` explicitly for provider integration checks.
+
+Upload a source JSONL to Phoenix with:
+
+```bash
+uv run python -m app.evals.phoenix_datasets \
+  --dataset evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl \
+  --name nutrition-agent-golden-single-turn-v2
+```
+
+See [evals/README.md](evals/README.md) for dataset structure, filters, all Phoenix dataset names, report semantics, and contribution guidance.
 
 Run the adversarial safety eval:
 

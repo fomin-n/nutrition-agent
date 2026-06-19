@@ -160,9 +160,11 @@ uv run pytest
 uv run ruff check .
 uv run python -m app.evals.run_eval --mock
 uv run python -m app.evals.run_retrieval_smoke
+uv run python -m app.evals.run_golden_eval --split smoke
 ```
 
 Tests must run without real API keys.
+Golden evals use committed JSONL under `evals/datasets/`, disable LLM and provider calls by default, and write ignored reports under `reports/eval/`. Do not change production behavior merely to increase a golden score; classify failures as expectation, evaluator, current-capability, or regression issues first.
 
 ## Generic Deployment Notes
 
