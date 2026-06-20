@@ -9,14 +9,22 @@ from app.evals.phoenix_datasets import upload_golden_dataset
 from app.evals.run_golden_eval import run_golden_eval, write_golden_results
 
 DATASET = Path("evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl")
+SINGLE_TURN_DATASET = Path("evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl")
+CONVERSATION_DATASET = Path("evals/datasets/nutrition_agent_golden_conversations_v1.jsonl")
 
 
 def test_golden_loader_validates_and_filters_examples() -> None:
     all_examples = load_golden_examples(DATASET)
+    single_turn = load_golden_examples(SINGLE_TURN_DATASET)
+    conversations = load_golden_examples(CONVERSATION_DATASET)
     smoke = load_golden_examples(DATASET, split="smoke")
     memory = load_golden_examples(DATASET, tags=["memory"])
 
     assert len(all_examples) == 110
+    assert len(single_turn) == 100
+    assert len(conversations) == 10
+    assert all(example.input.kind == "single_turn" for example in single_turn)
+    assert all(example.input.kind == "conversation" for example in conversations)
     assert len(smoke) == 17
     assert len(memory) == 8
     assert {example.input.kind for example in all_examples} == {"single_turn", "conversation"}
@@ -47,6 +55,7 @@ def test_golden_answer_evaluator_uses_behavior_text_and_range_overlap() -> None:
     evaluation = evaluate_answer(example, answer)
 
     assert evaluation["passed"] is True
+    assert evaluation["status"] == "pass"
     assert evaluation["actual_behavior"] == "estimate"
     assert evaluation["numeric_checks"]["required_calorie_check"] == "pass"
     assert parse_nutrition_ranges(answer)["carbs_g"] == {"min": 25.0, "max": 29.0}
@@ -62,6 +71,15 @@ def test_golden_text_checks_normalize_typographic_apostrophes() -> None:
     evaluation = evaluate_answer(example, "I can’t help with that request.")
 
     assert evaluation["text_checks"]["matched"] == ["can't help"]
+
+
+def test_golden_answer_evaluator_marks_unparsed_calories_unknown() -> None:
+    example = load_golden_examples(DATASET)[0]
+    evaluation = evaluate_answer(example, "Оценка калорий приведена в приложении.")
+
+    assert evaluation["status"] == "unknown"
+    assert evaluation["failed_checks"] == []
+    assert evaluation["unknown_checks"] == ["calories: answer could not be parsed"]
 
 
 def test_golden_conversation_runner_captures_effective_text_and_memory(tmp_path) -> None:
@@ -81,6 +99,8 @@ def test_golden_conversation_runner_captures_effective_text_and_memory(tmp_path)
     json_path, markdown_path = write_golden_results(run, tmp_path)
 
     assert run["summary"]["passed"] == 1
+    assert run["summary"]["failed"] == 0
+    assert run["summary"]["unknown"] == 0
     result = run["examples"][0]
     assert result["execution"]["turns"][-1]["effective_text"] == "лосось, 200 г, запеченный"
     assert result["execution"]["final_unresolved_task"] is None

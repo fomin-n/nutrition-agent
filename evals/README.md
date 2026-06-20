@@ -32,7 +32,23 @@ uv run python -m app.evals.run_golden_eval \
 
 Filter by one or more required metadata tags with repeated `--tag` options. The default run disables LLM calls and external nutrition providers, making it deterministic and cheap. `--live-providers` opts into configured nutrition APIs. LLM use requires both `--use-llm` and `--allow-paid-api`.
 
-Each run writes timestamped JSON and Markdown under `reports/eval/`. The command exits nonzero when any example fails, after writing the report. Exact reference-answer matching is intentionally not used. Required checks are expected behavior, text markers, and calorie-range overlap. Macro ranges are parsed and reported as advisory diagnostics.
+Each run writes timestamped JSON and Markdown under `reports/eval/`. Use `--output-dir reports/eval/baseline` when producing a baseline that should be reviewed and committed. Ordinary generated reports remain ignored. The command exits nonzero when any example fails or is unknown, after writing the report.
+
+Exact reference-answer matching is intentionally not used. Required checks are expected behavior, text markers, and calorie-range overlap. Macro ranges are parsed and reported as advisory diagnostics. Reports distinguish `pass`, `fail`, and `unknown`; an unparseable required calorie value is `unknown` unless another check is a definite failure. Every non-pass example also gets one deterministic triage classification: `likely_dataset_issue`, `evaluator_issue`, `unsupported_current_behavior`, or `real_system_failure`. These classifications identify where to investigate first and are not a substitute for human review.
+
+To create committed smoke and full baseline reports:
+
+```bash
+uv run python -m app.evals.run_golden_eval \
+  --dataset evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl \
+  --split smoke \
+  --output-dir reports/eval/baseline
+
+uv run python -m app.evals.run_golden_eval \
+  --dataset evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl \
+  --split golden \
+  --output-dir reports/eval/baseline
+```
 
 ## Phoenix Upload
 

@@ -20,6 +20,8 @@ downloaded_images/
 telegram_images/
 reports/eval/*
 !reports/eval/.gitkeep
+!reports/eval/baseline/
+!reports/eval/baseline/**
 *.jpg
 *.jpeg
 *.png

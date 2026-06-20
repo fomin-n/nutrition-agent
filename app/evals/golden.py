@@ -129,6 +129,7 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
     numeric = _evaluate_numeric_ranges(example.output.acceptable_range, parsed_nutrition)
 
     failed_checks: list[str] = []
+    unknown_checks: list[str] = []
     if actual_behavior != example.output.expected_behavior:
         failed_checks.append(
             f"behavior: expected {example.output.expected_behavior}, got {actual_behavior}"
@@ -140,7 +141,9 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
     if numeric["required_calorie_check"] == "fail":
         failed_checks.append("calories: predicted range does not overlap acceptable range")
     elif numeric["required_calorie_check"] == "unknown":
-        failed_checks.append("calories: answer could not be parsed")
+        unknown_checks.append("calories: answer could not be parsed")
+
+    status = "fail" if failed_checks else "unknown" if unknown_checks else "pass"
 
     return {
         "expected_behavior": example.output.expected_behavior,
@@ -154,7 +157,9 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
         "parsed_nutrition": parsed_nutrition,
         "numeric_checks": numeric,
         "failed_checks": failed_checks,
-        "passed": not failed_checks,
+        "unknown_checks": unknown_checks,
+        "status": status,
+        "passed": status == "pass",
     }
 
 

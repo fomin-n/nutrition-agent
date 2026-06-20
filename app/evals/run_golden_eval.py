@@ -76,7 +76,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             indent=2,
         )
     )
-    return 0 if run_output["summary"]["failed"] == 0 else 1
+    summary = run_output["summary"]
+    return 0 if summary["failed"] == 0 and summary["unknown"] == 0 else 1
 
 
 def run_golden_eval(
@@ -91,17 +92,22 @@ def run_golden_eval(
     timestamp = datetime.now(UTC)
     with _retrieval_mode(live_providers=live_providers):
         results = [_run_example(example, use_llm=use_llm) for example in examples]
-    passed = sum(1 for result in results if result["passed"])
+    passed = sum(1 for result in results if result["status"] == "pass")
+    failed = sum(1 for result in results if result["status"] == "fail")
+    unknown = sum(1 for result in results if result["status"] == "unknown")
     total = len(results)
     summary = {
         "total": total,
         "passed": passed,
-        "failed": total - passed,
+        "failed": failed,
+        "unknown": unknown,
         "pass_rate": passed / total if total else 0.0,
         "breakdowns": _build_breakdowns(examples, results),
+        "issue_classifications": _count_issue_classifications(results),
     }
+    run_scope = split or "all"
     return {
-        "run_id": f"golden_{timestamp.strftime('%Y%m%dT%H%M%S%fZ')}",
+        "run_id": f"golden_baseline_{run_scope}_{timestamp.strftime('%Y%m%dT%H%M%S%fZ')}",
         "timestamp_utc": timestamp.isoformat(),
         "dataset_path": str(Path(dataset_path)),
         "filters": {"split": split, "tags": list(tags)},
@@ -134,7 +140,16 @@ def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
         evaluation = evaluate_answer(example, answer)
         memory_failures = _evaluate_conversation_expectations(example, execution)
         evaluation["failed_checks"].extend(memory_failures)
-        evaluation["passed"] = not evaluation["failed_checks"]
+        status = (
+            "fail"
+            if evaluation["failed_checks"]
+            else "unknown"
+            if evaluation["unknown_checks"]
+            else "pass"
+        )
+        evaluation["status"] = status
+        evaluation["passed"] = status == "pass"
+        issue_classification = _classify_issue(evaluation)
         return {
             "id": example.metadata.id,
             "kind": example.input.kind,
@@ -146,7 +161,10 @@ def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
             "execution": execution,
             "evaluation": evaluation,
             "failed_checks": evaluation["failed_checks"],
-            "passed": evaluation["passed"],
+            "unknown_checks": evaluation["unknown_checks"],
+            "issue_classification": issue_classification,
+            "status": status,
+            "passed": status == "pass",
         }
     except Exception as exc:
         return {
@@ -160,8 +178,49 @@ def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
             "execution": {},
             "evaluation": {},
             "failed_checks": [f"execution_error: {type(exc).__name__}: {exc}"],
+            "unknown_checks": [],
+            "issue_classification": "evaluator_issue",
+            "status": "fail",
             "passed": False,
         }
+
+
+def _classify_issue(evaluation: dict[str, Any]) -> str | None:
+    failures = evaluation["failed_checks"]
+    unknowns = evaluation["unknown_checks"]
+    if not failures and not unknowns:
+        return None
+    if not failures:
+        return "evaluator_issue"
+    if any(
+        failure.startswith(("execution_error:", "unsupported_memory_assertion:"))
+        for failure in failures
+    ):
+        return "evaluator_issue"
+
+    expected = evaluation.get("expected_behavior")
+    actual = evaluation.get("actual_behavior")
+    if expected != actual:
+        if expected == "estimate" and actual in {"clarify", "refuse", "unknown"}:
+            return "unsupported_current_behavior"
+        return "real_system_failure"
+    if any(
+        failure.startswith(("calories:", "memory_assertion_failed:"))
+        for failure in failures
+    ):
+        return "real_system_failure"
+    if all(failure.startswith(("must_contain_any:", "must_not_contain_any:")) for failure in failures):
+        return "likely_dataset_issue"
+    return "real_system_failure"
+
+
+def _count_issue_classifications(results: Sequence[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    for result in results:
+        classification = result.get("issue_classification")
+        if classification:
+            counts[classification] += 1
+    return dict(sorted(counts.items()))
 
 
 def _run_single_turn(example: GoldenExample, *, use_llm: bool) -> tuple[str, dict[str, Any]]:
@@ -279,7 +338,7 @@ def _build_breakdowns(
     examples: Sequence[GoldenExample],
     results: Sequence[dict[str, Any]],
 ) -> dict[str, dict[str, dict[str, float | int]]]:
-    dimensions: dict[str, dict[str, list[bool]]] = {
+    dimensions: dict[str, dict[str, list[str]]] = {
         "kind": defaultdict(list),
         "language": defaultdict(list),
         "expected_behavior": defaultdict(list),
@@ -287,13 +346,13 @@ def _build_breakdowns(
         "tag": defaultdict(list),
     }
     for example, result in zip(examples, results, strict=True):
-        passed = bool(result["passed"])
-        dimensions["kind"][example.input.kind].append(passed)
-        dimensions["language"][example.metadata.language or example.input.language].append(passed)
-        dimensions["expected_behavior"][example.output.expected_behavior].append(passed)
-        dimensions["category"][example.metadata.category or "unknown"].append(passed)
+        status = str(result["status"])
+        dimensions["kind"][example.input.kind].append(status)
+        dimensions["language"][example.metadata.language or example.input.language].append(status)
+        dimensions["expected_behavior"][example.output.expected_behavior].append(status)
+        dimensions["category"][example.metadata.category or "unknown"].append(status)
         for tag in example.metadata.tags:
-            dimensions["tag"][tag].append(passed)
+            dimensions["tag"][tag].append(status)
 
     return {
         dimension: {
@@ -304,13 +363,16 @@ def _build_breakdowns(
     }
 
 
-def _group_summary(values: Sequence[bool]) -> dict[str, float | int]:
-    passed = sum(values)
+def _group_summary(values: Sequence[str]) -> dict[str, float | int]:
+    passed = values.count("pass")
+    failed = values.count("fail")
+    unknown = values.count("unknown")
     total = len(values)
     return {
         "total": total,
         "passed": passed,
-        "failed": total - passed,
+        "failed": failed,
+        "unknown": unknown,
         "pass_rate": passed / total if total else 0.0,
     }
 
@@ -326,32 +388,57 @@ def _render_markdown(run_output: dict[str, Any]) -> str:
         f"- Total: {summary['total']}",
         f"- Passed: {summary['passed']}",
         f"- Failed: {summary['failed']}",
+        f"- Unknown: {summary['unknown']}",
         f"- Pass rate: {summary['pass_rate']:.1%}",
         "- Numeric policy: calorie overlap is required; macro overlap is advisory.",
+        "- Diagnosis policy: issue classifications are deterministic triage hints, not ground truth.",
         "",
         "## Breakdowns",
         "",
     ]
     for dimension, groups in summary["breakdowns"].items():
-        lines.extend([f"### {dimension.replace('_', ' ').title()}", "", "| Value | Passed | Total | Rate |", "|---|---:|---:|---:|"])
+        lines.extend(
+            [
+                f"### {dimension.replace('_', ' ').title()}",
+                "",
+                "| Value | Passed | Failed | Unknown | Total | Rate |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
         for value, metrics in groups.items():
             lines.append(
-                f"| {value} | {metrics['passed']} | {metrics['total']} | {metrics['pass_rate']:.1%} |"
+                f"| {value} | {metrics['passed']} | {metrics['failed']} | "
+                f"{metrics['unknown']} | {metrics['total']} | {metrics['pass_rate']:.1%} |"
             )
         lines.append("")
 
-    failures = [result for result in run_output["examples"] if not result["passed"]]
-    lines.extend(["## Failed Examples", ""])
-    if not failures:
-        lines.append("No failures.")
-    for result in failures:
+    lines.extend(["## Issue Classifications", ""])
+    classifications = summary["issue_classifications"]
+    if classifications:
+        for classification, count in classifications.items():
+            lines.append(f"- `{classification}`: {count}")
+    else:
+        lines.append("No issues.")
+    lines.extend(["", "## Failed And Unknown Examples", ""])
+
+    issues = [result for result in run_output["examples"] if result["status"] != "pass"]
+    if not issues:
+        lines.append("No failures or unknown results.")
+    for result in issues:
         parsed = result.get("evaluation", {}).get("parsed_nutrition", {})
+        failed_checks = "; ".join(result["failed_checks"]) or "none"
+        unknown_checks = "; ".join(result["unknown_checks"]) or "none"
         lines.extend(
             [
                 f"### {result['id']}",
                 "",
                 f"- Input: `{result['input']}`",
-                f"- Failed checks: {'; '.join(result['failed_checks'])}",
+                f"- Status: `{result['status']}`",
+                f"- Classification: `{result['issue_classification']}`",
+                f"- Expected behavior: `{result.get('evaluation', {}).get('expected_behavior')}`",
+                f"- Actual behavior: `{result.get('evaluation', {}).get('actual_behavior')}`",
+                f"- Failed checks: {failed_checks}",
+                f"- Unknown checks: {unknown_checks}",
                 f"- Parsed nutrition: `{json.dumps(parsed, ensure_ascii=False)}`",
                 "",
                 "```text",
