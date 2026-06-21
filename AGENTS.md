@@ -13,6 +13,7 @@ This document is for contributors and coding agents working on `nutrition-agent`
 - `app/i18n.py`: lightweight English/Russian language detection and localized user-facing strings.
 - `app/observability/`: optional Phoenix/OpenInference tracing setup.
 - `app/tools/`: USDA, FatSecret, Open Food Facts, fallback nutrition, retrieval ranking, cache, and image helpers.
+- `app/tools/food_normalization.py`: shared deterministic food mention, Russian inflection, portion, and ambiguity logic used by routing, parsing, and memory.
 - `app/schemas/`: Pydantic models for inputs, safety decisions, nutrition values, and outputs.
 - `app/evals/`: lightweight adversarial eval data and runner.
 - `tests/`: offline unit tests.

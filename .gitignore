@@ -22,6 +22,8 @@ reports/eval/*
 !reports/eval/.gitkeep
 !reports/eval/baseline/
 !reports/eval/baseline/**
+!reports/eval/post_change/
+!reports/eval/post_change/**
 *.jpg
 *.jpeg
 *.png

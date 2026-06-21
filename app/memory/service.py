@@ -11,7 +11,8 @@ from pydantic import BaseModel, Field
 from app.i18n import LanguageCode, detect_language
 from app.llm.client import get_settings, local_moderate_text
 from app.schemas.outputs import FinalEstimate
-from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
+from app.tools.fallback_nutrition import normalize_food_query
+from app.tools.food_normalization import find_food_mentions
 from app.tools.food_query import normalize_food_description, product_profiles_in_text
 
 MessageRole = Literal["user", "assistant"]
@@ -711,13 +712,8 @@ def _target(
 
 
 def _matched_fallback_food(normalized: str) -> str | None:
-    matches: list[tuple[int, str]] = []
-    for food in FALLBACK_FOODS:
-        for alias in (food.name, *food.aliases):
-            normalized_alias = normalize_food_query(alias)
-            if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized):
-                matches.append((len(normalized_alias), food.name))
-    return max(matches, default=(0, ""))[1] or None
+    mentions = find_food_mentions(normalized)
+    return mentions[0].canonical_name if mentions else None
 
 
 def _targets_are_compatible(

@@ -36,7 +36,12 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
         }
 
     calories = totals.calories_kcal
-    if calories.max <= 0:
+    valid_zero_calorie_product = any(
+        diagnostic.food_category == "zero_sugar_soft_drink"
+        and diagnostic.selected_identity is not None
+        for diagnostic in state.get("retrieval_diagnostics", [])
+    )
+    if calories.max <= 0 and not valid_zero_calorie_product:
         return {
             "critic_result": CriticResult(
                 action="clarify",

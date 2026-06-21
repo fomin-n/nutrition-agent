@@ -144,6 +144,14 @@ Examples:
 
 Brand names are preserved instead of translated.
 
+### Deterministic Food Mentions And Portions
+
+`app.tools.food_normalization` is the shared pre-retrieval layer used by scope routing, text parsing, and memory target detection. It combines exact fallback/product aliases with a bounded set of conservative Russian token patterns. The patterns normalize `ё` to `е` and cover common inflections such as `банане`, `лосося`, `яйце`, `скира`, `миндаля`, and `говядины` without adding a morphology dependency or matching short unsafe prefixes.
+
+The same layer extracts metric weights, volumes, measured servings, and item counts. A single explicit gram weight takes precedence over an approximate household measure; quantities in multi-food text are assigned only to the nearest food mention. Standard serving ranges are limited to common single foods and known packaged products. Product aliases retain canonical identity and variant, so regular and zero-sugar cola cannot collapse into one candidate.
+
+Generic high-variance dishes such as an unspecified salad, burger, pasta, or soup request clarification when no weight or ingredients are present. A named standard dish or an explicit portion can continue through deterministic retrieval at medium confidence. This policy intentionally leaves unsupported long-tail mixed dishes as clarifications instead of inventing nutrition values.
+
 ## Ranking
 
 `app.tools.nutrition_ranking.rank_candidates` scores candidates by:

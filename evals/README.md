@@ -50,6 +50,18 @@ uv run python -m app.evals.run_golden_eval \
   --output-dir reports/eval/baseline
 ```
 
+Compare a current smoke/full pair with the committed baseline:
+
+```bash
+uv run python -m app.evals.compare_golden_runs \
+  --baseline-smoke reports/eval/baseline/golden_baseline_smoke_20260620T012752900358Z.json \
+  --baseline-golden reports/eval/baseline/golden_baseline_golden_20260620T012752900266Z.json \
+  --current-smoke reports/eval/post_change/<smoke-run>.json \
+  --current-golden reports/eval/post_change/<golden-run>.json
+```
+
+The 2026-06-21 deterministic parser update improved smoke from 64.7% to 100%, full golden from 25.5% to 60.9%, Russian from 22.8% to 59.6%, and single-turn from 21.0% to 58.0%. Memory/follow-up and safety/refusal tags remained at 100%. See the committed comparison under `reports/eval/post_change/` for category changes and remaining failures.
+
 ## Phoenix Upload
 
 Phoenix 17 exposes dataset upload at `/v1/datasets/upload`. The uploader uses the existing `httpx` dependency and stable `metadata.id` values; repeated uploads update the dataset rather than duplicating examples.

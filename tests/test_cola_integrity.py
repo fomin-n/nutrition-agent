@@ -2,6 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from app.graph.graph import process_request
+from app.graph.nodes import nutrition_retriever
 from app.graph.nodes.calculator import calculate_totals
 from app.graph.nodes.nutrition_retriever import NutritionRetriever
 from app.graph.nodes.text_parser import parse_text_locally
@@ -65,6 +67,19 @@ def test_zero_sugar_cola_is_distinct_from_regular() -> None:
     totals = calculate_totals([item])
     assert totals.calories_kcal.max == 0
     assert totals.carbs_g.max == 0
+
+
+def test_zero_sugar_cola_zero_total_is_not_rejected_by_critic(monkeypatch) -> None:
+    monkeypatch.setattr(nutrition_retriever, "get_default_router", _offline_router)
+
+    answer = process_request(
+        text="Сколько калорий в банке Coca-Cola Zero 330 мл?",
+        source="test",
+        use_llm=False,
+    )
+
+    assert "Оценка калорий: 0-0 ккал" in answer
+    assert "Нужно еще" not in answer
 
 
 def test_invalid_soft_drink_candidate_is_rejected_for_valid_fallback() -> None:

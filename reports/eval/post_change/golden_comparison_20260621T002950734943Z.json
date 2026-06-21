@@ -1,0 +1,240 @@
+{
+  "comparison_id": "golden_comparison_20260621T002950734943Z",
+  "timestamp_utc": "2026-06-21T00:29:50.734943+00:00",
+  "baseline": {
+    "smoke_run_id": "golden_baseline_smoke_20260620T012752900358Z",
+    "golden_run_id": "golden_baseline_golden_20260620T012752900266Z"
+  },
+  "current": {
+    "smoke_run_id": "golden_baseline_smoke_20260621T002820067027Z",
+    "golden_run_id": "golden_baseline_golden_20260621T002820068183Z"
+  },
+  "metrics": {
+    "smoke": {
+      "before": 0.6470588235294118,
+      "after": 1.0,
+      "delta": 0.3529411764705882
+    },
+    "full_golden": {
+      "before": 0.2545454545454545,
+      "after": 0.6090909090909091,
+      "delta": 0.3545454545454546
+    },
+    "russian": {
+      "before": 0.22807017543859648,
+      "after": 0.5964912280701754,
+      "delta": 0.3684210526315789
+    },
+    "single_turn": {
+      "before": 0.21,
+      "after": 0.58,
+      "delta": 0.37
+    },
+    "memory": {
+      "before": 0.875,
+      "after": 1.0,
+      "delta": 0.125
+    },
+    "followup": {
+      "before": 1.0,
+      "after": 1.0,
+      "delta": 0.0
+    },
+    "safety": {
+      "before": 1.0,
+      "after": 1.0,
+      "delta": 0.0
+    },
+    "refusal": {
+      "before": 1.0,
+      "after": 1.0,
+      "delta": 0.0
+    }
+  },
+  "categories_improved": [
+    {
+      "category": "basic",
+      "before": 0.3333333333333333,
+      "after": 1.0,
+      "delta": 0.6666666666666667
+    },
+    {
+      "category": "branded",
+      "before": 0.3333333333333333,
+      "after": 1.0,
+      "delta": 0.6666666666666667
+    },
+    {
+      "category": "cafe",
+      "before": 0.0,
+      "after": 1.0,
+      "delta": 1.0
+    },
+    {
+      "category": "conversation_memory",
+      "before": 0.7,
+      "after": 0.9,
+      "delta": 0.20000000000000007
+    },
+    {
+      "category": "edge_case",
+      "before": 0.6,
+      "after": 0.9,
+      "delta": 0.30000000000000004
+    },
+    {
+      "category": "mixed_dish",
+      "before": 0.10204081632653061,
+      "after": 0.22448979591836735,
+      "delta": 0.12244897959183673
+    },
+    {
+      "category": "packaged",
+      "before": 0.09090909090909091,
+      "after": 0.7272727272727273,
+      "delta": 0.6363636363636364
+    }
+  ],
+  "categories_regressed": [],
+  "remaining_issue_classifications": {
+    "likely_dataset_issue": 1,
+    "real_system_failure": 18,
+    "unsupported_current_behavior": 24
+  },
+  "top_remaining_failures": [
+    {
+      "id": "na_golden_030",
+      "input": "Macros in 2 tbsp peanut butter, 32g",
+      "classification": "real_system_failure",
+      "failed_checks": [
+        "calories: predicted range does not overlap acceptable range"
+      ]
+    },
+    {
+      "id": "na_golden_038",
+      "input": "Macros for a 125g mozzarella ball",
+      "classification": "real_system_failure",
+      "failed_checks": [
+        "calories: predicted range does not overlap acceptable range"
+      ]
+    },
+    {
+      "id": "na_golden_039",
+      "input": "Сколько БЖУ в 100 г хумуса?",
+      "classification": "real_system_failure",
+      "failed_checks": [
+        "calories: predicted range does not overlap acceptable range"
+      ]
+    },
+    {
+      "id": "na_golden_043",
+      "input": "Сколько БЖУ в тарелке куриного супа 400 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found",
+        "must_not_contain_any: found ['уточните']"
+      ]
+    },
+    {
+      "id": "na_golden_045",
+      "input": "Сколько калорий в 250 г пельменей со сметаной?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found"
+      ]
+    },
+    {
+      "id": "na_golden_046",
+      "input": "Calories in 250g potato vareniki",
+      "classification": "real_system_failure",
+      "failed_checks": [
+        "calories: predicted range does not overlap acceptable range"
+      ]
+    },
+    {
+      "id": "na_golden_047",
+      "input": "Сколько БЖУ в двух блинах со сметаной, примерно 200 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found"
+      ]
+    },
+    {
+      "id": "na_golden_048",
+      "input": "Calories and macros in 200g syrniki",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['kcal', 'calories'] found"
+      ]
+    },
+    {
+      "id": "na_golden_049",
+      "input": "Сколько калорий в гречке с курицей, порция 350 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found",
+        "must_not_contain_any: found ['уточните']"
+      ]
+    },
+    {
+      "id": "na_golden_051",
+      "input": "Сколько калорий в шакшуке 300 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found"
+      ]
+    },
+    {
+      "id": "na_golden_053",
+      "input": "Сколько БЖУ в сэндвиче с индейкой 220 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found"
+      ]
+    },
+    {
+      "id": "na_golden_054",
+      "input": "Calories and macros in a tuna sandwich",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['kcal', 'calories'] found"
+      ]
+    },
+    {
+      "id": "na_golden_055",
+      "input": "Сколько калорий в клаб-сэндвиче 300 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found"
+      ]
+    },
+    {
+      "id": "na_golden_057",
+      "input": "Сколько БЖУ в буррито с курицей 400 г?",
+      "classification": "unsupported_current_behavior",
+      "failed_checks": [
+        "behavior: expected estimate, got clarify",
+        "must_contain_any: none of ['ккал', 'калор'] found",
+        "must_not_contain_any: found ['уточните']"
+      ]
+    },
+    {
+      "id": "na_golden_058",
+      "input": "Calories in two beef tacos, about 300g total",
+      "classification": "real_system_failure",
+      "failed_checks": [
+        "calories: predicted range does not overlap acceptable range"
+      ]
+    }
+  ],
+  "remaining_failure_count": 43
+}

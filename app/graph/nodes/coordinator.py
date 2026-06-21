@@ -11,6 +11,7 @@ from app.llm.client import get_settings, has_openai_key, local_moderate_text
 from app.llm.structured import invoke_structured_text, read_prompt
 from app.schemas.safety import ModerationDecision, RouteName, ScopeDecision
 from app.tools.fallback_nutrition import fallback_names, normalize_food_query
+from app.tools.food_normalization import find_food_mentions
 
 RAW_FOOD_WORDS = fallback_names() | {
     "ate",
@@ -335,6 +336,8 @@ def route(state: NutritionGraphState) -> NutritionGraphState:
 
 
 def _contains_food_signal(normalized_text: str) -> bool:
+    if find_food_mentions(normalized_text):
+        return True
     if any(re.search(rf"\b{re.escape(word)}\b", normalized_text) for word in FOOD_WORDS):
         return True
     if _contains_russian_food_stem(normalized_text):
@@ -349,6 +352,8 @@ def _contains_food_signal(normalized_text: str) -> bool:
 
 
 def _contains_meal_detail(normalized_text: str) -> bool:
+    if find_food_mentions(normalized_text):
+        return True
     if _contains_russian_food_stem(normalized_text):
         return True
     return any(

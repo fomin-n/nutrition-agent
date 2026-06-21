@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.evals.compare_golden_runs import build_comparison, render_comparison_markdown
 from app.evals.golden import evaluate_answer, load_golden_examples, parse_nutrition_ranges
 from app.evals.phoenix_datasets import upload_golden_dataset
 from app.evals.run_golden_eval import run_golden_eval, write_golden_results
@@ -11,6 +12,12 @@ from app.evals.run_golden_eval import run_golden_eval, write_golden_results
 DATASET = Path("evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl")
 SINGLE_TURN_DATASET = Path("evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl")
 CONVERSATION_DATASET = Path("evals/datasets/nutrition_agent_golden_conversations_v1.jsonl")
+BASELINE_SMOKE = Path(
+    "reports/eval/baseline/golden_baseline_smoke_20260620T012752900358Z.json"
+)
+BASELINE_GOLDEN = Path(
+    "reports/eval/baseline/golden_baseline_golden_20260620T012752900266Z.json"
+)
 
 
 def test_golden_loader_validates_and_filters_examples() -> None:
@@ -148,3 +155,21 @@ def test_phoenix_upload_preserves_structured_rows_and_stable_ids() -> None:
     assert payload["example_ids"] == [example.metadata.id]
     assert payload["splits"] == [example.splits]
     assert result["dataset_id"] == "dataset-1"
+
+
+def test_golden_comparison_reports_metrics_and_remaining_failures() -> None:
+    baseline_smoke = json.loads(BASELINE_SMOKE.read_text(encoding="utf-8"))
+    baseline_golden = json.loads(BASELINE_GOLDEN.read_text(encoding="utf-8"))
+
+    comparison = build_comparison(
+        baseline_smoke,
+        baseline_golden,
+        baseline_smoke,
+        baseline_golden,
+    )
+    markdown = render_comparison_markdown(comparison)
+
+    assert comparison["metrics"]["full_golden"]["delta"] == 0
+    assert comparison["remaining_failure_count"] == 82
+    assert comparison["categories_regressed"] == []
+    assert "## Top Remaining Failures" in markdown

@@ -1,0 +1,853 @@
+# NutritionAgent Golden Eval
+
+- Run ID: `golden_baseline_golden_20260621T002820068183Z`
+- Dataset: `evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl`
+- Filters: split=`golden`, tags=`[]`
+- Total: 110
+- Passed: 67
+- Failed: 43
+- Unknown: 0
+- Pass rate: 60.9%
+- Numeric policy: calorie overlap is required; macro overlap is advisory.
+- Diagnosis policy: issue classifications are deterministic triage hints, not ground truth.
+
+## Breakdowns
+
+### Kind
+
+| Value | Passed | Failed | Unknown | Total | Rate |
+|---|---:|---:|---:|---:|---:|
+| conversation | 9 | 1 | 0 | 10 | 90.0% |
+| single_turn | 58 | 42 | 0 | 100 | 58.0% |
+
+### Language
+
+| Value | Passed | Failed | Unknown | Total | Rate |
+|---|---:|---:|---:|---:|---:|
+| en | 33 | 20 | 0 | 53 | 62.3% |
+| ru | 34 | 23 | 0 | 57 | 59.6% |
+
+### Expected Behavior
+
+| Value | Passed | Failed | Unknown | Total | Rate |
+|---|---:|---:|---:|---:|---:|
+| clarify | 8 | 2 | 0 | 10 | 80.0% |
+| estimate | 56 | 41 | 0 | 97 | 57.7% |
+| refuse | 3 | 0 | 0 | 3 | 100.0% |
+
+### Category
+
+| Value | Passed | Failed | Unknown | Total | Rate |
+|---|---:|---:|---:|---:|---:|
+| basic | 21 | 0 | 0 | 21 | 100.0% |
+| branded | 6 | 0 | 0 | 6 | 100.0% |
+| cafe | 3 | 0 | 0 | 3 | 100.0% |
+| conversation_memory | 9 | 1 | 0 | 10 | 90.0% |
+| edge_case | 9 | 1 | 0 | 10 | 90.0% |
+| mixed_dish | 11 | 38 | 0 | 49 | 22.4% |
+| packaged | 8 | 3 | 0 | 11 | 72.7% |
+
+### Tag
+
+| Value | Passed | Failed | Unknown | Total | Rate |
+|---|---:|---:|---:|---:|---:|
+| ambiguous | 1 | 0 | 0 | 1 | 100.0% |
+| banana | 1 | 0 | 0 | 1 | 100.0% |
+| basic | 21 | 0 | 0 | 21 | 100.0% |
+| branded | 8 | 0 | 0 | 8 | 100.0% |
+| cafe | 3 | 0 | 0 | 3 | 100.0% |
+| chicken | 2 | 0 | 0 | 2 | 100.0% |
+| clarification | 8 | 2 | 0 | 10 | 80.0% |
+| clarify | 7 | 1 | 0 | 8 | 87.5% |
+| cola | 1 | 0 | 0 | 1 | 100.0% |
+| easy | 38 | 5 | 0 | 43 | 88.4% |
+| edge_case | 9 | 1 | 0 | 10 | 90.0% |
+| en | 33 | 20 | 0 | 53 | 62.3% |
+| estimate | 49 | 41 | 0 | 90 | 54.4% |
+| fish | 1 | 0 | 0 | 1 | 100.0% |
+| followup | 5 | 0 | 0 | 5 | 100.0% |
+| hard | 0 | 10 | 0 | 10 | 0.0% |
+| medium | 20 | 27 | 0 | 47 | 42.6% |
+| memory | 8 | 0 | 0 | 8 | 100.0% |
+| missing_image | 0 | 1 | 0 | 1 | 0.0% |
+| mixed_dish | 11 | 38 | 0 | 49 | 22.4% |
+| new_request | 1 | 0 | 0 | 1 | 100.0% |
+| packaged | 8 | 3 | 0 | 11 | 72.7% |
+| prompt_injection | 1 | 0 | 0 | 1 | 100.0% |
+| refuse | 2 | 0 | 0 | 2 | 100.0% |
+| regression | 1 | 0 | 0 | 1 | 100.0% |
+| retrieval | 14 | 3 | 0 | 17 | 82.4% |
+| rice | 1 | 0 | 0 | 1 | 100.0% |
+| ru | 34 | 23 | 0 | 57 | 59.6% |
+| safety | 3 | 0 | 0 | 3 | 100.0% |
+| smoke | 17 | 0 | 0 | 17 | 100.0% |
+| yogurt | 1 | 0 | 0 | 1 | 100.0% |
+
+## Issue Classifications
+
+- `likely_dataset_issue`: 1
+- `real_system_failure`: 18
+- `unsupported_current_behavior`: 24
+
+## Failed And Unknown Examples
+
+### na_golden_030
+
+- Input: `Macros in 2 tbsp peanut butter, 32g`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 160.0, "max": 160.0}, "protein_g": {"min": 7.0, "max": 7.0}, "fat_g": {"min": 14.0, "max": 14.0}, "carbs_g": {"min": 6.0, "max": 6.0}}`
+
+```text
+Estimated calories: 160-160 kcal
+Protein: 7-7 g
+Fat: 14-14 g
+Carbs: 6-6 g
+Main assumptions:
+* peanut butter: 28-28 g (estimated from measured serving).
+Confidence: medium
+```
+
+### na_golden_038
+
+- Input: `Macros for a 125g mozzarella ball`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 350.0, "max": 350.0}, "protein_g": {"min": 35.0, "max": 35.0}, "fat_g": {"min": 21.0, "max": 21.0}, "carbs_g": {"min": 4.0, "max": 4.0}}`
+
+```text
+Estimated calories: 350-350 kcal
+Protein: 35-35 g
+Fat: 21-21 g
+Carbs: 4-4 g
+Main assumptions:
+* mozzarella: 125-125 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_039
+
+- Input: `Сколько БЖУ в 100 г хумуса?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 170.0, "max": 170.0}, "protein_g": {"min": 8.0, "max": 8.0}, "fat_g": {"min": 10.0, "max": 10.0}, "carbs_g": {"min": 14.0, "max": 14.0}}`
+
+```text
+Оценка калорий: 170-170 ккал
+Белки: 8-8 г
+Жиры: 10-10 г
+Углеводы: 14-14 г
+Основные допущения:
+* hummus: 100-100 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_043
+
+- Input: `Сколько БЖУ в тарелке куриного супа 400 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы, как продукт был приготовлен.
+```
+
+### na_golden_045
+
+- Input: `Сколько калорий в 250 г пельменей со сметаной?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_046
+
+- Input: `Calories in 250g potato vareniki`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 220.0, "max": 220.0}, "protein_g": {"min": 5.0, "max": 5.0}, "fat_g": {"min": 0.0, "max": 0.0}, "carbs_g": {"min": 50.0, "max": 50.0}}`
+
+```text
+Estimated calories: 220-220 kcal
+Protein: 5-5 g
+Fat: 0-0 g
+Carbs: 50-50 g
+Main assumptions:
+* potato boiled: 250-250 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_047
+
+- Input: `Сколько БЖУ в двух блинах со сметаной, примерно 200 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_048
+
+- Input: `Calories and macros in 200g syrniki`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_049
+
+- Input: `Сколько калорий в гречке с курицей, порция 350 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы, как продукт был приготовлен.
+```
+
+### na_golden_051
+
+- Input: `Сколько калорий в шакшуке 300 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_053
+
+- Input: `Сколько БЖУ в сэндвиче с индейкой 220 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_054
+
+- Input: `Calories and macros in a tuna sandwich`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_055
+
+- Input: `Сколько калорий в клаб-сэндвиче 300 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_057
+
+- Input: `Сколько БЖУ в буррито с курицей 400 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы, как продукт был приготовлен.
+```
+
+### na_golden_058
+
+- Input: `Calories in two beef tacos, about 300g total`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 750.0, "max": 750.0}, "protein_g": {"min": 78.0, "max": 78.0}, "fat_g": {"min": 45.0, "max": 45.0}, "carbs_g": {"min": 0.0, "max": 0.0}}`
+
+```text
+Estimated calories: 750-750 kcal
+Protein: 78-78 g
+Fat: 45-45 g
+Carbs: 0-0 g
+Main assumptions:
+* beef cooked: 300-300 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_059
+
+- Input: `Сколько калорий в курином карри с рисом 450 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 580.0, "max": 580.0}, "protein_g": {"min": 12.0, "max": 12.0}, "fat_g": {"min": 1.0, "max": 1.0}, "carbs_g": {"min": 127.0, "max": 127.0}}`
+
+```text
+Оценка калорий: 580-580 ккал
+Белки: 12-12 г
+Жиры: 1-1 г
+Углеводы: 127-127 г
+Основные допущения:
+* вареный рис: 450-450 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_061
+
+- Input: `Сколько калорий в лазанье 350 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_064
+
+- Input: `Calories and macros in a 12-piece sushi set`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_065
+
+- Input: `Сколько калорий в поке с лососем 450 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 930.0, "max": 930.0}, "protein_g": {"min": 99.0, "max": 99.0}, "fat_g": {"min": 54.0, "max": 54.0}, "carbs_g": {"min": 0.0, "max": 0.0}}`
+
+```text
+Оценка калорий: 930-930 ккал
+Белки: 99-99 г
+Жиры: 54-54 г
+Углеводы: 0-0 г
+Основные допущения:
+* лосось: 450-450 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_066
+
+- Input: `How many calories in a pork ramen bowl, about 600g?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_067
+
+- Input: `Сколько БЖУ в фо бо 600 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_068
+
+- Input: `Calories in chicken pad thai, 450g`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found; must_not_contain_any: found ['please clarify']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: Please clarify what cut of chicken it was, how it was prepared.
+```
+
+### na_golden_069
+
+- Input: `Сколько калорий в жареном рисе с яйцом и курицей 400 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы.
+```
+
+### na_golden_070
+
+- Input: `Macros for a falafel wrap, about 350g`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_071
+
+- Input: `Сколько БЖУ в шаурме с курицей 350 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы, как продукт был приготовлен.
+```
+
+### na_golden_072
+
+- Input: `Calories in a kebab plate with rice, about 500g`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found; must_not_contain_any: found ['please clarify']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: Please clarify how it was prepared.
+```
+
+### na_golden_074
+
+- Input: `Calories and macros in a quinoa veggie bowl, 400g`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_075
+
+- Input: `Сколько БЖУ в грибном ризотто 350 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```
+
+### na_golden_076
+
+- Input: `How many calories in fish and chips, about 450g?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 2410.0, "max": 2410.0}, "protein_g": {"min": 32.0, "max": 32.0}, "fat_g": {"min": 158.0, "max": 158.0}, "carbs_g": {"min": 238.0, "max": 238.0}}`
+
+```text
+Estimated calories: 2410-2410 kcal
+Protein: 32-32 g
+Fat: 158-158 g
+Carbs: 238-238 g
+Main assumptions:
+* potato chips: 450-450 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_077
+
+- Input: `Сколько калорий в стейке с картошкой фри, порция 500 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 440.0, "max": 440.0}, "protein_g": {"min": 10.0, "max": 10.0}, "fat_g": {"min": 0.0, "max": 0.0}, "carbs_g": {"min": 100.0, "max": 100.0}}`
+
+```text
+Оценка калорий: 440-440 ккал
+Белки: 10-10 г
+Жиры: 0-0 г
+Углеводы: 100-100 г
+Основные допущения:
+* картофель: 500-500 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_078
+
+- Input: `Calories in 6 chicken nuggets`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What cut of chicken, how much, and how was it prepared?
+```
+
+### na_golden_080
+
+- Input: `Calories and macros in 400g lentil soup`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 580.0, "max": 640.0}, "protein_g": {"min": 41.0, "max": 44.0}, "fat_g": {"min": 5.0, "max": 8.0}, "carbs_g": {"min": 97.0, "max": 106.0}}`
+
+```text
+Estimated calories: 580-640 kcal
+Protein: 41-44 g
+Fat: 5-8 g
+Carbs: 97-106 g
+Main assumptions:
+* lentils cooked: 400-400 g (explicit gram weight).
+* vegetable soup: 250-400 g (assumed standard portion).
+Confidence: medium
+```
+
+### na_golden_081
+
+- Input: `Сколько калорий в овсянке на молоке с бананом, порция 350 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 560.0, "max": 690.0}, "protein_g": {"min": 15.0, "max": 20.0}, "fat_g": {"min": 10.0, "max": 15.0}, "carbs_g": {"min": 111.0, "max": 128.0}}`
+
+```text
+Оценка калорий: 560-690 ккал
+Белки: 15-20 г
+Жиры: 10-15 г
+Углеводы: 111-128 г
+Основные допущения:
+* овсянка: 180-280 г (принята стандартная порция).
+* молоко: 200-300 г (принята стандартная порция).
+* банан: 350-350 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_082
+
+- Input: `Calories in 3 pancakes with syrup`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['kcal', 'calories'] found
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+I need one more detail to estimate this reliably: What foods are in the meal and roughly how much of each?
+```
+
+### na_golden_083
+
+- Input: `Сколько БЖУ в мюсли с йогуртом и ягодами 350 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 210.0, "max": 210.0}, "protein_g": {"min": 12.0, "max": 12.0}, "fat_g": {"min": 12.0, "max": 12.0}, "carbs_g": {"min": 16.0, "max": 16.0}}`
+
+```text
+Оценка калорий: 210-210 ккал
+Белки: 12-12 г
+Жиры: 12-12 г
+Углеводы: 16-16 г
+Основные допущения:
+* йогурт: 350-350 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_085
+
+- Input: `Сколько калорий в цезарь-ролле с курицей 300 г?`
+- Status: `fail`
+- Classification: `unsupported_current_behavior`
+- Expected behavior: `estimate`
+- Actual behavior: `clarify`
+- Failed checks: behavior: expected estimate, got clarify; must_contain_any: none of ['ккал', 'калор'] found; must_not_contain_any: found ['уточните']
+- Unknown checks: calories: answer could not be parsed
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Уточните, пожалуйста: какая часть курицы, как продукт был приготовлен.
+```
+
+### na_golden_086
+
+- Input: `Macros in beef udon noodles, about 500g`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 1040.0, "max": 1220.0}, "protein_g": {"min": 55.0, "max": 73.0}, "fat_g": {"min": 20.0, "max": 30.0}, "carbs_g": {"min": 154.0, "max": 154.0}}`
+
+```text
+Estimated calories: 1040-1220 kcal
+Protein: 55-73 g
+Fat: 20-30 g
+Carbs: 154-154 g
+Main assumptions:
+* beef cooked: 100-170 g (assumed standard portion).
+* cooked pasta: 500-500 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_087
+
+- Input: `Сколько калорий в салате с помидорами и моцареллой 300 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 870.0, "max": 900.0}, "protein_g": {"min": 86.0, "max": 88.0}, "fat_g": {"min": 51.0, "max": 52.0}, "carbs_g": {"min": 16.0, "max": 22.0}}`
+
+```text
+Оценка калорий: 870-900 ккал
+Белки: 86-88 г
+Жиры: 51-52 г
+Углеводы: 16-22 г
+Основные допущения:
+* салатные овощи: 80-180 г (принята стандартная порция).
+* помидор: 80-150 г (принята стандартная порция).
+* mozzarella: 300-300 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_088
+
+- Input: `Calories in scrambled eggs with toast`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 160.0, "max": 230.0}, "protein_g": {"min": 9.0, "max": 13.0}, "fat_g": {"min": 5.0, "max": 7.0}, "carbs_g": {"min": 17.0, "max": 27.0}}`
+
+```text
+Estimated calories: 160-230 kcal
+Protein: 9-13 g
+Fat: 5-7 g
+Carbs: 17-27 g
+Main assumptions:
+* egg: 45-60 g (assumed standard portion).
+* bread: 35-55 g (assumed standard portion).
+Confidence: medium
+```
+
+### na_golden_089
+
+- Input: `Сколько БЖУ в салате с креветками гриль 350 г?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 70.0, "max": 70.0}, "protein_g": {"min": 4.0, "max": 4.0}, "fat_g": {"min": 1.0, "max": 1.0}, "carbs_g": {"min": 14.0, "max": 14.0}}`
+
+```text
+Оценка калорий: 70-70 ккал
+Белки: 4-4 г
+Жиры: 1-1 г
+Углеводы: 14-14 г
+Основные допущения:
+* салатные овощи: 350-350 г (использован указанный вес).
+Уверенность: средняя
+```
+
+### na_golden_090
+
+- Input: `Calories in 250g cottage cheese with honey`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `estimate`
+- Actual behavior: `estimate`
+- Failed checks: calories: predicted range does not overlap acceptable range
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 300.0, "max": 300.0}, "protein_g": {"min": 42.0, "max": 42.0}, "fat_g": {"min": 12.0, "max": 12.0}, "carbs_g": {"min": 8.0, "max": 8.0}}`
+
+```text
+Estimated calories: 300-300 kcal
+Protein: 42-42 g
+Fat: 12-12 g
+Carbs: 8-8 g
+Main assumptions:
+* cottage cheese: 250-250 g (explicit gram weight).
+Confidence: medium
+```
+
+### na_golden_098
+
+- Input: `How many calories in chicken and rice?`
+- Status: `fail`
+- Classification: `real_system_failure`
+- Expected behavior: `clarify`
+- Actual behavior: `estimate`
+- Failed checks: behavior: expected clarify, got estimate; must_contain_any: none of ['need', 'clarify', 'detail'] found; must_not_contain_any: found ['Estimated calories']
+- Unknown checks: none
+- Parsed nutrition: `{"calories_kcal": {"min": 390.0, "max": 580.0}, "protein_g": {"min": 41.0, "max": 62.0}, "fat_g": {"min": 5.0, "max": 7.0}, "carbs_g": {"min": 42.0, "max": 62.0}}`
+
+```text
+Estimated calories: 390-580 kcal
+Protein: 41-62 g
+Fat: 5-7 g
+Carbs: 42-62 g
+Main assumptions:
+* chicken breast cooked: 120-180 g (assumed standard portion).
+* cooked white rice: 150-220 g (assumed standard portion).
+Confidence: medium
+```
+
+### na_conv_010_photo_missing_stays_clarification
+
+- Input: `['На фото еда, посчитай']`
+- Status: `fail`
+- Classification: `likely_dataset_issue`
+- Expected behavior: `clarify`
+- Actual behavior: `clarify`
+- Failed checks: must_contain_any: none of ['фото', 'опишите', 'описание'] found
+- Unknown checks: none
+- Parsed nutrition: `{}`
+
+```text
+Нужно еще немного информации для надежной оценки: Какие продукты были в блюде и примерно сколько каждого?
+```

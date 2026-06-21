@@ -270,3 +270,34 @@ def test_unsafe_message_after_pending_task_is_not_merged(tmp_path) -> None:
 
     assert "can’t help" in answer
     assert "yogurt" not in answer.lower()
+
+
+def test_new_russian_food_request_replaces_pending_chicken(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        nutrition_retriever,
+        "get_default_router",
+        lambda: NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None),
+    )
+    memory = MemoryService(tmp_path / "memory.sqlite3")
+    process_request(
+        text="Сколько калорий в курице?",
+        source="test",
+        use_llm=False,
+        user_id=1,
+        session_id=10,
+        memory_service=memory,
+    )
+
+    answer = process_request(
+        text="Сколько калорий в среднем банане?",
+        source="test",
+        use_llm=False,
+        user_id=1,
+        session_id=10,
+        memory_service=memory,
+    )
+
+    assert "Оценка калорий:" in answer
+    assert "банан" in answer
+    assert "куриц" not in answer
+    assert memory.load_context(1, 10).unresolved_task is None

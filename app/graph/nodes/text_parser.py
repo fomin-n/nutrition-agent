@@ -12,84 +12,13 @@ from app.llm.structured import invoke_structured_text, read_prompt
 from app.memory.service import UnresolvedTask, derive_unresolved_task, memory_context_prompt
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
-from app.tools.food_query import product_profile_for_canonical, product_profiles_in_text
-
-DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
-    "cooked white rice": (150, 220),
-    "cooked pasta": (160, 240),
-    "cooked buckwheat": (150, 220),
-    "chicken breast cooked": (120, 180),
-    "beef cooked": (100, 170),
-    "salmon cooked": (120, 180),
-    "egg": (45, 60),
-    "olive oil": (10, 18),
-    "butter": (8, 15),
-    "potato boiled": (150, 250),
-    "bread": (35, 55),
-    "banana": (100, 140),
-    "apple": (150, 220),
-    "tomato": (80, 150),
-    "cucumber": (80, 160),
-    "mixed salad vegetables": (80, 180),
-    "cheese": (25, 45),
-    "yogurt plain": (125, 200),
-    "milk": (200, 300),
-    "oatmeal cooked": (180, 280),
-    "Coca-Cola": (330, 330),
-    "Coca-Cola Zero Sugar": (330, 330),
-    "pizza": (100, 160),
-    "hamburger": (180, 280),
-    "vegetable soup": (250, 400),
-}
-
-UNIT_GRAMS: dict[str, float] = {
-    "g": 1,
-    "gram": 1,
-    "grams": 1,
-    "kg": 1000,
-    "oz": 28.35,
-    "ounce": 28.35,
-    "ounces": 28.35,
-    "tbsp": 14,
-    "tablespoon": 14,
-    "tablespoons": 14,
-    "г": 1,
-    "гр": 1,
-    "грамм": 1,
-    "грамма": 1,
-    "граммов": 1,
-    "cup": 180,
-    "cups": 180,
-    "чашка": 180,
-    "чашки": 180,
-    "чашек": 180,
-    "slice": 40,
-    "slices": 40,
-    "кусок": 40,
-    "куска": 40,
-    "кусочка": 40,
-    "ломтик": 40,
-    "ломтика": 40,
-}
-
-COUNT_WORDS: dict[str, float] = {
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "один": 1,
-    "одно": 1,
-    "одна": 1,
-    "два": 2,
-    "две": 2,
-    "трех": 3,
-    "три": 3,
-    "четыре": 4,
-    "четырех": 4,
-    "пять": 5,
-    "пяти": 5,
-}
+from app.tools.food_normalization import (
+    detect_preparation,
+    estimate_portion,
+    find_food_mentions,
+    is_high_variance_without_detail,
+)
+from app.tools.food_query import product_profiles_in_text
 
 LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
     "ru": {
@@ -111,8 +40,15 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "mixed salad vegetables": "салатные овощи",
         "cheese": "сыр",
         "yogurt plain": "йогурт",
+        "skyr plain": "скир",
         "milk": "молоко",
         "oatmeal cooked": "овсянка",
+        "almonds": "миндаль",
+        "avocado": "авокадо",
+        "tofu firm": "тофу",
+        "lentils cooked": "чечевица",
+        "chickpeas cooked": "нут",
+        "cottage cheese": "творог",
         "Snickers": "Snickers",
         "Twix": "Twix",
         "Bounty": "Bounty",
@@ -121,6 +57,10 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "pizza": "пицца",
         "hamburger": "бургер",
         "vegetable soup": "овощной суп",
+        "Greek salad": "греческий салат",
+        "chicken Caesar salad": "салат Цезарь с курицей",
+        "pasta carbonara": "паста карбонара",
+        "borscht with sour cream": "борщ со сметаной",
     }
 }
 
@@ -200,34 +140,39 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
 
     ingredients: list[IngredientEstimate] = []
     assumptions: list[str] = []
-
-    for food in FALLBACK_FOODS:
-        has_zero_marker = any(
-            marker in normalized
-            for marker in (" zero", " diet", " light", "sugar free", "без сахара", "зеро", "лайт")
+    mentions = find_food_mentions(normalized)
+    if is_high_variance_without_detail(normalized, mentions):
+        question = (
+            "Уточните состав или примерный вес порции."
+            if response_language(language) == "ru"
+            else "Please clarify the ingredients or approximate portion weight."
         )
-        if food.name == "Coca-Cola" and has_zero_marker:
-            continue
-        if food.name == "Coca-Cola Zero Sugar" and not has_zero_marker:
-            continue
-        aliases = sorted((food.name, *food.aliases), key=len, reverse=True)
-        if not any(re.search(rf"\b{re.escape(normalize_food_query(alias))}\b", normalized) for alias in aliases):
-            continue
-        grams_min, grams_max, note = _estimate_grams_for_food(normalized, food.name, aliases)
+        return MealUnderstanding(
+            ingredients=[],
+            assumptions=["high_variance_dish_without_details"],
+            confidence="low",
+            needs_clarification=True,
+            clarification_question=question,
+        )
+
+    preparation = detect_preparation(normalized)
+    for mention in mentions:
+        portion = estimate_portion(normalized, mention, mentions)
         ingredients.append(
             IngredientEstimate(
-                name=food.name,
-                grams_min=grams_min,
-                grams_max=grams_max,
-                preparation=None,
-                notes=note,
-                confidence="medium" if "assumed" in note else "high",
+                name=mention.canonical_name,
+                grams_min=portion.grams_min,
+                grams_max=portion.grams_max,
+                preparation=preparation,
+                notes=portion.note,
+                confidence="high" if portion.explicit else "medium",
             )
         )
         grams_unit = "г" if response_language(language) == "ru" else "g"
         assumptions.append(
-            f"{_food_label(food.name, language)}: "
-            f"{round(grams_min)}-{round(grams_max)} {grams_unit} ({_localize_note(note, language)})."
+            f"{_food_label(mention.canonical_name, language)}: "
+            f"{round(portion.grams_min)}-{round(portion.grams_max)} {grams_unit} "
+            f"({_localize_note(portion.note, language)})."
         )
 
     if not ingredients:
@@ -247,95 +192,6 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     )
 
 
-def _estimate_grams_for_food(normalized_text: str, canonical: str, aliases: list[str]) -> tuple[float, float, str]:
-    alias_patterns = [re.escape(normalize_food_query(alias)) for alias in aliases]
-    alias_pattern = "|".join(alias_patterns)
-    gram_units = _unit_pattern(("g", "gram", "grams", "kg", "oz", "ounce", "ounces", "г", "гр", "грамм", "грамма", "граммов"))
-    product_profile = product_profile_for_canonical(canonical)
-
-    if product_profile and product_profile.category == "chocolate_bar":
-        explicit_weight = re.search(rf"\b(\d+(?:[.,]\d+)?)\s*({gram_units})\b", normalized_text)
-        if explicit_weight:
-            amount = _explicit_gram_amount(explicit_weight.group(0), gram_units)
-            return amount, amount, "explicit packaged weight"
-        if product_profile.default_serving_amount:
-            amount = product_profile.default_serving_amount
-            return amount, amount, "assumed standard packaged serving"
-
-    if canonical in {"Coca-Cola", "Coca-Cola Zero Sugar"}:
-        volume_match = re.search(r"\b(\d+(?:[.,]\d+)?)\s*(ml|milliliter|milliliters|мл)\b", normalized_text)
-        if volume_match:
-            amount_ml = float(volume_match.group(1).replace(",", "."))
-            return amount_ml, amount_ml, "volume converted at assumed beverage density of 1 g/ml"
-        if re.search(r"\b(can|банка|банке|банку|банки)\b", normalized_text):
-            return 330, 330, "assumed standard 330 ml can at beverage density of 1 g/ml"
-
-    explicit_after = re.search(
-        rf"\b(\d+(?:\.\d+)?)\s*({gram_units})\s+(?:of\s+)?(?:{alias_pattern})\b",
-        normalized_text,
-    )
-    explicit_before = re.search(
-        rf"\b(?:{alias_pattern})\b.{0,20}?\b(\d+(?:\.\d+)?)\s*({gram_units})\b",
-        normalized_text,
-    )
-    if explicit_after:
-        amount = _explicit_gram_amount(explicit_after.group(0), gram_units)
-        return amount * 0.9, amount * 1.1, "explicit gram estimate with small uncertainty"
-    if explicit_before:
-        amount = _explicit_gram_amount(explicit_before.group(0), gram_units)
-        return amount * 0.9, amount * 1.1, "explicit gram estimate with small uncertainty"
-
-    count_match = None
-    if canonical == "egg":
-        count_match = re.search(
-            rf"\b(\d+(?:\.\d+)?|{_number_word_pattern()})\s*(egg|eggs|яйцо|яйца|яиц)\b",
-            normalized_text,
-        )
-    if count_match is None:
-        count_match = re.search(
-            rf"\b(\d+(?:\.\d+)?)\s*({_unit_pattern(('slice', 'slices', 'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'кусок', 'куска', 'кусочка', 'ломтик', 'ломтика', 'чашка', 'чашки', 'чашек'))})\s+(?:of\s+)?(?:{alias_pattern})\b",
-            normalized_text,
-        )
-    if count_match:
-        count = _parse_count(count_match.group(1))
-        unit = count_match.group(2)
-        if canonical == "egg" and unit in {"egg", "eggs"}:
-            grams = count * 50
-            return grams * 0.9, grams * 1.1, "estimated from egg count"
-        if canonical == "egg" and unit in {"яйцо", "яйца", "яиц"}:
-            grams = count * 50
-            return grams * 0.9, grams * 1.1, "estimated from egg count"
-        if unit in UNIT_GRAMS:
-            grams = count * UNIT_GRAMS[unit]
-            return grams * 0.85, grams * 1.15, f"estimated from {unit} count"
-
-    default_min, default_max = DEFAULT_PORTIONS_G.get(canonical, (100, 150))
-    return default_min, default_max, "assumed standard portion"
-
-
-def _unit_pattern(units: tuple[str, ...]) -> str:
-    return "|".join(re.escape(unit) for unit in sorted(units, key=len, reverse=True))
-
-
-def _explicit_gram_amount(matched_text: str, gram_units: str) -> float:
-    match = re.search(rf"\b(\d+(?:\.\d+)?)\s*({gram_units})\b", matched_text)
-    if not match:
-        return 0
-    return float(match.group(1)) * UNIT_GRAMS[match.group(2)]
-
-
-def _number_word_pattern() -> str:
-    return "|".join(re.escape(word) for word in sorted(COUNT_WORDS, key=len, reverse=True))
-
-
-def _parse_count(value: str) -> float:
-    if value in COUNT_WORDS:
-        return COUNT_WORDS[value]
-    if re.fullmatch(r"\d+(?:\.\d+)?", value):
-        return float(value)
-    return 1
-
-
 def _food_label(canonical: str, language: LanguageCode | None) -> str:
     language = response_language(language)
     return LOCALIZED_FOOD_NAMES.get(language, {}).get(canonical, canonical)
@@ -344,23 +200,22 @@ def _food_label(canonical: str, language: LanguageCode | None) -> str:
 def _localize_note(note: str, language: LanguageCode | None) -> str:
     if response_language(language) != "ru":
         return note
-    if note == "explicit gram estimate with small uncertainty":
-        return "явная оценка в граммах с небольшой неопределенностью"
-    if note == "estimated from egg count":
-        return "оценено по количеству яиц"
+    if note == "explicit gram weight":
+        return "использован указанный вес"
+    if note in {"estimated from item count", "estimated from serving count"}:
+        return "оценено по количеству порций"
+    if note == "estimated from measured serving":
+        return "оценено по указанной мерной порции"
     if note == "assumed standard portion":
         return "принята стандартная порция"
     if note == "explicit packaged weight":
         return "использован указанный вес упаковки"
     if note == "assumed standard packaged serving":
         return "принят стандартный вес батончика"
+    if note == "assumed standard packaged serving at beverage density of 1 g/ml":
+        return "принята стандартная упаковка и плотность напитка 1 г/мл"
     if note == "volume converted at assumed beverage density of 1 g/ml":
         return "объем пересчитан при принятой плотности напитка 1 г/мл"
-    if note == "assumed standard 330 ml can at beverage density of 1 g/ml":
-        return "принята стандартная банка 330 мл и плотность напитка 1 г/мл"
-    if note.startswith("estimated from ") and note.endswith(" count"):
-        unit = note.removeprefix("estimated from ").removesuffix(" count")
-        return f"оценено по количеству порций ({unit})"
     return note
 
 
