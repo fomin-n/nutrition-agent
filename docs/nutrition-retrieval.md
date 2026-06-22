@@ -148,7 +148,9 @@ Brand names are preserved instead of translated.
 
 `app.tools.food_normalization` is the shared pre-retrieval layer used by scope routing, text parsing, and memory target detection. It combines exact fallback/product aliases with a bounded set of conservative Russian token patterns. The patterns normalize `ё` to `е` and cover common inflections such as `банане`, `лосося`, `яйце`, `скира`, `миндаля`, and `говядины` without adding a morphology dependency or matching short unsafe prefixes.
 
-The same layer extracts metric weights, volumes, measured servings, and item counts. A single explicit gram weight takes precedence over an approximate household measure; quantities in multi-food text are assigned only to the nearest food mention. Standard serving ranges are limited to common single foods and known packaged products. Product aliases retain canonical identity and variant, so regular and zero-sugar cola cannot collapse into one candidate.
+The same layer extracts metric weights, volumes, measured servings, and item counts. A single explicit gram weight takes precedence over an approximate household measure; quantities in multi-food text are assigned only to the nearest food mention. Standard serving ranges are limited to common single foods and known packaged products. Product aliases retain canonical identity and variant, so regular and zero-sugar cola cannot collapse into one candidate. Liter/litre and Russian `л`/`литр` forms convert to grams only when the selected deterministic food profile records a density.
+
+Plain water is an explicit `plain_water` category with a 1 g/ml density and zero calories/macros. Candidate validation sets `valid_zero_calories` only after a real water or zero-sugar candidate passes identity and nutrient checks. The critic requires at least one successfully retrieved candidate carrying that semantic flag, so an empty retrieval that happens to calculate to zero remains a clarification. Flavored, sweetened, syrup-containing, lemon/fruit, and Vitaminwater-style queries do not normalize to plain water.
 
 Generic high-variance dishes such as an unspecified salad, burger, pasta, or soup request clarification when no weight or ingredients are present. A named standard dish or an explicit portion can continue through deterministic retrieval at medium confidence. This policy intentionally leaves unsupported long-tail mixed dishes as clarifications instead of inventing nutrition values.
 
@@ -174,7 +176,7 @@ Score components are stored on each `NutritionCandidate` for debugging.
 - FatSecret unavailable: USDA, Open Food Facts where applicable, and fallback continue.
 - USDA unavailable: FatSecret and fallback continue.
 - Rate limits and 5xx errors are logged in sanitized form and do not reach the user.
-- Every complete candidate is validated before selection. Sugary soft drinks must have negligible protein/fat and carbohydrate-dominant energy; regular and zero-sugar variants cannot cross-match. Curated chocolate bars must match the canonical product identity and plausible category ranges.
+- Every complete candidate is validated before selection. Sugary soft drinks must have negligible protein/fat and carbohydrate-dominant energy; regular and zero-sugar variants cannot cross-match. Plain-water candidates must have a water identity, no flavor/additive marker, and negligible calories/macros. Curated chocolate bars must match the canonical product identity and plausible category ranges.
 - No exact match returns a lower-ranked candidate only when that candidate passes semantic validation.
 - `generic_fallback` is limited to composite/photo-derived foods. It is forbidden for branded products, beverages, and unknown single ingredients.
 - When no candidate or explicit food/category fallback passes validation, the graph returns a localized clarification asking for brand, serving size, or a nutrition-label photo.

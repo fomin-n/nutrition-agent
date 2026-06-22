@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.i18n import detect_language
-from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
+from app.tools.fallback_nutrition import lookup_fallback_profile, normalize_food_query
 
 QueryKind = Literal[
     "generic_ingredient",
@@ -18,6 +18,7 @@ FoodCategory = Literal[
     "chocolate_bar",
     "sugary_soft_drink",
     "zero_sugar_soft_drink",
+    "plain_water",
     "unknown",
 ]
 ProductVariant = Literal["regular", "zero_sugar", "unknown"]
@@ -257,6 +258,7 @@ def normalize_food_description(
     normalized = normalize_food_query(original)
     quantity, unit = _extract_quantity(normalized)
     product = _find_product(normalized)
+    fallback_profile = lookup_fallback_profile(normalized)
     brand = product.brand if product else _find_alias(normalized, BRAND_ALIASES)
     restaurant = _find_alias(normalized, RESTAURANT_ALIASES)
     if restaurant is None and (re.search(r"\bbig mac\b", normalized) or re.search(r"\bбиг мак\b", normalized)):
@@ -298,7 +300,13 @@ def normalize_food_description(
         quantity=quantity,
         unit=unit,
         region=region,
-        food_category=product.category if product else "unknown",
+        food_category=(
+            product.category
+            if product
+            else fallback_profile.food_category
+            if fallback_profile and fallback_profile.food_category
+            else "unknown"
+        ),
         product_variant=product.variant if product else "unknown",
         default_serving_amount=product.default_serving_amount if product else None,
         default_serving_unit=product.default_serving_unit if product else None,
@@ -312,16 +320,9 @@ def _canonical_query(normalized: str) -> tuple[str, str | None]:
         if re.search(rf"\b{re.escape(normalize_food_query(phrase))}\b", normalized):
             return replacement, preparation
 
-    best_alias_len = 0
-    best_name: str | None = None
-    for food in FALLBACK_FOODS:
-        for alias in (food.name, *food.aliases):
-            normalized_alias = normalize_food_query(alias)
-            if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized) and len(normalized_alias) > best_alias_len:
-                best_alias_len = len(normalized_alias)
-                best_name = food.name
-    if best_name:
-        return best_name, None
+    fallback_profile = lookup_fallback_profile(normalized)
+    if fallback_profile:
+        return fallback_profile.name, None
 
     return normalized, None
 
@@ -350,7 +351,7 @@ def _classify_query_kind(
 
 def _extract_quantity(normalized: str) -> tuple[float | None, str | None]:
     match = re.search(
-        r"\b(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|oz|ml|milliliter|milliliters|г|гр|грамм|грамма|граммов|кг|мл)\b",
+        r"\b(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|oz|ml|milliliter|milliliters|l|liter|liters|litre|litres|г|гр|грамм|грамма|граммов|кг|мл|л|литр|литра|литре|литров)\b",
         normalized,
     )
     if not match:

@@ -12,6 +12,7 @@ from app.schemas.nutrition import (
     RetrievalDiagnostic,
     RetrievalFailure,
 )
+from app.tools.fallback_nutrition import contains_water_reference, is_plain_water_query
 from app.tools.food_query import normalize_food_description
 from app.tools.nutrition_tools import (
     NutritionSourceRouter,
@@ -63,11 +64,27 @@ class NutritionRetriever:
             language=language,
             source_route=source_route,
         )
+        modified_water_context = bool(
+            query.food_category == "plain_water"
+            and raw_input
+            and contains_water_reference(raw_input)
+            and not is_plain_water_query(raw_input)
+        )
+        if modified_water_context:
+            query = normalize_food_description(
+                raw_input or ingredient.name,
+                language=language,
+                source_route=source_route,
+            )
         selection = self.router.select_candidate(query)
         selected = selection.selected
         warning: str | None = None
         fallback_path: str | None = None
-        if selected is None and query.query_kind in {"user_composite_meal", "photo_derived_food"}:
+        if (
+            selected is None
+            and not modified_water_context
+            and query.query_kind in {"user_composite_meal", "photo_derived_food"}
+        ):
             generic = generic_fallback_candidate(ingredient.name)
             validation = validate_candidate(generic, query)
             selection.candidates.append(generic)

@@ -70,17 +70,26 @@ class NutritionSourceRouter:
     def select_candidate(self, query: NormalizedFoodQuery) -> CandidateSelection:
         candidates = self.retrieve_candidates(query)
         validations = [validate_candidate(candidate, query) for candidate in candidates]
-        selected = next(
+        selected_pair = next(
             (
-                candidate
+                (candidate, validation)
                 for candidate, validation in zip(candidates, validations, strict=True)
                 if validation.accepted
             ),
             None,
         )
+        selected = (
+            selected_pair[0].model_copy(
+                update={"valid_zero_calories": selected_pair[1].valid_zero_calories}
+            )
+            if selected_pair
+            else None
+        )
         return CandidateSelection(selected=selected, candidates=candidates, validations=validations)
 
     def _provider_order(self, query: NormalizedFoodQuery) -> list[str]:
+        if query.food_category == "plain_water":
+            return ["fallback"]
         if query.query_kind in {"branded_product", "restaurant_menu_item"}:
             return ["fatsecret", "usda", "open_food_facts", "fallback"]
         if query.query_kind in {"standard_prepared_dish", "user_composite_meal", "photo_derived_food"}:

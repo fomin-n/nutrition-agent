@@ -1,7 +1,12 @@
 import re
 from dataclasses import dataclass
 
-from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
+from app.tools.fallback_nutrition import (
+    FALLBACK_FOODS,
+    is_plain_water_query,
+    lookup_fallback_profile,
+    normalize_food_query,
+)
 from app.tools.food_query import PRODUCT_ALIASES, ProductAliasProfile
 
 
@@ -60,6 +65,7 @@ RUSSIAN_FOOD_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("mixed salad vegetables", (r"салат\w*",)),
     ("hamburger", (r"бургер\w*", r"гамбургер\w*", r"чизбургер\w*")),
     ("vegetable soup", (r"суп\w*",)),
+    ("water", (r"вод(?:а|ы|е|у|ой|ою)?",)),
 )
 
 DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
@@ -83,6 +89,7 @@ DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
     "yogurt plain": (125, 200),
     "skyr plain": (125, 200),
     "milk": (200, 300),
+    "water": (250, 250),
     "oatmeal cooked": (180, 280),
     "almonds": (25, 35),
     "avocado": (120, 180),
@@ -127,6 +134,7 @@ COUNT_WORDS: dict[str, float] = {
     "один": 1,
     "одно": 1,
     "одна": 1,
+    "одном": 1,
     "два": 2,
     "две": 2,
     "двух": 2,
@@ -179,6 +187,23 @@ COUNT_UNITS = {
     "штук",
 }
 
+VOLUME_ML: dict[str, float] = {
+    "ml": 1,
+    "milliliter": 1,
+    "milliliters": 1,
+    "мл": 1,
+    "l": 1000,
+    "liter": 1000,
+    "liters": 1000,
+    "litre": 1000,
+    "litres": 1000,
+    "л": 1000,
+    "литр": 1000,
+    "литра": 1000,
+    "литре": 1000,
+    "литров": 1000,
+}
+
 HIGH_VARIANCE_FOODS = {
     "mixed salad vegetables",
     "hamburger",
@@ -216,6 +241,8 @@ def find_food_mentions(text: str) -> tuple[FoodMention, ...]:
                 break
 
     for food in FALLBACK_FOODS:
+        if food.food_category == "plain_water" and not is_plain_water_query(normalized):
+            continue
         for alias in sorted((food.name, *food.aliases), key=len, reverse=True):
             match = _search_alias(normalized, alias)
             if match:
@@ -230,6 +257,8 @@ def find_food_mentions(text: str) -> tuple[FoodMention, ...]:
                 break
 
     for canonical, patterns in RUSSIAN_FOOD_PATTERNS:
+        if canonical == "water" and not is_plain_water_query(normalized):
+            continue
         for pattern in patterns:
             match = re.search(rf"\b(?:{pattern})\b", normalized)
             if match:
@@ -263,7 +292,7 @@ def find_food_mentions(text: str) -> tuple[FoodMention, ...]:
 def extract_quantity_mentions(text: str) -> tuple[QuantityMention, ...]:
     normalized = normalize_food_query(text)
     number_pattern = _number_pattern()
-    units = tuple(UNIT_GRAMS) + tuple(COUNT_UNITS) + ("ml", "milliliter", "milliliters", "мл")
+    units = tuple(UNIT_GRAMS) + tuple(COUNT_UNITS) + tuple(VOLUME_ML)
     unit_pattern = "|".join(re.escape(unit) for unit in sorted(units, key=len, reverse=True))
     matches: list[QuantityMention] = []
     for match in re.finditer(rf"\b(?P<amount>{number_pattern})\s*(?P<unit>{unit_pattern})\b", normalized):
@@ -275,7 +304,19 @@ def extract_quantity_mentions(text: str) -> tuple[QuantityMention, ...]:
                 end=match.end(),
             )
         )
-    return tuple(matches)
+    occupied = tuple((match.start, match.end) for match in matches)
+    for match in re.finditer(r"\b(?:in|в)\s+(?P<unit>liter|litre|литре)\b", normalized):
+        if any(match.start() < end and match.end() > start for start, end in occupied):
+            continue
+        matches.append(
+            QuantityMention(
+                amount=1,
+                unit=match.group("unit"),
+                start=match.start(),
+                end=match.end(),
+            )
+        )
+    return tuple(sorted(matches, key=lambda item: item.start))
 
 
 def estimate_portion(
@@ -296,10 +337,14 @@ def estimate_portion(
         count = _nearby_count(normalized, mention) or 1
         amount *= count
         unit = mention.product.default_serving_unit
-        if unit == "ml":
+        if unit in VOLUME_ML:
+            density = _density_g_per_ml(mention.canonical_name)
+            if density is None:
+                return PortionEstimate(amount, amount, "assumed standard packaged serving", False)
+            grams = amount * VOLUME_ML[unit] * density
             return PortionEstimate(
-                amount,
-                amount,
+                grams,
+                grams,
                 "assumed standard packaged serving at beverage density of 1 g/ml",
                 False,
             )
@@ -399,11 +444,13 @@ def _quantity_to_grams(
         grams = quantity.amount * UNIT_GRAMS[quantity.unit]
         note = "explicit gram weight" if quantity.unit not in {"tbsp", "tablespoon", "tablespoons", "tsp", "teaspoon", "teaspoons", "столовая ложка", "столовой ложке", "чайная ложка", "чайной ложке"} else "estimated from measured serving"
         return PortionEstimate(grams, grams, note, True)
-    if quantity.unit in {"ml", "milliliter", "milliliters", "мл"}:
-        if canonical_name in {"Coca-Cola", "Coca-Cola Zero Sugar", "milk"}:
+    if quantity.unit in VOLUME_ML:
+        density = _density_g_per_ml(canonical_name)
+        if density is not None:
+            grams = quantity.amount * VOLUME_ML[quantity.unit] * density
             return PortionEstimate(
-                quantity.amount,
-                quantity.amount,
+                grams,
+                grams,
                 "volume converted at assumed beverage density of 1 g/ml",
                 True,
             )
@@ -417,6 +464,11 @@ def _quantity_to_grams(
             False,
         )
     return None
+
+
+def _density_g_per_ml(canonical_name: str) -> float | None:
+    profile = lookup_fallback_profile(canonical_name)
+    return profile.density_g_per_ml if profile else None
 
 
 def _nearby_count(normalized: str, mention: FoodMention) -> float | None:

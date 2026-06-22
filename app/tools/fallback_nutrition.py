@@ -12,6 +12,8 @@ class FallbackFood:
     fat_g: float
     carbs_g: float
     aliases: tuple[str, ...]
+    density_g_per_ml: float | None = None
+    food_category: str | None = None
 
     def as_nutrition(self) -> NutritionPer100g:
         return NutritionPer100g(
@@ -155,7 +157,44 @@ FALLBACK_FOODS: tuple[FallbackFood, ...] = (
         3.0,
         ("cottage cheese", "cottage cheese 5%", "творог", "творога", "твороге"),
     ),
-    FallbackFood("milk", 61, 3.2, 3.3, 4.8, ("milk", "whole milk", "молоко", "молока")),
+    FallbackFood(
+        "milk",
+        61,
+        3.2,
+        3.3,
+        4.8,
+        ("milk", "whole milk", "молоко", "молока"),
+        density_g_per_ml=1.0,
+    ),
+    FallbackFood(
+        "water",
+        0,
+        0.0,
+        0.0,
+        0.0,
+        (
+            "water",
+            "plain water",
+            "drinking water",
+            "tap water",
+            "still water",
+            "sparkling water",
+            "вода",
+            "воды",
+            "воде",
+            "воду",
+            "водой",
+            "обычная вода",
+            "обычной воде",
+            "обычной воды",
+            "питьевая вода",
+            "питьевой воды",
+            "минеральная вода",
+            "газированная вода",
+        ),
+        density_g_per_ml=1.0,
+        food_category="plain_water",
+    ),
     FallbackFood(
         "oatmeal cooked",
         71,
@@ -347,6 +386,7 @@ FALLBACK_FOODS: tuple[FallbackFood, ...] = (
             "коле",
             "колу",
         ),
+        density_g_per_ml=1.0,
     ),
     FallbackFood(
         "Coca-Cola Zero Sugar",
@@ -372,6 +412,7 @@ FALLBACK_FOODS: tuple[FallbackFood, ...] = (
             "кока-кола лайт",
             "кола лайт",
         ),
+        density_g_per_ml=1.0,
     ),
     # Extra broad MVP fallbacks for common free-text meals.
     FallbackFood("pizza", 266, 11.0, 10.0, 33.0, ("pizza", "slice pizza", "pizza slice", "пицца", "пиццы")),
@@ -461,7 +502,27 @@ def fallback_names() -> set[str]:
     return names
 
 
-def lookup_fallback_food(query: str) -> NutritionPer100g | None:
+def contains_water_reference(query: str) -> bool:
+    normalized = normalize_food_query(query)
+    return bool(
+        re.search(r"\bwater\b", normalized)
+        or re.search(r"\bвод(?:а|ы|е|у|ой|ою)?\b", normalized)
+        or re.search(r"\bvitaminwater\b", normalized)
+    )
+
+
+def is_plain_water_query(query: str) -> bool:
+    normalized = normalize_food_query(query)
+    if not contains_water_reference(normalized):
+        return False
+    additive_patterns = (
+        r"\b(?:flavored|flavoured|sweetened|sugar|syrup|vitaminwater|vitamin water|lemon|fruit)\b",
+        r"\b(?:ароматизирован\w*|сладк\w*|сахар\w*|сироп\w*|витамин\w*|лимон\w*|фрукт\w*)\b",
+    )
+    return not any(re.search(pattern, normalized) for pattern in additive_patterns)
+
+
+def lookup_fallback_profile(query: str) -> FallbackFood | None:
     normalized = normalize_food_query(query)
     if not normalized:
         return None
@@ -469,15 +530,22 @@ def lookup_fallback_food(query: str) -> NutritionPer100g | None:
     best: FallbackFood | None = None
     best_alias_len = 0
     for food in FALLBACK_FOODS:
+        if food.food_category == "plain_water" and not is_plain_water_query(normalized):
+            continue
         aliases = (food.name, *food.aliases)
         for alias in aliases:
             normalized_alias = normalize_food_query(alias)
             if normalized == normalized_alias:
-                return food.as_nutrition()
+                return food
             if (
                 re.search(rf"\b{re.escape(normalized_alias)}\b", normalized)
                 and len(normalized_alias) > best_alias_len
             ):
                 best = food
                 best_alias_len = len(normalized_alias)
-    return best.as_nutrition() if best else None
+    return best
+
+
+def lookup_fallback_food(query: str) -> NutritionPer100g | None:
+    profile = lookup_fallback_profile(query)
+    return profile.as_nutrition() if profile else None

@@ -42,6 +42,7 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "yogurt plain": "йогурт",
         "skyr plain": "скир",
         "milk": "молоко",
+        "water": "вода",
         "oatmeal cooked": "овсянка",
         "almonds": "миндаль",
         "avocado": "авокадо",
@@ -158,6 +159,9 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     preparation = detect_preparation(normalized)
     for mention in mentions:
         portion = estimate_portion(normalized, mention, mentions)
+        ingredient_confidence = (
+            "high" if portion.explicit or mention.canonical_name == "water" else "medium"
+        )
         ingredients.append(
             IngredientEstimate(
                 name=mention.canonical_name,
@@ -165,7 +169,7 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
                 grams_max=portion.grams_max,
                 preparation=preparation,
                 notes=portion.note,
-                confidence="high" if portion.explicit else "medium",
+                confidence=ingredient_confidence,
             )
         )
         grams_unit = "г" if response_language(language) == "ru" else "g"
@@ -174,6 +178,12 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
             f"{round(portion.grams_min)}-{round(portion.grams_max)} {grams_unit} "
             f"({_localize_note(portion.note, language)})."
         )
+        if mention.canonical_name == "water":
+            assumptions.append(
+                "Это обычная вода без сахара и калорийных добавок."
+                if response_language(language) == "ru"
+                else "This assumes plain water without sugar or caloric additives."
+            )
 
     if not ingredients:
         return MealUnderstanding(
@@ -188,7 +198,11 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
         dish_name=None,
         ingredients=ingredients,
         assumptions=assumptions,
-        confidence="medium",
+        confidence=(
+            "high"
+            if ingredients and all(item.name == "water" for item in ingredients)
+            else "medium"
+        ),
     )
 
 

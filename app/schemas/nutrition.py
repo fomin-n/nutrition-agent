@@ -87,6 +87,7 @@ class NutritionCandidate(BaseModel):
     sodium_mg: float | None = Field(default=None, ge=0)
     values_per_100g: NutritionValues | None = None
     source_confidence: Confidence = "medium"
+    valid_zero_calories: bool = False
     match_score: float | None = None
     score_components: dict[str, float] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -124,6 +125,7 @@ class IngredientNutrition(BaseModel):
 class CandidateValidationResult(BaseModel):
     accepted: bool
     reasons: list[str] = Field(default_factory=list)
+    valid_zero_calories: bool = False
 
 
 class CandidateDiagnostic(BaseModel):

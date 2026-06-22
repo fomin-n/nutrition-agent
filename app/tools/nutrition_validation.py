@@ -1,5 +1,5 @@
 from app.schemas.nutrition import CandidateValidationResult, NutritionCandidate
-from app.tools.fallback_nutrition import normalize_food_query
+from app.tools.fallback_nutrition import is_plain_water_query, normalize_food_query
 from app.tools.food_query import NormalizedFoodQuery, product_profile_for_canonical
 
 
@@ -73,4 +73,19 @@ def validate_candidate(
         if calories > 10 or carbs > 2:
             reasons.append("zero_sugar_soft_drink_energy_or_carbs_above_limit")
 
-    return CandidateValidationResult(accepted=not reasons, reasons=reasons)
+    if query.food_category == "plain_water":
+        if not is_plain_water_query(candidate_haystack):
+            reasons.append("plain_water_identity_or_additive_mismatch")
+        if calories > 1 or any(macro > 0.5 for macro in (protein, fat, carbs)):
+            reasons.append("plain_water_has_calories_or_macros")
+
+    accepted = not reasons
+    valid_zero_calories = accepted and query.food_category in {
+        "plain_water",
+        "zero_sugar_soft_drink",
+    }
+    return CandidateValidationResult(
+        accepted=accepted,
+        reasons=reasons,
+        valid_zero_calories=valid_zero_calories,
+    )

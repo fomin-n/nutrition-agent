@@ -27,15 +27,15 @@ def test_golden_loader_validates_and_filters_examples() -> None:
     smoke = load_golden_examples(DATASET, split="smoke")
     memory = load_golden_examples(DATASET, tags=["memory"])
 
-    assert len(all_examples) == 110
-    assert len(single_turn) == 100
+    assert len(all_examples) == 111
+    assert len(single_turn) == 101
     assert len(conversations) == 10
     assert all(example.input.kind == "single_turn" for example in single_turn)
     assert all(example.input.kind == "conversation" for example in conversations)
-    assert len(smoke) == 17
+    assert len(smoke) == 18
     assert len(memory) == 8
     assert {example.input.kind for example in all_examples} == {"single_turn", "conversation"}
-    assert len({example.metadata.id for example in all_examples}) == 110
+    assert len({example.metadata.id for example in all_examples}) == 111
 
 
 def test_golden_loader_rejects_duplicate_ids(tmp_path) -> None:

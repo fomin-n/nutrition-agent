@@ -131,7 +131,7 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 - `food_query.py`: deterministic English/Russian query normalization, centralized product aliases, bounded provider-query expansion, brand/restaurant/region extraction, category/variant metadata, and query-kind classification.
 - `nutrition_tools.py`: provider router and explicit tool functions such as `search_fatsecret_foods`, `get_fatsecret_food`, `search_usda_foods`, `get_usda_food`, and `retrieve_nutrition_candidates`.
 - `nutrition_ranking.py`: deterministic candidate ranking with score components.
-- `nutrition_validation.py`: semantic candidate validation, including beverage macro checks, regular/zero-sugar checks, and branded chocolate-bar identity/plausibility checks.
+- `nutrition_validation.py`: semantic candidate validation, including plain-water/valid-zero checks, beverage macro checks, regular/zero-sugar checks, and branded chocolate-bar identity/plausibility checks.
 - `fatsecret_client.py`: FatSecret OAuth2 client-credentials auth and Basic `foods.search` / `food.get` method calls. Do not persist raw FatSecret responses, tokens, credentials, or full nutrition records in snapshots.
 - `usda_client.py`: USDA FoodData Central search and details retrieval with cache, data-type routing, and nutrient normalization.
 - `open_food_facts_client.py`: Open Food Facts product lookup for packaged foods.
