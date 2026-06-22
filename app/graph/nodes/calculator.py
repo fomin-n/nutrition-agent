@@ -49,6 +49,18 @@ def calculate_totals(items: list[IngredientNutrition]) -> NutritionTotals:
 def calculate_macros(state: NutritionGraphState) -> NutritionGraphState:
     items = state.get("ingredient_nutrition", [])
     totals = calculate_totals(items)
+    failures = state.get("retrieval_failures", [])
+    if items and failures:
+        totals = totals.model_copy(
+            update={
+                "warnings": dedupe(
+                    [
+                        *totals.warnings,
+                        "Partial estimate: one or more ingredients could not be resolved reliably.",
+                    ]
+                )
+            }
+        )
     diagnostics = [
         diagnostic.model_copy(update={"calculated_totals": totals.model_dump()})
         for diagnostic in state.get("retrieval_diagnostics", [])
@@ -64,6 +76,7 @@ def calculate_macros(state: NutritionGraphState) -> NutritionGraphState:
                     if diagnostic.selected_identity
                 ],
                 "totals": totals.model_dump(),
+                "retrieval_failure_count": len(failures),
             },
             ensure_ascii=True,
         ),

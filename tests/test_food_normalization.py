@@ -79,17 +79,19 @@ def test_multiple_food_quantities_are_owned_by_nearest_food() -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "How many calories in a salad?",
         "Calories in a burger?",
         "Сколько БЖУ в тарелке пасты?",
         "Сколько калорий в супе?",
+        "How many calories in a salad?",
     ],
 )
-def test_high_variance_dishes_without_details_clarify(text: str) -> None:
+def test_materially_ambiguous_dishes_without_details_clarify(text: str) -> None:
     meal = parse_text_locally(text)
 
     assert meal.needs_clarification is True
     assert meal.ingredients == []
+    assert meal.confidence == "low"
+    assert meal.assumptions
 
 
 @pytest.mark.parametrize(

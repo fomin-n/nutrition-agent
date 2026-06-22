@@ -13,6 +13,7 @@ from app.memory.service import UnresolvedTask, derive_unresolved_task, memory_co
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import FALLBACK_FOODS, normalize_food_query
 from app.tools.food_normalization import (
+    CONVENTIONAL_DISH_PRIORS,
     detect_preparation,
     estimate_portion,
     find_food_mentions,
@@ -62,6 +63,15 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
         "chicken Caesar salad": "салат Цезарь с курицей",
         "pasta carbonara": "паста карбонара",
         "borscht with sour cream": "борщ со сметаной",
+        "borscht": "борщ",
+        "pelmeni": "пельмени",
+        "KFC chicken wing": "крылышко KFC",
+        "mashed potatoes": "картофельное пюре",
+        "meat cutlet": "котлета",
+        "beet cooked": "свекла",
+        "cabbage cooked": "капуста",
+        "carrot cooked": "морковь",
+        "onion": "лук",
     }
 }
 
@@ -77,6 +87,8 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     expected_products = {profile.canonical_product for profile in product_profiles}
     parsed_products = {ingredient.name for ingredient in local_meal.ingredients}
     if expected_products and parsed_products == expected_products:
+        return {"meal": local_meal}
+    if _uses_conventional_dish_prior(local_meal):
         return {"meal": local_meal}
     if state.get("use_llm", True) and has_openai_key():
         try:
@@ -144,21 +156,27 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     mentions = find_food_mentions(normalized)
     if is_high_variance_without_detail(normalized, mentions):
         question = (
-            "Уточните состав или примерный вес порции."
+            "Уточните вид блюда, состав или примерный вес порции."
             if response_language(language) == "ru"
-            else "Please clarify the ingredients or approximate portion weight."
+            else "Please clarify the dish type, ingredients, or approximate portion weight."
         )
         return MealUnderstanding(
             ingredients=[],
-            assumptions=["high_variance_dish_without_details"],
+            assumptions=["dish_type_or_composition_required"],
             confidence="low",
             needs_clarification=True,
             clarification_question=question,
         )
 
     preparation = detect_preparation(normalized)
+    used_conventional_prior = False
     for mention in mentions:
         portion = estimate_portion(normalized, mention, mentions)
+        used_conventional_prior = (
+            used_conventional_prior
+            or mention.canonical_name in CONVENTIONAL_DISH_PRIORS
+            and not portion.explicit
+        )
         ingredient_confidence = (
             "high" if portion.explicit or mention.canonical_name == "water" else "medium"
         )
@@ -178,6 +196,9 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
             f"{round(portion.grams_min)}-{round(portion.grams_max)} {grams_unit} "
             f"({_localize_note(portion.note, language)})."
         )
+        dish_assumption = _dish_assumption(mention.canonical_name, language)
+        if dish_assumption:
+            assumptions.append(dish_assumption)
         if mention.canonical_name == "water":
             assumptions.append(
                 "Это обычная вода без сахара и калорийных добавок."
@@ -201,9 +222,39 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
         confidence=(
             "high"
             if ingredients and all(item.name == "water" for item in ingredients)
+            else "low"
+            if used_conventional_prior
             else "medium"
         ),
     )
+
+
+def _uses_conventional_dish_prior(meal: MealUnderstanding) -> bool:
+    return bool(
+        meal.ingredients
+        and not meal.needs_clarification
+        and any(item.name in CONVENTIONAL_DISH_PRIORS for item in meal.ingredients)
+    )
+
+
+def _dish_assumption(canonical: str, language: LanguageCode | None) -> str | None:
+    ru = {
+        "borscht": "Принят обычный мясной борщ без сметаны и хлеба.",
+        "borscht with sour cream": "Принят обычный мясной борщ со стандартной порцией сметаны.",
+        "pelmeni": "Принят пельмень среднего размера с мясной начинкой.",
+        "KFC chicken wing": "Принято одно жареное крылышко KFC; рецепт зависит от рынка.",
+        "mashed potatoes": "Принято обычное картофельное пюре с небольшим количеством молока и масла.",
+        "meat cutlet": "Принята котлета среднего размера из смешанного мясного фарша.",
+    }
+    en = {
+        "borscht": "Assumed ordinary meat-based borscht without sour cream or bread.",
+        "borscht with sour cream": "Assumed ordinary meat-based borscht with a standard serving of sour cream.",
+        "pelmeni": "Assumed a medium meat-filled dumpling.",
+        "KFC chicken wing": "Assumed one fried KFC chicken wing; recipes vary by market.",
+        "mashed potatoes": "Assumed ordinary mashed potatoes with a small amount of milk and butter.",
+        "meat cutlet": "Assumed a medium mixed-meat cutlet.",
+    }
+    return (ru if response_language(language) == "ru" else en).get(canonical)
 
 
 def _food_label(canonical: str, language: LanguageCode | None) -> str:

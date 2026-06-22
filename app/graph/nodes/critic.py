@@ -75,7 +75,7 @@ def _deterministic_critic(state: NutritionGraphState) -> CriticResult:
     if final.is_refusal or final.is_clarification:
         return CriticResult(action="accept")
 
-    if meal and meal.needs_clarification:
+    if meal and meal.needs_clarification and not state.get("ingredient_nutrition"):
         return CriticResult(
             action="clarify",
             issues=["meal parser requested clarification"],

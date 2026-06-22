@@ -307,6 +307,15 @@ def classify_scope_locally(
             language=language,
         )
 
+    if _contains_food_signal(normalized_text) and _has_concrete_food_subject(normalized_text):
+        return ScopeDecision(
+            route="text_meal",
+            is_food_related=True,
+            reason="Nutrition request with a concrete food subject.",
+            confidence="low",
+            language=language,
+        )
+
     if _contains_food_signal(normalized_text):
         return ScopeDecision(
             route="needs_clarification",
@@ -366,3 +375,51 @@ def _contains_meal_detail(normalized_text: str) -> bool:
 def _contains_russian_food_stem(normalized_text: str) -> bool:
     tokens = re.findall(r"[а-я]+", normalized_text)
     return any(token.startswith(stem) for token in tokens for stem in RUSSIAN_FOOD_STEMS)
+
+
+def _has_concrete_food_subject(normalized_text: str) -> bool:
+    stop_words = GENERIC_INTENT_WORDS | {
+        "a",
+        "an",
+        "are",
+        "how",
+        "in",
+        "is",
+        "many",
+        "much",
+        "my",
+        "of",
+        "the",
+        "this",
+        "was",
+        "what",
+        "был",
+        "было",
+        "в",
+        "во",
+        "для",
+        "и",
+        "как",
+        "какой",
+        "много",
+        "мой",
+        "на",
+        "один",
+        "одна",
+        "одном",
+        "одной",
+        "примерно",
+        "самом",
+        "самый",
+        "сколько",
+        "обычном",
+        "обычный",
+        "это",
+    }
+    tokens = re.findall(r"[a-zа-я0-9]+", normalized_text)
+    return any(
+        len(token) > 2
+        and token not in stop_words
+        and not RUSSIAN_NUTRITION_INTENT_RE.fullmatch(token)
+        for token in tokens
+    )

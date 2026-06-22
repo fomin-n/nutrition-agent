@@ -33,6 +33,10 @@ def validate_candidate(
             if part
         )
     )
+    if query.restaurant:
+        expected_restaurant = normalize_food_query(query.restaurant)
+        if expected_restaurant not in candidate_haystack:
+            reasons.append("restaurant_identity_mismatch")
     if query.food_category == "chocolate_bar":
         expected_product = normalize_food_query(query.canonical_query)
         profile = product_profile_for_canonical(query.canonical_query)
@@ -78,6 +82,42 @@ def validate_candidate(
             reasons.append("plain_water_identity_or_additive_mismatch")
         if calories > 1 or any(macro > 0.5 for macro in (protein, fat, carbs)):
             reasons.append("plain_water_has_calories_or_macros")
+
+    canonical = normalize_food_query(query.canonical_query)
+    if canonical == "beef cooked":
+        processed_terms = ("salami", "sausage", "cured", "corned", "jerky", "luncheon")
+        if any(term in candidate_haystack for term in processed_terms):
+            reasons.append("plain_beef_matched_processed_meat")
+        if protein < 12 or fat > 35 or carbs > 8:
+            reasons.append("plain_beef_macros_out_of_range")
+    elif canonical == "potato boiled":
+        excluded_terms = ("fried", "fries", "chips", "salad", "mashed", "gratin")
+        if any(term in candidate_haystack for term in excluded_terms):
+            reasons.append("boiled_potato_preparation_mismatch")
+        if not 45 <= calories <= 150 or fat > 3 or not 8 <= carbs <= 35:
+            reasons.append("boiled_potato_macros_out_of_range")
+    elif canonical == "milk":
+        excluded_terms = (
+            "almond",
+            "coconut",
+            "condensed",
+            "crackers",
+            "evaporated",
+            "goat",
+            "malted",
+            "oat",
+            "powder",
+            "soy",
+        )
+        if any(term in candidate_haystack for term in excluded_terms):
+            reasons.append("ordinary_milk_identity_mismatch")
+        if not 35 <= calories <= 90 or not 2 <= protein <= 5 or fat > 6 or not 3 <= carbs <= 8:
+            reasons.append("ordinary_milk_macros_out_of_range")
+    elif canonical in {"borscht", "borscht with sour cream"}:
+        if "borscht" not in candidate_haystack and "borsch" not in candidate_haystack:
+            reasons.append("borscht_identity_mismatch")
+        if not 30 <= calories <= 120 or protein > 10 or fat > 10 or carbs > 20:
+            reasons.append("meat_borscht_macros_out_of_range")
 
     accepted = not reasons
     valid_zero_calories = accepted and query.food_category in {

@@ -116,6 +116,8 @@ Model names are configurable through environment variables so the project can mo
 
 ## Data Sources
 
+For recognizable ordinary foods and prepared dishes, the service follows an estimate-first policy. Missing portion or recipe details use documented standard-serving and conventional-dish assumptions with reduced confidence. Exact branded/provider data is still preferred; deterministic local priors are used when providers are unavailable or semantically invalid. A few unresolved ingredients no longer suppress an otherwise useful estimate: sufficiently covered partial totals are returned with an explicit omission warning. Mandatory clarification remains for unidentifiable foods, materially ambiguous requests, or requests with no defensible nutrition match.
+
 - USDA FoodData Central lookup when `USDA_API_KEY` is configured. Generic ingredients prefer Foundation/SR Legacy data, and prepared dishes prefer FNDDS where relevant.
 - FatSecret Platform API lookup when `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are configured. Branded products and restaurant menu items prefer FatSecret first.
 - Open Food Facts lookup remains available for packaged-food fallback.

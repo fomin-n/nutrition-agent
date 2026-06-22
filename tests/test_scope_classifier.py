@@ -1,3 +1,5 @@
+import pytest
+
 from app.graph.nodes import coordinator
 from app.graph.nodes.coordinator import classify_scope_locally, scope_classifier
 from app.schemas.inputs import NormalizedInput
@@ -38,6 +40,32 @@ def test_scope_classifier_accepts_russian_apple_question_with_typo() -> None:
     )
     assert decision.route == "text_meal"
     assert decision.language == "ru"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Сколько калорий в борще?",
+        "Сколько калорий в одной пельмешке?",
+        "Сколько калорий в одном крылышке KFC?",
+        "Пюрешка с котлеткой",
+    ],
+)
+def test_scope_classifier_accepts_concrete_russian_food_subjects(text: str) -> None:
+    decision = classify_scope_locally(text, has_image=False, has_text=True)
+
+    assert decision.route == "text_meal"
+    assert decision.is_food_related
+
+
+def test_scope_classifier_routes_unknown_nutrition_subject_to_parser() -> None:
+    decision = classify_scope_locally(
+        "Сколько калорий в неизвестной штуке?",
+        has_image=False,
+        has_text=True,
+    )
+
+    assert decision.route == "text_meal"
 
 
 def test_scope_classifier_keeps_local_food_route_when_llm_marks_off_topic(monkeypatch) -> None:

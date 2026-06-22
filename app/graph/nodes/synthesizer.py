@@ -26,7 +26,8 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
     totals = state.get("totals")
     language = state_language(state)
     failures = state.get("retrieval_failures", [])
-    if failures:
+    items = state.get("ingredient_nutrition", [])
+    if failures and not _has_usable_partial_estimate(items, failures):
         foods = ", ".join(failure.ingredient_name for failure in failures[:3])
         if language == "ru":
             text = (
@@ -64,8 +65,7 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
             )
         }
 
-    confidence = _combined_confidence(meal, totals)
-    items = state.get("ingredient_nutrition", [])
+    confidence = _combined_confidence(meal, totals, has_failures=bool(failures))
     normalized = state.get("normalized_input")
     if len(items) >= 2 and _is_comparison_request(normalized.text if normalized else ""):
         return {
@@ -80,7 +80,21 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
         f"{item.ingredient_name}: {round(item.grams_min)}-{round(item.grams_max)} g."
         for item in state.get("ingredient_nutrition", [])
     ]
+    if failures:
+        foods = ", ".join(failure.ingredient_name for failure in failures[:3])
+        assumptions = [
+            *assumptions,
+            (
+                f"Частичная оценка: надежные данные не найдены для {foods}; "
+                "их вклад не включен в итог."
+                if language == "ru"
+                else f"Partial estimate: reliable data was unavailable for {foods}; "
+                "their contribution is not included."
+            ),
+        ]
     text = _format_estimate(totals, assumptions, confidence, language=language)
+    if confidence == "low":
+        text = f"{text}\n{_optional_refinement_note(language)}"
     return {
         "final_estimate": FinalEstimate(
             text=text,
@@ -134,10 +148,25 @@ def _confidence_label(confidence: Confidence, language: str) -> str:
     return {"low": "низкая", "medium": "средняя", "high": "высокая"}[confidence]
 
 
-def _combined_confidence(meal: MealUnderstanding, totals: NutritionTotals) -> Confidence:
-    if totals.warnings:
+def _combined_confidence(
+    meal: MealUnderstanding,
+    totals: NutritionTotals,
+    *,
+    has_failures: bool = False,
+) -> Confidence:
+    if totals.warnings or has_failures:
         return "low"
     return meal.confidence
+
+
+def _has_usable_partial_estimate(items: list, failures: list) -> bool:
+    return bool(items and len(items) >= len(failures))
+
+
+def _optional_refinement_note(language: str) -> str:
+    if language == "ru":
+        return "Для более точной оценки можно указать вес порции, рецепт и добавки."
+    return "For a more precise estimate, provide the portion weight, recipe, and additions."
 
 
 def _is_comparison_request(text: str) -> bool:
