@@ -31,6 +31,7 @@ The graph uses `NutritionGraphState`, a typed dictionary carrying:
 - deterministic macro totals
 - final estimate
 - critic result
+- critic iteration count, bounded feedback, and prior critic results
 - errors and test flags
 
 Primary graph flow:
@@ -44,7 +45,9 @@ Primary graph flow:
 7. `calculate_macros`
 8. `synthesize_answer`
 9. `critic`
-10. `output_moderation`
+10. either `output_moderation` or a bounded `prepare_critic_revision` -> `synthesize_answer` loop
+
+The critic loop only revisits deterministic answer synthesis. It never reparses food, repeats provider retrieval, or changes calculator totals. `CRITIC_MAX_ITERATIONS` defaults to `2` and is schema-bounded to `0-3`; reaching the cap produces a localized clarification.
 
 Keep the graph controlled. Do not replace it with an unconstrained agent loop.
 
@@ -66,9 +69,10 @@ Settings are loaded from environment variables via `pydantic-settings`:
 - `OPENAI_TEXT_MODEL`
 - `OPENAI_VISION_MODEL`
 - `OPENAI_CRITIC_MODEL`
+- `CRITIC_MAX_ITERATIONS`
 - `OPENAI_MODERATION_ENABLED`
 
-The current MVP uses OpenAI models for structured classification/parsing and image recognition when enabled. Macro arithmetic, final formatting, and critic sanity checks are deterministic Python in the current implementation.
+The current implementation uses OpenAI models for structured classification/parsing and image recognition when enabled. Critic hard checks and final formatting are deterministic; after those pass, `OPENAI_CRITIC_MODEL` may provide a Pydantic-validated qualitative `accept`/`revise` decision. LLM failures fall back to deterministic acceptance. Macro arithmetic and regenerated answers always use calculator-owned values.
 
 The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
 

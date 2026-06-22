@@ -22,6 +22,9 @@ class NutritionGraphState(TypedDict, total=False):
     totals: NutritionTotals
     final_estimate: FinalEstimate
     critic_result: CriticResult
+    critic_history: list[CriticResult]
+    critic_feedback: list[str]
+    critic_iteration: int
     errors: list[str]
     use_llm: bool
     memory_context: dict

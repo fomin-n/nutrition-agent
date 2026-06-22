@@ -5,7 +5,7 @@ from functools import lru_cache
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.schemas.safety import ModerationDecision
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     openai_text_model: str = "gpt-4.1-mini"
     openai_vision_model: str = "gpt-4.1-mini"
     openai_critic_model: str = "gpt-4.1-mini"
+    critic_max_iterations: int = Field(default=2, ge=0, le=3)
     openai_moderation_enabled: bool = True
 
     enable_phoenix_tracing: bool = False

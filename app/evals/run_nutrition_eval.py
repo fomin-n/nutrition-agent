@@ -168,6 +168,10 @@ def _example_result(*, case: NutritionEvalCase, state: NutritionGraphState) -> d
             "nutrition_lookup": lookup_rows,
             "aggregation": _serialize_totals(totals),
             "critic": _serialize_critic(critic),
+            "critic_iterations": state.get("critic_iteration", 0),
+            "critic_history": [
+                item.model_dump(mode="json") for item in state.get("critic_history", [])
+            ],
         },
     }
 
@@ -276,6 +280,7 @@ def _safe_config(*, use_llm: bool, max_examples: int) -> dict[str, Any]:
         "openai_text_model": settings.openai_text_model,
         "openai_vision_model": settings.openai_vision_model,
         "openai_critic_model": settings.openai_critic_model,
+        "critic_max_iterations": settings.critic_max_iterations,
         "openai_api_key_configured": bool(settings.openai_api_key),
         "usda_api_key_configured": bool(settings.usda_api_key),
     }

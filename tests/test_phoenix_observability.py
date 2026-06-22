@@ -24,6 +24,8 @@ def test_trace_metadata_excludes_raw_input() -> None:
     assert metadata["request_type"] == "text"
     assert metadata["request_language"] == "en"
     assert metadata["openai_text_model"] == settings.openai_text_model
+    assert metadata["openai_critic_model"] == settings.openai_critic_model
+    assert metadata["critic_max_iterations"] == settings.critic_max_iterations
     assert metadata["telegram_message_id"] == 123
     assert "text" not in metadata
     assert "openai_api_key" not in metadata

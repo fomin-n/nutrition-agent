@@ -15,11 +15,12 @@ class FinalEstimate(BaseModel):
 
 
 CriticAction = Literal["accept", "clarify", "refuse", "revise"]
+CriticSource = Literal["deterministic", "llm"]
 
 
 class CriticResult(BaseModel):
     action: CriticAction = "accept"
     issues: list[str] = Field(default_factory=list)
-    revised_text: str | None = None
     clarification_question: str | None = None
-
+    source: CriticSource = "deterministic"
+    iteration: int = Field(default=0, ge=0)

@@ -1,3 +1,4 @@
+import logging
 import re
 
 from app.graph.nodes.calculator import calculate_totals
@@ -12,8 +13,15 @@ from app.schemas.nutrition import MealUnderstanding, NutritionTotals
 from app.schemas.outputs import FinalEstimate
 from app.schemas.safety import Confidence
 
+LOGGER = logging.getLogger(__name__)
+
 
 def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
+    LOGGER.info(
+        "Deterministic answer synthesis critic_iteration=%d feedback_count=%d",
+        state.get("critic_iteration", 0),
+        len(state.get("critic_feedback", [])),
+    )
     meal = state.get("meal")
     totals = state.get("totals")
     language = state_language(state)

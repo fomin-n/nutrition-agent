@@ -99,8 +99,9 @@ Model names are configurable through environment variables so the project can mo
 
 - `OPENAI_TEXT_MODEL`: structured scope classification and text meal parsing when LLM mode is enabled.
 - `OPENAI_VISION_MODEL`: food-photo recognition and image+caption interpretation.
-- `OPENAI_CRITIC_MODEL`: reserved for model-backed critic checks; the current MVP uses deterministic critic logic.
-- Answer synthesis is deterministic in the current MVP; the graph does not ask the model to invent totals or perform arithmetic.
+- `OPENAI_CRITIC_MODEL`: schema-validated qualitative answer review after deterministic critic checks when LLM mode is enabled.
+- `CRITIC_MAX_ITERATIONS`: hard cap for critic-driven answer regeneration, default `2` and bounded to `0-3`.
+- Answer synthesis remains deterministic. A fixable critique regenerates the canonical localized answer from calculator totals and assumptions; the model cannot replace or recompute nutrition values.
 - User-facing estimates, clarifications, and refusals are localized for English and Russian text requests. If the user sends only an image, the default response language is English.
 
 ## Safety Design
@@ -111,7 +112,7 @@ Model names are configurable through environment variables so the project can mo
 - Off-topic, hacking, prompt-extraction, unsafe diet, and medical-treatment requests are refused.
 - Unauthorized Telegram users receive only a minimal login prompt and cannot trigger expensive work.
 - Access keys are one-time by default. The application stores HMAC-SHA256 digests, not raw keys.
-- Final answers pass a critic/sanity-check step and output moderation before delivery.
+- Final answers pass deterministic total/format checks and optional LLM qualitative review before output moderation. The controlled `critic -> synthesize -> critic` cycle can only revisit synthesis and terminates at `CRITIC_MAX_ITERATIONS`; an answer still rejected at the cap becomes a clarification.
 
 ## Data Sources
 

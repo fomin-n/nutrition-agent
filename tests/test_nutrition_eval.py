@@ -78,3 +78,5 @@ def test_nutrition_eval_no_llm_graph_path() -> None:
     assert result["components"]["extraction"]["expected_ingredient_recall"] == 1
     assert result["parsed_prediction"]["calories_kcal"]["min"] > 0
     assert result["metrics"]["calories_kcal"]["absolute_error"] is not None
+    assert result["components"]["critic_iterations"] == 0
+    assert result["components"]["critic_history"] == []

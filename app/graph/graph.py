@@ -5,7 +5,12 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.calculator import calculate_macros
 from app.graph.nodes.coordinator import route, route_from_scope, scope_classifier
-from app.graph.nodes.critic import critic, route_after_critic
+from app.graph.nodes.critic import (
+    critic,
+    finalize_critic_cap,
+    prepare_critic_revision,
+    route_after_critic,
+)
 from app.graph.nodes.image_recognizer import combine_text_and_image, recognize_dish_photo
 from app.graph.nodes.normalize import normalize_input
 from app.graph.nodes.nutrition_retriever import retrieve_nutrition
@@ -42,6 +47,8 @@ def build_graph():
     workflow.add_node("calculate_macros", calculate_macros)
     workflow.add_node("synthesize_answer", synthesize_answer)
     workflow.add_node("critic", critic)
+    workflow.add_node("prepare_critic_revision", prepare_critic_revision)
+    workflow.add_node("finalize_critic_cap", finalize_critic_cap)
     workflow.add_node("output_moderation", output_moderation)
 
     workflow.add_edge(START, "normalize_input")
@@ -77,11 +84,15 @@ def build_graph():
         "critic",
         route_after_critic,
         {
+            "revise": "prepare_critic_revision",
+            "critic_cap": "finalize_critic_cap",
             "ask_clarification": "ask_clarification",
             "refuse": "refuse",
             "output_moderation": "output_moderation",
         },
     )
+    workflow.add_edge("prepare_critic_revision", "synthesize_answer")
+    workflow.add_edge("finalize_critic_cap", "ask_clarification")
     workflow.add_edge("ask_clarification", "output_moderation")
     workflow.add_edge("refuse", "output_moderation")
     workflow.add_edge("output_moderation", END)
@@ -180,6 +191,7 @@ def _trace_metadata(
         "openai_text_model": settings.openai_text_model,
         "openai_vision_model": settings.openai_vision_model,
         "openai_critic_model": settings.openai_critic_model,
+        "critic_max_iterations": settings.critic_max_iterations,
     }
     if extra:
         metadata.update(extra)
