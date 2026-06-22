@@ -141,6 +141,8 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 - `open_food_facts_client.py`: Open Food Facts product lookup for packaged foods.
 - `cache.py`: versioned-key JSON file cache with atomic replacement and key-digest diagnostics.
 
+Whole-ingredient retrieval is parallelized with a bounded thread pool; provider calls for one ingredient stay sequential. `NUTRITION_RETRIEVAL_MAX_WORKERS` defaults to `3` and is bounded to `1-8`. Outcomes must be reassembled in ingredient-input order, and tracing context must be copied into workers. The shared file cache synchronizes reads/writes, and FatSecret token refresh remains lock-protected.
+
 External data should be treated as untrusted and potentially incomplete.
 
 Provider credentials are optional and independently disabled:

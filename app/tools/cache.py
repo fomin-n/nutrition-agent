@@ -14,7 +14,7 @@ class JsonFileCache:
     def __init__(self, cache_dir: str | Path) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self._write_lock = threading.Lock()
+        self._lock = threading.RLock()
 
     @staticmethod
     def key_digest(key: str) -> str:
@@ -26,21 +26,22 @@ class JsonFileCache:
 
     def get(self, key: str) -> dict[str, Any] | None:
         path = self._path_for_key(key)
-        if not path.exists():
-            LOGGER.debug("Nutrition cache hit=false key_digest=%s", self.key_digest(key))
-            return None
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-            LOGGER.debug("Nutrition cache hit=true key_digest=%s", self.key_digest(key))
-            return value
-        except (OSError, json.JSONDecodeError):
-            LOGGER.warning("Nutrition cache unreadable key_digest=%s", self.key_digest(key))
-            return None
+        with self._lock:
+            if not path.exists():
+                LOGGER.debug("Nutrition cache hit=false key_digest=%s", self.key_digest(key))
+                return None
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+                LOGGER.debug("Nutrition cache hit=true key_digest=%s", self.key_digest(key))
+                return value
+            except (OSError, json.JSONDecodeError):
+                LOGGER.warning("Nutrition cache unreadable key_digest=%s", self.key_digest(key))
+                return None
 
     def set(self, key: str, value: dict[str, Any]) -> None:
         path = self._path_for_key(key)
         payload = json.dumps(value, ensure_ascii=False, indent=2)
-        with self._write_lock:
+        with self._lock:
             file_descriptor, temp_name = tempfile.mkstemp(
                 prefix=f".{path.name}.",
                 suffix=".tmp",

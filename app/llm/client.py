@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     phoenix_collector_endpoint: str = "http://127.0.0.1:6006/v1/traces"
 
     nutrition_cache_dir: str = ".cache/nutrition-agent"
+    nutrition_retrieval_max_workers: int = Field(default=3, ge=1, le=8)
     nutrition_diagnostics_include_raw: bool = False
     nutrition_diagnostics_max_payload_chars: int = 2000
     temp_image_dir: str = "/tmp/nutrition-agent-images"

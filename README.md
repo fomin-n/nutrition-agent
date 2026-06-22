@@ -125,6 +125,8 @@ For recognizable ordinary foods and prepared dishes, the service follows an esti
 
 Provider outputs are normalized into a common candidate schema with a stable `source + source_id + serving_id` identity, serving metadata, per-100 g values when safely available, and deterministic ranking score components. Unknown single ingredients, branded products, and beverages never use the generic mixed-food fallback; the bot asks for a brand, serving, or label when no semantically valid candidate exists. The app does not persist FatSecret raw API responses or tokens.
 
+Independent ingredient lookups use a bounded thread pool because the provider clients are synchronous and I/O-bound. `NUTRITION_RETRIEVAL_MAX_WORKERS` defaults to `3` and is bounded to `1-8`; set it to `1` to restore serial lookup. Provider calls within one ingredient remain sequential, and results are always reassembled in meal-input order before calculation.
+
 Regular Coca-Cola aliases in English and Russian normalize to one branded sugary-soft-drink product. A can defaults to 330 ml, and volume is converted to calculator grams only for this recorded water-density beverage profile. Candidate validation rejects soft-drink records with implausible protein/fat or a regular/zero-sugar mismatch.
 
 Common international packaged products use a small deterministic alias registry before provider lookup. Russian forms such as `Сникерс`, `Сникерсе`, `Твикс`, `Твиксе`, and `Баунти` map to canonical English product names and bounded provider-query expansions such as `Snickers bar`. Explicit package weights are used exactly; otherwise the documented standard product serving is assumed. If structured providers fail, a product-specific per-100 g profile is used instead of `generic_mixed_food`. Values may differ by market or variant, so unusual editions still require a label photo.
@@ -281,6 +283,7 @@ Optional environment variables:
 - `ENABLE_USDA`
 - `ENABLE_FATSECRET`
 - `ENABLE_OPEN_FOOD_FACTS`
+- `NUTRITION_RETRIEVAL_MAX_WORKERS`
 - `OPENAI_TEXT_MODEL`
 - `OPENAI_VISION_MODEL`
 - `OPENAI_CRITIC_MODEL`

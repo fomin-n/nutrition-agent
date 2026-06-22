@@ -1,5 +1,8 @@
 import json
 import logging
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 
 from app.graph.state import NutritionGraphState
@@ -194,21 +197,160 @@ def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
     source_route = scope.route if scope else None
     language = normalized.language if normalized else None
     retriever = NutritionRetriever()
-    outcomes = [
-        retriever.lookup_with_diagnostics(
-            ingredient,
-            source_route=source_route,
-            language=language,
-            request_id=state.get("request_id"),
-            raw_input=normalized.text if normalized else None,
-        )
-        for ingredient in meal.ingredients
-    ]
+    settings = get_settings()
+    started = time.perf_counter()
+    outcomes = _lookup_ingredients(
+        retriever,
+        meal.ingredients,
+        source_route=source_route,
+        language=language,
+        request_id=state.get("request_id"),
+        raw_input=normalized.text if normalized else None,
+        max_workers=settings.nutrition_retrieval_max_workers,
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    LOGGER.info(
+        "Nutrition ingredient retrieval complete request_id=%s ingredient_count=%d "
+        "worker_count=%d duration_ms=%.1f",
+        state.get("request_id"),
+        len(meal.ingredients),
+        min(settings.nutrition_retrieval_max_workers, len(meal.ingredients)),
+        elapsed_ms,
+    )
     return {
         "ingredient_nutrition": [outcome.item for outcome in outcomes if outcome.item is not None],
         "retrieval_failures": [outcome.failure for outcome in outcomes if outcome.failure is not None],
         "retrieval_diagnostics": [outcome.diagnostic for outcome in outcomes],
     }
+
+
+def _lookup_ingredients(
+    retriever: NutritionRetriever,
+    ingredients: list[IngredientEstimate],
+    *,
+    source_route: str | None,
+    language: str | None,
+    request_id: str | None,
+    raw_input: str | None,
+    max_workers: int,
+) -> list[LookupOutcome]:
+    if len(ingredients) <= 1 or max_workers == 1:
+        return [
+            _lookup_ingredient_safely(
+                retriever,
+                ingredient,
+                source_route=source_route,
+                language=language,
+                request_id=request_id,
+                raw_input=raw_input,
+            )
+            for ingredient in ingredients
+        ]
+
+    worker_count = min(max_workers, len(ingredients))
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="nutrition-retrieval",
+    ) as executor:
+        futures: list[Future[LookupOutcome]] = []
+        for ingredient in ingredients:
+            context = copy_context()
+            futures.append(
+                executor.submit(
+                    context.run,
+                    _lookup_ingredient_safely,
+                    retriever,
+                    ingredient,
+                    source_route=source_route,
+                    language=language,
+                    request_id=request_id,
+                    raw_input=raw_input,
+                )
+            )
+        return [future.result() for future in futures]
+
+
+def _lookup_ingredient_safely(
+    retriever: NutritionRetriever,
+    ingredient: IngredientEstimate,
+    *,
+    source_route: str | None,
+    language: str | None,
+    request_id: str | None,
+    raw_input: str | None,
+) -> LookupOutcome:
+    started = time.perf_counter()
+    try:
+        return retriever.lookup_with_diagnostics(
+            ingredient,
+            source_route=source_route,
+            language=language,
+            request_id=request_id,
+            raw_input=raw_input,
+        )
+    except Exception:
+        LOGGER.exception(
+            "Nutrition ingredient lookup raised request_id=%s ingredient=%r",
+            request_id,
+            ingredient.name,
+        )
+        return _unexpected_failure_outcome(
+            ingredient,
+            source_route=source_route,
+            language=language,
+            request_id=request_id,
+        )
+    finally:
+        LOGGER.info(
+            "Nutrition ingredient lookup complete request_id=%s ingredient=%r duration_ms=%.1f",
+            request_id,
+            ingredient.name,
+            (time.perf_counter() - started) * 1000,
+        )
+
+
+def _unexpected_failure_outcome(
+    ingredient: IngredientEstimate,
+    *,
+    source_route: str | None,
+    language: str | None,
+    request_id: str | None,
+) -> LookupOutcome:
+    try:
+        query = normalize_food_description(
+            ingredient.name,
+            language=language,
+            source_route=source_route,
+        )
+        canonical_query = query.canonical_query
+        food_category = query.food_category
+        product_variant = query.product_variant
+        product_type = query.product_type
+        queries = provider_search_queries(query)
+    except Exception:
+        canonical_query = ingredient.name.strip().casefold()
+        food_category = "unknown"
+        product_variant = "unknown"
+        product_type = None
+        queries = []
+
+    failure = RetrievalFailure(
+        ingredient_name=ingredient.name,
+        canonical_query=canonical_query,
+        reason="unexpected_retrieval_error",
+    )
+    diagnostic = RetrievalDiagnostic(
+        request_id=request_id,
+        ingredient_name=ingredient.name,
+        canonical_query=canonical_query,
+        food_category=food_category,
+        product_variant=product_variant,
+        product_type=product_type,
+        amount_min_g=ingredient.grams_min,
+        amount_max_g=ingredient.grams_max,
+        provider_queries=queries,
+    )
+    return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
 
 
 def _public_candidate_debug(candidate: NutritionCandidate) -> NutritionCandidate:
