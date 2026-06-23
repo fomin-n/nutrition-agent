@@ -33,7 +33,12 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     language = state["normalized_input"].language
     memory_note = memory_context_prompt(state.get("memory_context"))
     local_meal = parse_text_locally(text, language=language)
-    if local_meal.needs_clarification and derive_unresolved_task(text) is not None:
+    unresolved_task = derive_unresolved_task(text)
+    if local_meal.needs_clarification and unresolved_task is not None:
+        if state.get("use_llm", True) and _is_generic_ingredient_in_compound_dish(text, unresolved_task):
+            llm_meal = _try_parse_text_with_llm(text, language=language, memory_note=memory_note)
+            if llm_meal is not None and (llm_meal.ingredients or llm_meal.needs_clarification):
+                return {"meal": llm_meal}
         return {"meal": local_meal}
     product_profiles = product_profiles_in_text(text)
     expected_products = {profile.canonical_product for profile in product_profiles}
@@ -43,16 +48,29 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     if _uses_conventional_dish_prior(local_meal):
         return {"meal": local_meal}
     if state.get("use_llm", True) and has_openai_key():
-        try:
-            llm_meal = parse_text_with_llm(text, language=language, memory_note=memory_note)
-            if llm_meal.ingredients and not llm_meal.needs_clarification:
-                return {"meal": llm_meal}
-            if local_meal.ingredients:
-                return {"meal": local_meal}
-            return {"meal": llm_meal}
-        except Exception:
+        llm_meal = _try_parse_text_with_llm(text, language=language, memory_note=memory_note)
+        if llm_meal is None:
             return {"meal": local_meal}
+        if llm_meal.ingredients and not llm_meal.needs_clarification:
+            return {"meal": llm_meal}
+        if local_meal.ingredients:
+            return {"meal": local_meal}
+        return {"meal": llm_meal}
     return {"meal": local_meal}
+
+
+def _try_parse_text_with_llm(
+    text: str,
+    *,
+    language: LanguageCode,
+    memory_note: str,
+) -> MealUnderstanding | None:
+    if not has_openai_key():
+        return None
+    try:
+        return parse_text_with_llm(text, language=language, memory_note=memory_note)
+    except Exception:
+        return None
 
 
 def parse_text_with_llm(
@@ -238,6 +256,75 @@ def _localize_note(note: str, language: LanguageCode | None) -> str:
 
 def _requires_explicit_details(task: UnresolvedTask) -> bool:
     return (task.canonical_query or task.food_name) in {"chicken", "fish", "rice", "yogurt"}
+
+
+def _is_generic_ingredient_in_compound_dish(text: str, task: UnresolvedTask) -> bool:
+    target = task.canonical_query or task.food_name
+    if target not in {"chicken", "fish", "rice", "yogurt"}:
+        return False
+    normalized = normalize_food_query(text)
+    mentions = find_food_mentions(normalized)
+    target_foods = {
+        "chicken": {"chicken breast cooked"},
+        "fish": {"salmon cooked"},
+        "rice": {"cooked white rice"},
+        "yogurt": {"yogurt plain", "skyr"},
+    }
+    if any(mention.canonical_name not in target_foods[target] for mention in mentions):
+        return True
+    return any(re.search(pattern, normalized) for pattern in _compound_dish_patterns(target))
+
+
+def _compound_dish_patterns(target: str) -> tuple[str, ...]:
+    generic_heads = (
+        r"soup",
+        r"salad",
+        r"sandwich",
+        r"wrap",
+        r"burrito",
+        r"shawarma",
+        r"bowl",
+        r"curry",
+        r"pizza",
+        r"ramen",
+        r"pho",
+        r"taco(?:s)?",
+        r"kebab",
+        r"stir\s*fry",
+        r"суп\w*",
+        r"салат\w*",
+        r"сэндвич\w*",
+        r"бутерброд\w*",
+        r"ролл\w*",
+        r"буррито\w*",
+        r"шаурм\w*",
+        r"шаверм\w*",
+        r"боул\w*",
+        r"карри",
+        r"пицц\w*",
+        r"рамен\w*",
+        r"тако",
+        r"кебаб\w*",
+    )
+    if target == "rice":
+        return (
+            r"\b(?:rice\s+bowl|fried\s+rice|rice\s+salad|rice\s+with\s+\w+)\b",
+            r"\b(?:боул\w*|жарен\w+\s+рис\w*|рис\w*\s+с\s+\w+)\b",
+        )
+    if target == "yogurt":
+        return (
+            r"\b(?:yogurt\s+bowl|yogurt\s+parfait|smoothie|granola)\b",
+            r"\b(?:йогурт\w*\s+с\s+\w+|смузи|гранол\w*)\b",
+        )
+    ingredient_terms = {
+        "chicken": (r"chicken", r"куриц\w*", r"курин\w*"),
+        "fish": (r"fish", r"рыб\w*"),
+    }.get(target, ())
+    return tuple(
+        rf"\b(?:{ingredient}).{{0,24}}\b(?:{head})\b|\b(?:{head}).{{0,24}}\b(?:{ingredient})\b"
+        for ingredient in ingredient_terms
+        for head in generic_heads
+    )
 
 
 def _is_single_food_request(normalized_text: str, task: UnresolvedTask) -> bool:

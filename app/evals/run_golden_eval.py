@@ -14,13 +14,23 @@ from app.evals.golden import (
     evaluate_answer,
     load_golden_examples,
 )
+from app.evals.llm_stub import STUB_VERSION, build_golden_llm_stub
 from app.graph.graph import process_request
-from app.graph.nodes import nutrition_retriever
+from app.graph.nodes import (
+    coordinator,
+    critic,
+    image_recognizer,
+    nutrition_retriever,
+    packaging_recognizer,
+    safety_gate,
+    text_parser,
+)
 from app.memory.service import MemoryService
 from app.tools.fallback_nutrition import normalize_food_query
 from app.tools.nutrition_tools import NutritionSourceRouter
 
 DEFAULT_OUTPUT_DIR = Path("reports/eval")
+LLM_MODES = ("off", "stub", "live")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -30,7 +40,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--tag", action="append", default=[], help="Require a metadata tag; repeatable.")
     parser.add_argument("--max-examples", type=int)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--use-llm", action="store_true", help="Override examples and enable LLM paths.")
+    parser.add_argument(
+        "--llm-mode",
+        choices=LLM_MODES,
+        default="off",
+        help=(
+            "Parser lane to run: off=deterministic fallback, "
+            "stub=use the production LLM branch with deterministic golden fixtures, "
+            "live=use real configured LLM calls."
+        ),
+    )
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Deprecated alias for --llm-mode live.",
+    )
     parser.add_argument(
         "--allow-paid-api",
         action="store_true",
@@ -42,8 +66,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Use configured nutrition providers instead of deterministic local fallbacks.",
     )
     args = parser.parse_args(argv)
-    if args.use_llm and not args.allow_paid_api:
-        parser.error("--use-llm requires --allow-paid-api")
+    if args.use_llm and args.llm_mode != "off":
+        parser.error("--use-llm cannot be combined with --llm-mode")
+    llm_mode = "live" if args.use_llm else args.llm_mode
+    if llm_mode == "live" and not args.allow_paid_api:
+        parser.error("--llm-mode live requires --allow-paid-api")
     if args.max_examples is not None and args.max_examples < 1:
         parser.error("--max-examples must be at least 1")
 
@@ -61,7 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset_path=args.dataset,
         split=args.split,
         tags=args.tag,
-        use_llm=args.use_llm,
+        llm_mode=llm_mode,
         live_providers=args.live_providers,
     )
     json_path, markdown_path = write_golden_results(run_output, args.output_dir)
@@ -86,12 +113,20 @@ def run_golden_eval(
     dataset_path: str | Path,
     split: str | None = None,
     tags: Sequence[str] = (),
-    use_llm: bool = False,
+    use_llm: bool | None = None,
+    llm_mode: str | None = None,
     live_providers: bool = False,
 ) -> dict[str, Any]:
+    resolved_llm_mode = _resolve_llm_mode(use_llm=use_llm, llm_mode=llm_mode)
     timestamp = datetime.now(UTC)
-    with _retrieval_mode(live_providers=live_providers):
-        results = [_run_example(example, use_llm=use_llm) for example in examples]
+    with _retrieval_mode(live_providers=live_providers), _llm_parser_mode(
+        llm_mode=resolved_llm_mode,
+        examples=examples,
+    ):
+        results = [
+            _run_example(example, use_llm=resolved_llm_mode != "off")
+            for example in examples
+        ]
     passed = sum(1 for result in results if result["status"] == "pass")
     failed = sum(1 for result in results if result["status"] == "fail")
     unknown = sum(1 for result in results if result["status"] == "unknown")
@@ -112,7 +147,9 @@ def run_golden_eval(
         "dataset_path": str(Path(dataset_path)),
         "filters": {"split": split, "tags": list(tags)},
         "config": {
-            "use_llm": use_llm,
+            "use_llm": resolved_llm_mode != "off",
+            "llm_mode": resolved_llm_mode,
+            "llm_stub_version": STUB_VERSION if resolved_llm_mode == "stub" else None,
             "live_providers": live_providers,
             "macro_ranges_are_advisory": True,
         },
@@ -314,6 +351,14 @@ def _evaluate_conversation_expectations(
     return failures
 
 
+def _resolve_llm_mode(*, use_llm: bool | None, llm_mode: str | None) -> str:
+    if llm_mode is not None:
+        if llm_mode not in LLM_MODES:
+            raise ValueError(f"Unsupported llm_mode={llm_mode!r}")
+        return llm_mode
+    return "live" if use_llm else "off"
+
+
 @contextmanager
 def _retrieval_mode(*, live_providers: bool) -> Iterator[None]:
     if live_providers:
@@ -326,6 +371,45 @@ def _retrieval_mode(*, live_providers: bool) -> Iterator[None]:
         yield
     finally:
         nutrition_retriever.get_default_router = original
+
+
+@contextmanager
+def _llm_parser_mode(
+    *,
+    llm_mode: str,
+    examples: Sequence[GoldenExample],
+) -> Iterator[None]:
+    if llm_mode != "stub":
+        yield
+        return
+    class LocalModerationService:
+        def moderate_text(self, text: str | None):
+            return safety_gate.local_moderate_text(text)
+
+    original_has_openai_key = text_parser.has_openai_key
+    original_parse_text_with_llm = text_parser.parse_text_with_llm
+    original_coordinator_has_openai_key = coordinator.has_openai_key
+    original_critic_has_openai_key = critic.has_openai_key
+    original_image_has_openai_key = image_recognizer.has_openai_key
+    original_packaging_has_openai_key = packaging_recognizer.has_openai_key
+    original_moderation_service = safety_gate.ModerationService
+    text_parser.has_openai_key = lambda: True
+    text_parser.parse_text_with_llm = build_golden_llm_stub(examples)
+    coordinator.has_openai_key = lambda: False
+    critic.has_openai_key = lambda: False
+    image_recognizer.has_openai_key = lambda: False
+    packaging_recognizer.has_openai_key = lambda: False
+    safety_gate.ModerationService = LocalModerationService
+    try:
+        yield
+    finally:
+        text_parser.has_openai_key = original_has_openai_key
+        text_parser.parse_text_with_llm = original_parse_text_with_llm
+        coordinator.has_openai_key = original_coordinator_has_openai_key
+        critic.has_openai_key = original_critic_has_openai_key
+        image_recognizer.has_openai_key = original_image_has_openai_key
+        packaging_recognizer.has_openai_key = original_packaging_has_openai_key
+        safety_gate.ModerationService = original_moderation_service
 
 
 def _input_summary(example: GoldenExample) -> str | list[str] | None:

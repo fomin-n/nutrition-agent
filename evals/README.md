@@ -4,11 +4,11 @@ The committed golden datasets cover English and Russian single-turn requests plu
 
 ## Files
 
-- `datasets/nutrition_agent_golden_single_turn_v2.jsonl`: 100 single-turn examples.
+- `datasets/nutrition_agent_golden_single_turn_v2.jsonl`: 101 single-turn examples.
 - `datasets/nutrition_agent_golden_single_turn_v2.csv`: spreadsheet view of the same IDs.
 - `datasets/nutrition_agent_golden_conversations_v1.jsonl`: 10 conversation examples.
 - `datasets/nutrition_agent_golden_conversations_v1.csv`: spreadsheet view of the same IDs.
-- `datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl`: combined 110-example Phoenix-friendly dataset.
+- `datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl`: combined 111-example Phoenix-friendly dataset.
 
 JSONL is the source of truth for the runner and Phoenix upload. CSV files are provided for human review. Every JSONL row preserves structured `input`, `output`, `metadata`, and `splits` values.
 
@@ -22,7 +22,7 @@ uv run python -m app.evals.run_golden_eval \
   --split smoke
 ```
 
-Run all 110 golden cases:
+Run all 111 golden cases:
 
 ```bash
 uv run python -m app.evals.run_golden_eval \
@@ -30,7 +30,14 @@ uv run python -m app.evals.run_golden_eval \
   --split golden
 ```
 
-Filter by one or more required metadata tags with repeated `--tag` options. The default run disables LLM calls and external nutrition providers, making it deterministic and cheap. `--live-providers` opts into configured nutrition APIs. LLM use requires both `--use-llm` and `--allow-paid-api`.
+Filter by one or more required metadata tags with repeated `--tag` options. The default run disables LLM calls and external nutrition providers, making it deterministic and cheap. `--live-providers` opts into configured nutrition APIs.
+
+Parser lanes:
+
+- `--llm-mode off`: default deterministic fallback path with no LLM calls.
+- `--llm-mode stub`: production parser branch with deterministic golden fixtures. This mode patches parser LLM calls to fixed structured `MealUnderstanding` outputs and keeps moderation, scope, critic, image, and packaging model calls local/off. It is a regression lane, not a claim about actual model quality.
+- `--llm-mode live --allow-paid-api`: real configured production LLM parser path. This may call paid APIs and should be run intentionally.
+- `--use-llm --allow-paid-api`: deprecated alias for `--llm-mode live --allow-paid-api`.
 
 Each run writes timestamped JSON and Markdown under `reports/eval/`. Use `--output-dir reports/eval/baseline` when producing a baseline that should be reviewed and committed. Ordinary generated reports remain ignored. The command exits nonzero when any example fails or is unknown, after writing the report.
 
@@ -58,6 +65,14 @@ uv run python -m app.evals.compare_golden_runs \
   --baseline-golden reports/eval/baseline/golden_baseline_golden_20260620T012752900266Z.json \
   --current-smoke reports/eval/post_change/<smoke-run>.json \
   --current-golden reports/eval/post_change/<golden-run>.json
+```
+
+Compare deterministic and LLM-path lanes case-by-case:
+
+```bash
+uv run python -m app.evals.compare_golden_lanes \
+  --fallback-run reports/eval/<fallback-run>.json \
+  --llm-run reports/eval/<llm-run>.json
 ```
 
 The 2026-06-21 deterministic parser update improved smoke from 64.7% to 100%, full golden from 25.5% to 60.9%, Russian from 22.8% to 59.6%, and single-turn from 21.0% to 58.0%. Memory/follow-up and safety/refusal tags remained at 100%. See the committed comparison under `reports/eval/post_change/` for category changes and remaining failures.

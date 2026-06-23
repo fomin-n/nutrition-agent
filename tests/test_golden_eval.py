@@ -4,6 +4,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.evals.compare_golden_lanes import build_lane_comparison
+from app.evals.compare_golden_lanes import render_markdown as render_lane_markdown
 from app.evals.compare_golden_runs import build_comparison, render_comparison_markdown
 from app.evals.golden import evaluate_answer, load_golden_examples, parse_nutrition_ranges
 from app.evals.phoenix_datasets import upload_golden_dataset
@@ -113,6 +115,74 @@ def test_golden_conversation_runner_captures_effective_text_and_memory(tmp_path)
     assert result["execution"]["final_unresolved_task"] is None
     assert json_path.exists()
     assert "na_conv_003_ru_fish_followup" not in markdown_path.read_text(encoding="utf-8")
+
+
+def test_golden_eval_stub_llm_lane_is_deterministic_and_records_mode() -> None:
+    example = next(
+        item
+        for item in load_golden_examples(DATASET)
+        if item.metadata.id == "na_golden_002"
+    )
+
+    run = run_golden_eval(
+        [example],
+        dataset_path=DATASET,
+        llm_mode="stub",
+        live_providers=False,
+    )
+
+    assert run["config"]["use_llm"] is True
+    assert run["config"]["llm_mode"] == "stub"
+    assert run["config"]["llm_stub_version"]
+    assert run["summary"]["passed"] == 1
+
+
+def test_golden_lane_comparison_reports_per_case_flips() -> None:
+    fallback = {
+        "run_id": "fallback",
+        "config": {"llm_mode": "off"},
+        "summary": {"pass_rate": 0.5},
+        "examples": [
+            {"id": "a", "status": "fail", "failed_checks": ["x"], "issue_classification": "real"},
+            {"id": "b", "status": "pass", "failed_checks": [], "issue_classification": None},
+        ],
+    }
+    llm = {
+        "run_id": "stub",
+        "config": {"llm_mode": "stub"},
+        "summary": {"pass_rate": 0.5},
+        "examples": [
+            {
+                "id": "a",
+                "kind": "single_turn",
+                "language": "en",
+                "category": "mixed_dish",
+                "tags": [],
+                "input": "food",
+                "status": "pass",
+                "failed_checks": [],
+                "issue_classification": None,
+            },
+            {
+                "id": "b",
+                "kind": "single_turn",
+                "language": "en",
+                "category": "mixed_dish",
+                "tags": [],
+                "input": "food",
+                "status": "fail",
+                "failed_checks": ["y"],
+                "issue_classification": "real",
+            },
+        ],
+    }
+
+    comparison = build_lane_comparison(fallback, llm)
+    markdown = render_lane_markdown(comparison)
+
+    assert [case["id"] for case in comparison["fail_to_pass"]] == ["a"]
+    assert [case["id"] for case in comparison["pass_to_fail"]] == ["b"]
+    assert "| `a` | `fail` | `pass` |" in markdown
 
 
 def test_phoenix_upload_preserves_structured_rows_and_stable_ids() -> None:
