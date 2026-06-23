@@ -12,169 +12,26 @@ from app.llm.structured import invoke_structured_text, read_prompt
 from app.schemas.safety import ModerationDecision, RouteName, ScopeDecision
 from app.tools.fallback_nutrition import fallback_names, normalize_food_query
 from app.tools.food_normalization import find_food_mentions
+from app.tools.food_vocabulary import load_food_vocabulary
 
-RAW_FOOD_WORDS = fallback_names() | {
-    "ate",
-    "eaten",
-    "meal",
-    "breakfast",
-    "lunch",
-    "dinner",
-    "snack",
-    "plate",
-    "bowl",
-    "portion",
-    "serving",
-    "calorie",
-    "calories",
-    "kcal",
-    "protein",
-    "carbs",
-    "fat",
-    "macros",
-    "sandwich",
-    "wrap",
-    "taco",
-    "sushi",
-    "fish",
-    "meat",
-    "vegetables",
-    "fruit",
-    "еда",
-    "блюдо",
-    "прием пищи",
-    "приём пищи",
-    "завтрак",
-    "обед",
-    "ужин",
-    "перекус",
-    "тарелка",
-    "порция",
-    "калория",
-    "калории",
-    "калорий",
-    "калрий",
-    "калорийность",
-    "ккал",
-    "бжу",
-    "кбжу",
-    "белок",
-    "белка",
-    "белки",
-    "жир",
-    "жиры",
-    "жиров",
-    "углеводы",
-    "углеводов",
-    "макросы",
-    "нутриенты",
-}
+_VOCABULARY = load_food_vocabulary()
+
+RAW_FOOD_WORDS = fallback_names() | set(_VOCABULARY.scope.additional_food_terms)
 
 FOOD_WORDS = {normalized for word in RAW_FOOD_WORDS if (normalized := normalize_food_query(word))}
 
-GENERIC_INTENT_WORDS = {
-    "ate",
-    "eaten",
-    "meal",
-    "breakfast",
-    "lunch",
-    "dinner",
-    "snack",
-    "plate",
-    "bowl",
-    "portion",
-    "serving",
-    "calorie",
-    "calories",
-    "kcal",
-    "protein",
-    "carbs",
-    "fat",
-    "macros",
-    "еда",
-    "блюдо",
-    "прием пищи",
-    "приём пищи",
-    "завтрак",
-    "обед",
-    "ужин",
-    "перекус",
-    "тарелка",
-    "порция",
-    "калория",
-    "калории",
-    "калорий",
-    "калрий",
-    "калорийность",
-    "ккал",
-    "бжу",
-    "кбжу",
-    "белок",
-    "белка",
-    "белки",
-    "жир",
-    "жиры",
-    "жиров",
-    "углеводы",
-    "углеводов",
-    "макросы",
-    "нутриенты",
-}
+GENERIC_INTENT_WORDS = set(_VOCABULARY.scope.generic_intent_terms)
 GENERIC_INTENT_WORDS = {
     normalized for word in GENERIC_INTENT_WORDS if (normalized := normalize_food_query(word))
 }
 
-RUSSIAN_FOOD_STEMS = {
-    "банан",
-    "бургер",
-    "гамбургер",
-    "говядин",
-    "греч",
-    "йогурт",
-    "картоф",
-    "картош",
-    "куриц",
-    "курин",
-    "лосос",
-    "макарон",
-    "молок",
-    "огур",
-    "овощ",
-    "овсян",
-    "омлет",
-    "паст",
-    "пицц",
-    "помидор",
-    "рыб",
-    "салат",
-    "сахар",
-    "сметан",
-    "томат",
-    "творог",
-    "фрукт",
-    "яблок",
-}
+RUSSIAN_FOOD_STEMS = set(_VOCABULARY.scope.russian_food_stems)
 
 RUSSIAN_NUTRITION_INTENT_RE = re.compile(
     r"\b(калор\w*|калр\w*|ккал|бжу|кбжу|белк\w*|жир\w*|углевод\w*|макро\w*|нутриент\w*)\b"
 )
 
-PACKAGED_WORDS = {
-    "barcode",
-    "packaged",
-    "package",
-    "wrapper",
-    "label",
-    "nutrition facts",
-    "brand",
-    "product",
-    "штрихкод",
-    "упаковка",
-    "этикетка",
-    "пищевая ценность",
-    "бренд",
-    "продукт",
-}
+PACKAGED_WORDS = set(_VOCABULARY.scope.packaged_terms)
 
 
 def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:

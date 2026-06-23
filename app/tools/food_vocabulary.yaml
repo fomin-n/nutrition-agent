@@ -1,0 +1,1589 @@
+version: 1
+description: Canonical nutrition vocabulary for deterministic food detection, linking, fallback nutrition, portions, display
+  names, and scope terms. Canonical names are stable downstream join keys.
+foods:
+- name: cooked white rice
+  nutrition_per_100g:
+    calories_kcal: 130
+    protein_g: 2.7
+    fat_g: 0.3
+    carbs_g: 28.2
+  aliases:
+  - rice
+  - white rice
+  - cooked rice
+  - рис
+  - риса
+  - рисом
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: вареный рис
+  russian_patterns:
+  - рис(?:а|е|ом|у)?
+- name: cooked pasta
+  nutrition_per_100g:
+    calories_kcal: 158
+    protein_g: 5.8
+    fat_g: 0.9
+    carbs_g: 30.9
+  aliases:
+  - pasta
+  - spaghetti
+  - noodles
+  - паста
+  - пасты
+  - пастой
+  - макароны
+  - макарон
+  default_portion_g:
+  - 160
+  - 240
+  localized_names:
+    ru: паста
+  flags:
+  - conventional_dish_prior
+  - high_variance
+  russian_patterns:
+  - паст\w*
+  - макарон\w*
+- name: cooked buckwheat
+  nutrition_per_100g:
+    calories_kcal: 92
+    protein_g: 3.4
+    fat_g: 0.6
+    carbs_g: 19.9
+  aliases:
+  - buckwheat
+  - kasha
+  - гречка
+  - гречки
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: гречка
+  russian_patterns:
+  - греч\w*
+- name: chicken breast cooked
+  nutrition_per_100g:
+    calories_kcal: 165
+    protein_g: 31.0
+    fat_g: 3.6
+    carbs_g: 0.0
+  aliases:
+  - chicken
+  - chicken breast
+  - курица
+  - курицы
+  - курицей
+  - куриная грудка
+  default_portion_g:
+  - 120
+  - 180
+  localized_names:
+    ru: курица
+- name: beef cooked
+  nutrition_per_100g:
+    calories_kcal: 250
+    protein_g: 26.0
+    fat_g: 15.0
+    carbs_g: 0.0
+  aliases:
+  - beef
+  - steak
+  - ground beef
+  - говядина
+  - стейк
+  default_portion_g:
+  - 100
+  - 170
+  localized_names:
+    ru: говядина
+  russian_patterns:
+  - говядин\w*
+- name: salmon cooked
+  nutrition_per_100g:
+    calories_kcal: 206
+    protein_g: 22.0
+    fat_g: 12.0
+    carbs_g: 0.0
+  aliases:
+  - salmon
+  - cooked salmon
+  - лосось
+  - семга
+  default_portion_g:
+  - 120
+  - 180
+  localized_names:
+    ru: лосось
+  russian_patterns:
+  - лосос\w*
+  - семг\w*
+- name: egg
+  nutrition_per_100g:
+    calories_kcal: 143
+    protein_g: 12.6
+    fat_g: 9.5
+    carbs_g: 0.7
+  aliases:
+  - egg
+  - eggs
+  - omelet
+  - omelette
+  - яйцо
+  - яйца
+  - яиц
+  - омлет
+  - омлете
+  default_portion_g:
+  - 45
+  - 60
+  localized_names:
+    ru: яйца
+  russian_patterns:
+  - яйц\w*
+  - яиц
+- name: olive oil
+  nutrition_per_100g:
+    calories_kcal: 884
+    protein_g: 0.0
+    fat_g: 100.0
+    carbs_g: 0.0
+  aliases:
+  - olive oil
+  - oil
+  - оливковое масло
+  - масло
+  default_portion_g:
+  - 10
+  - 18
+  localized_names:
+    ru: оливковое масло
+- name: butter
+  nutrition_per_100g:
+    calories_kcal: 717
+    protein_g: 0.9
+    fat_g: 81.1
+    carbs_g: 0.1
+  aliases:
+  - butter
+  - сливочное масло
+  default_portion_g:
+  - 8
+  - 15
+  localized_names:
+    ru: сливочное масло
+- name: potato boiled
+  nutrition_per_100g:
+    calories_kcal: 87
+    protein_g: 1.9
+    fat_g: 0.1
+    carbs_g: 20.1
+  aliases:
+  - potato
+  - boiled potato
+  - potatoes
+  - картофель
+  - картошка
+  default_portion_g:
+  - 150
+  - 250
+  localized_names:
+    ru: картофель
+  russian_patterns:
+  - картоф\w*
+  - картош\w*
+- name: bread
+  nutrition_per_100g:
+    calories_kcal: 265
+    protein_g: 9.0
+    fat_g: 3.2
+    carbs_g: 49.0
+  aliases:
+  - bread
+  - toast
+  - slice of bread
+  - sourdough
+  - хлеб
+  - тост
+  default_portion_g:
+  - 35
+  - 55
+  localized_names:
+    ru: хлеб
+  russian_patterns:
+  - хлеб\w*
+- name: banana
+  nutrition_per_100g:
+    calories_kcal: 89
+    protein_g: 1.1
+    fat_g: 0.3
+    carbs_g: 22.8
+  aliases:
+  - banana
+  - bananas
+  - банан
+  - банана
+  default_portion_g:
+  - 100
+  - 140
+  localized_names:
+    ru: банан
+  russian_patterns:
+  - банан\w*
+- name: avocado
+  nutrition_per_100g:
+    calories_kcal: 160
+    protein_g: 2.0
+    fat_g: 14.7
+    carbs_g: 8.5
+  aliases:
+  - avocado
+  - авокадо
+  default_portion_g:
+  - 120
+  - 180
+  localized_names:
+    ru: авокадо
+  russian_patterns:
+  - авокадо
+- name: almonds
+  nutrition_per_100g:
+    calories_kcal: 579
+    protein_g: 21.2
+    fat_g: 49.9
+    carbs_g: 21.6
+  aliases:
+  - almond
+  - almonds
+  - миндаль
+  - миндаля
+  default_portion_g:
+  - 25
+  - 35
+  localized_names:
+    ru: миндаль
+  russian_patterns:
+  - миндал\w*
+- name: tofu firm
+  nutrition_per_100g:
+    calories_kcal: 120
+    protein_g: 14.0
+    fat_g: 7.0
+    carbs_g: 2.5
+  aliases:
+  - tofu
+  - firm tofu
+  - тофу
+  - твердого тофу
+  default_portion_g:
+  - 100
+  - 180
+  localized_names:
+    ru: тофу
+  russian_patterns:
+  - тофу
+- name: lentils cooked
+  nutrition_per_100g:
+    calories_kcal: 116
+    protein_g: 9.0
+    fat_g: 0.4
+    carbs_g: 20.1
+  aliases:
+  - lentils
+  - cooked lentils
+  - lentil
+  - чечевица
+  - чечевицы
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: чечевица
+  russian_patterns:
+  - чечевиц\w*
+- name: chickpeas cooked
+  nutrition_per_100g:
+    calories_kcal: 164
+    protein_g: 8.9
+    fat_g: 2.6
+    carbs_g: 27.4
+  aliases:
+  - chickpeas
+  - cooked chickpeas
+  - chickpea
+  - нут
+  - нута
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: нут
+  russian_patterns:
+  - нут(?:а|е|ом|у)?
+- name: apple
+  nutrition_per_100g:
+    calories_kcal: 52
+    protein_g: 0.3
+    fat_g: 0.2
+    carbs_g: 13.8
+  aliases:
+  - apple
+  - apples
+  - green apple
+  - яблоко
+  - яблока
+  - яблоке
+  - яблоком
+  - яблоку
+  - яблоки
+  - зеленое яблоко
+  - зеленом яблоке
+  - зеленого яблока
+  - зелёное яблоко
+  - зелёном яблоке
+  - зелёного яблока
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: яблоко
+  russian_patterns:
+  - яблок\w*
+- name: tomato
+  nutrition_per_100g:
+    calories_kcal: 18
+    protein_g: 0.9
+    fat_g: 0.2
+    carbs_g: 3.9
+  aliases:
+  - tomato
+  - tomatoes
+  - помидор
+  - томат
+  - помидоры
+  default_portion_g:
+  - 80
+  - 150
+  localized_names:
+    ru: помидор
+  russian_patterns:
+  - помидор\w*
+  - томат\w*
+- name: cucumber
+  nutrition_per_100g:
+    calories_kcal: 15
+    protein_g: 0.7
+    fat_g: 0.1
+    carbs_g: 3.6
+  aliases:
+  - cucumber
+  - cucumbers
+  - огурец
+  - огурцы
+  default_portion_g:
+  - 80
+  - 160
+  localized_names:
+    ru: огурец
+  russian_patterns:
+  - огур\w*
+- name: beet cooked
+  nutrition_per_100g:
+    calories_kcal: 44
+    protein_g: 1.7
+    fat_g: 0.2
+    carbs_g: 10.0
+  aliases:
+  - beet
+  - beets
+  - cooked beet
+  - свекла
+  - свеклы
+  - свекле
+  - свеклой
+  default_portion_g:
+  - 80
+  - 150
+  localized_names:
+    ru: свекла
+  russian_patterns:
+  - свекл\w*
+- name: cabbage cooked
+  nutrition_per_100g:
+    calories_kcal: 23
+    protein_g: 1.3
+    fat_g: 0.1
+    carbs_g: 5.5
+  aliases:
+  - cabbage
+  - cooked cabbage
+  - капуста
+  - капусты
+  - капусте
+  - капустой
+  default_portion_g:
+  - 80
+  - 160
+  localized_names:
+    ru: капуста
+  russian_patterns:
+  - капуст\w*
+- name: carrot cooked
+  nutrition_per_100g:
+    calories_kcal: 35
+    protein_g: 0.8
+    fat_g: 0.2
+    carbs_g: 8.2
+  aliases:
+  - carrot
+  - carrots
+  - cooked carrot
+  - морковь
+  - моркови
+  - морковью
+  default_portion_g:
+  - 70
+  - 140
+  localized_names:
+    ru: морковь
+  russian_patterns:
+  - морков\w*
+- name: onion
+  nutrition_per_100g:
+    calories_kcal: 40
+    protein_g: 1.1
+    fat_g: 0.1
+    carbs_g: 9.3
+  aliases:
+  - onion
+  - onions
+  - лук
+  - лука
+  - луком
+  default_portion_g:
+  - 30
+  - 80
+  localized_names:
+    ru: лук
+  russian_patterns:
+  - лук(?:а|е|ом|у)?
+- name: mixed salad vegetables
+  nutrition_per_100g:
+    calories_kcal: 20
+    protein_g: 1.2
+    fat_g: 0.2
+    carbs_g: 4.0
+  aliases:
+  - mixed salad vegetables
+  - salad vegetables
+  - lettuce
+  - green salad
+  - mixed salad
+  - salad
+  - салат
+  - салата
+  - зеленый салат
+  - зелёный салат
+  default_portion_g:
+  - 80
+  - 180
+  localized_names:
+    ru: салатные овощи
+  flags:
+  - conventional_dish_prior
+  - high_variance
+  russian_patterns:
+  - салат\w*
+- name: cheese
+  nutrition_per_100g:
+    calories_kcal: 402
+    protein_g: 25.0
+    fat_g: 33.0
+    carbs_g: 1.3
+  aliases:
+  - cheese
+  - cheddar
+  - hard cheese
+  - сыр
+  - сыра
+  - сыром
+  default_portion_g:
+  - 25
+  - 45
+  localized_names:
+    ru: сыр
+  russian_patterns:
+  - сыр(?:а|е|ом|у|ы)?
+- name: yogurt plain
+  nutrition_per_100g:
+    calories_kcal: 61
+    protein_g: 3.5
+    fat_g: 3.3
+    carbs_g: 4.7
+  aliases:
+  - yogurt
+  - plain yogurt
+  - yoghurt
+  - йогурт
+  default_portion_g:
+  - 125
+  - 200
+  localized_names:
+    ru: йогурт
+  russian_patterns:
+  - йогурт\w*
+- name: Greek yogurt 2%
+  nutrition_per_100g:
+    calories_kcal: 73
+    protein_g: 9.9
+    fat_g: 2.0
+    carbs_g: 3.9
+  aliases:
+  - greek yogurt
+  - greek yogurt 2%
+  - греческий йогурт
+  - греческого йогурта
+  - греческом йогурте
+- name: skyr plain
+  nutrition_per_100g:
+    calories_kcal: 63
+    protein_g: 11.0
+    fat_g: 0.2
+    carbs_g: 4.0
+  aliases:
+  - skyr
+  - plain skyr
+  - natural skyr
+  - скир
+  - скира
+  - скыр
+  default_portion_g:
+  - 125
+  - 200
+  localized_names:
+    ru: скир
+  russian_patterns:
+  - ск[иы]р\w*
+- name: cottage cheese
+  nutrition_per_100g:
+    calories_kcal: 121
+    protein_g: 17.0
+    fat_g: 5.0
+    carbs_g: 3.0
+  aliases:
+  - cottage cheese
+  - cottage cheese 5%
+  - творог
+  - творога
+  - твороге
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: творог
+  russian_patterns:
+  - творог\w*
+- name: milk
+  nutrition_per_100g:
+    calories_kcal: 61
+    protein_g: 3.2
+    fat_g: 3.3
+    carbs_g: 4.8
+  aliases:
+  - milk
+  - whole milk
+  - молоко
+  - молока
+  density_g_per_ml: 1.0
+  default_portion_g:
+  - 200
+  - 300
+  localized_names:
+    ru: молоко
+  russian_patterns:
+  - молок\w*
+- name: water
+  nutrition_per_100g:
+    calories_kcal: 0
+    protein_g: 0.0
+    fat_g: 0.0
+    carbs_g: 0.0
+  aliases:
+  - water
+  - plain water
+  - drinking water
+  - tap water
+  - still water
+  - sparkling water
+  - вода
+  - воды
+  - воде
+  - воду
+  - водой
+  - обычная вода
+  - обычной воде
+  - обычной воды
+  - питьевая вода
+  - питьевой воды
+  - минеральная вода
+  - газированная вода
+  density_g_per_ml: 1.0
+  food_category: plain_water
+  default_portion_g:
+  - 250
+  - 250
+  localized_names:
+    ru: вода
+  russian_patterns:
+  - вод(?:а|ы|е|у|ой|ою)?
+- name: oatmeal cooked
+  nutrition_per_100g:
+    calories_kcal: 71
+    protein_g: 2.5
+    fat_g: 1.5
+    carbs_g: 12.0
+  aliases:
+  - oatmeal
+  - porridge
+  - cooked oats
+  - oats
+  - овсянка
+  - овсянки
+  - овсянкой
+  - каша
+  - каши
+  - кашу
+  - кашей
+  - овсяная каша
+  - овсяной каши
+  - овсяную кашу
+  - овсяной кашей
+  default_portion_g:
+  - 180
+  - 280
+  localized_names:
+    ru: овсянка
+  russian_patterns:
+  - овсян\w*
+- name: dry oats
+  nutrition_per_100g:
+    calories_kcal: 389
+    protein_g: 16.9
+    fat_g: 6.9
+    carbs_g: 66.3
+  aliases:
+  - dry oats
+  - rolled oats dry
+  - сухие овсяные хлопья
+  - овсяных хлопьев
+- name: butter croissant
+  nutrition_per_100g:
+    calories_kcal: 406
+    protein_g: 8.2
+    fat_g: 21.0
+    carbs_g: 45.8
+  aliases:
+  - butter croissant
+  - croissant
+  - круассан
+  - круассана
+  default_portion_g:
+  - 55
+  - 75
+- name: pain au chocolat
+  nutrition_per_100g:
+    calories_kcal: 414
+    protein_g: 7.5
+    fat_g: 22.0
+    carbs_g: 45.0
+  aliases:
+  - pain au chocolat
+  - chocolate croissant
+  - шоколадный круассан
+  default_portion_g:
+  - 65
+  - 85
+- name: baguette
+  nutrition_per_100g:
+    calories_kcal: 274
+    protein_g: 8.8
+    fat_g: 1.0
+    carbs_g: 57.5
+  aliases:
+  - baguette
+  - багет
+  - багета
+  default_portion_g:
+  - 80
+  - 120
+- name: potato chips
+  nutrition_per_100g:
+    calories_kcal: 536
+    protein_g: 7.0
+    fat_g: 35.0
+    carbs_g: 53.0
+  aliases:
+  - potato chips
+  - chips
+  - картофельные чипсы
+  - картофельных чипсов
+  - картофельными чипсами
+  - чипсы
+  - чипсов
+  default_portion_g:
+  - 25
+  - 40
+- name: Nutella
+  nutrition_per_100g:
+    calories_kcal: 539
+    protein_g: 6.3
+    fat_g: 30.9
+    carbs_g: 57.5
+  aliases:
+  - nutella
+  - нутелла
+  - нутеллы
+  - нутелле
+  default_portion_g:
+  - 15
+  - 20
+- name: peanut butter
+  nutrition_per_100g:
+    calories_kcal: 588
+    protein_g: 25.0
+    fat_g: 50.0
+    carbs_g: 20.0
+  aliases:
+  - peanut butter
+  - арахисовая паста
+  - арахисовой пасты
+  default_portion_g:
+  - 25
+  - 35
+- name: protein bar
+  nutrition_per_100g:
+    calories_kcal: 380
+    protein_g: 33.0
+    fat_g: 12.0
+    carbs_g: 38.0
+  aliases:
+  - protein bar
+  - протеиновый батончик
+  - протеиновом батончике
+  default_portion_g:
+  - 50
+  - 65
+- name: instant noodles dry
+  nutrition_per_100g:
+    calories_kcal: 470
+    protein_g: 10.0
+    fat_g: 20.0
+    carbs_g: 62.0
+  aliases:
+  - instant noodles
+  - instant noodle pack
+  - лапша быстрого приготовления
+  - лапши быстрого приготовления
+  default_portion_g:
+  - 75
+  - 100
+- name: vanilla ice cream
+  nutrition_per_100g:
+    calories_kcal: 207
+    protein_g: 3.5
+    fat_g: 11.0
+    carbs_g: 23.6
+  aliases:
+  - vanilla ice cream
+  - ice cream
+  - ванильное мороженое
+  - мороженое
+  default_portion_g:
+  - 80
+  - 140
+- name: tuna canned in water
+  nutrition_per_100g:
+    calories_kcal: 116
+    protein_g: 25.5
+    fat_g: 0.8
+    carbs_g: 0.0
+  aliases:
+  - canned tuna in water
+  - tuna in water
+  - canned tuna
+  - тунец в собственном соку
+  default_portion_g:
+  - 100
+  - 150
+- name: dark chocolate
+  nutrition_per_100g:
+    calories_kcal: 598
+    protein_g: 7.8
+    fat_g: 42.6
+    carbs_g: 45.9
+  aliases:
+  - dark chocolate
+  - темный шоколад
+  - темного шоколада
+  - тёмный шоколад
+  - тёмного шоколада
+  default_portion_g:
+  - 20
+  - 35
+- name: mozzarella
+  nutrition_per_100g:
+    calories_kcal: 280
+    protein_g: 28.0
+    fat_g: 17.0
+    carbs_g: 3.1
+  aliases:
+  - mozzarella
+  - mozzarella ball
+  - моцарелла
+  - моцареллы
+  - моцареллой
+  default_portion_g:
+  - 100
+  - 125
+- name: hummus
+  nutrition_per_100g:
+    calories_kcal: 166
+    protein_g: 7.9
+    fat_g: 9.6
+    carbs_g: 14.3
+  aliases:
+  - hummus
+  - хумус
+  - хумуса
+  - хумусе
+  default_portion_g:
+  - 80
+  - 150
+- name: granola
+  nutrition_per_100g:
+    calories_kcal: 471
+    protein_g: 10.0
+    fat_g: 20.0
+    carbs_g: 64.0
+  aliases:
+  - granola
+  - гранола
+  - гранолы
+  default_portion_g:
+  - 40
+  - 60
+- name: Snickers
+  nutrition_per_100g:
+    calories_kcal: 500
+    protein_g: 8.0
+    fat_g: 24.0
+    carbs_g: 62.0
+  aliases:
+  - snickers
+  - snickers bar
+  - сникерс
+  - сникерса
+  - сникерсе
+  - сникерсом
+  - сникерсу
+  localized_names:
+    ru: Snickers
+- name: Twix
+  nutrition_per_100g:
+    calories_kcal: 495
+    protein_g: 5.0
+    fat_g: 24.0
+    carbs_g: 65.0
+  aliases:
+  - twix
+  - twix bar
+  - твикс
+  - твикса
+  - твиксе
+  - твиксом
+  - твиксу
+  localized_names:
+    ru: Twix
+- name: Bounty
+  nutrition_per_100g:
+    calories_kcal: 488
+    protein_g: 4.0
+    fat_g: 26.0
+    carbs_g: 59.0
+  aliases:
+  - bounty
+  - bounty bar
+  - баунти
+  localized_names:
+    ru: Bounty
+- name: Coca-Cola
+  nutrition_per_100g:
+    calories_kcal: 42
+    protein_g: 0.0
+    fat_g: 0.0
+    carbs_g: 10.6
+  aliases:
+  - regular cola soft drink
+  - regular cola
+  - coca cola
+  - coca-cola
+  - cocacola
+  - coke
+  - cola
+  - кока кола
+  - кока-кола
+  - кока колы
+  - кока-колы
+  - кола
+  - колы
+  - коле
+  - колу
+  density_g_per_ml: 1.0
+  default_portion_g:
+  - 330
+  - 330
+  localized_names:
+    ru: Coca-Cola
+- name: Coca-Cola Zero Sugar
+  nutrition_per_100g:
+    calories_kcal: 0.2
+    protein_g: 0.0
+    fat_g: 0.0
+    carbs_g: 0.0
+  aliases:
+  - coca cola zero sugar
+  - coca-cola zero sugar
+  - coke zero
+  - cola zero
+  - diet cola
+  - coca cola light
+  - coca-cola light
+  - coke light
+  - cola light
+  - кока кола зеро
+  - кока-кола зеро
+  - кола зеро
+  - кола без сахара
+  - кока кола лайт
+  - кока-кола лайт
+  - кола лайт
+  density_g_per_ml: 1.0
+  default_portion_g:
+  - 330
+  - 330
+  localized_names:
+    ru: Coca-Cola без сахара
+- name: pizza
+  nutrition_per_100g:
+    calories_kcal: 266
+    protein_g: 11.0
+    fat_g: 10.0
+    carbs_g: 33.0
+  aliases:
+  - pizza
+  - slice pizza
+  - pizza slice
+  - пицца
+  - пиццы
+  default_portion_g:
+  - 100
+  - 160
+  localized_names:
+    ru: пицца
+- name: hamburger
+  nutrition_per_100g:
+    calories_kcal: 254
+    protein_g: 12.0
+    fat_g: 10.0
+    carbs_g: 28.0
+  aliases:
+  - burger
+  - hamburger
+  - cheeseburger
+  - бургер
+  - гамбургер
+  - чизбургер
+  default_portion_g:
+  - 180
+  - 280
+  localized_names:
+    ru: бургер
+  flags:
+  - conventional_dish_prior
+  - high_variance
+  russian_patterns:
+  - бургер\w*
+  - гамбургер\w*
+  - чизбургер\w*
+- name: vegetable soup
+  nutrition_per_100g:
+    calories_kcal: 45
+    protein_g: 2.0
+    fat_g: 1.5
+    carbs_g: 6.5
+  aliases:
+  - soup
+  - vegetable soup
+  - суп
+  - овощной суп
+  default_portion_g:
+  - 250
+  - 400
+  localized_names:
+    ru: овощной суп
+  flags:
+  - conventional_dish_prior
+  - high_variance
+  russian_patterns:
+  - суп\w*
+- name: French fries
+  nutrition_per_100g:
+    calories_kcal: 312
+    protein_g: 3.4
+    fat_g: 15.0
+    carbs_g: 41.0
+  aliases:
+  - french fries
+  - fries
+  - картошка фри
+  - картошке фри
+  - картофель фри
+- name: McDonald's Big Mac
+  nutrition_per_100g:
+    calories_kcal: 257
+    protein_g: 12.0
+    fat_g: 15.0
+    carbs_g: 20.0
+  aliases:
+  - big mac
+  - mcdonalds big mac
+  - биг мак
+  - биг мака
+  default_portion_g:
+  - 215
+  - 215
+- name: Greek salad
+  nutrition_per_100g:
+    calories_kcal: 120
+    protein_g: 3.5
+    fat_g: 9.0
+    carbs_g: 7.0
+  aliases:
+  - greek salad
+  - греческий салат
+  - греческого салата
+  default_portion_g:
+  - 250
+  - 350
+  localized_names:
+    ru: греческий салат
+  flags:
+  - conventional_dish_prior
+- name: chicken Caesar salad
+  nutrition_per_100g:
+    calories_kcal: 180
+    protein_g: 13.0
+    fat_g: 11.0
+    carbs_g: 9.0
+  aliases:
+  - chicken caesar salad
+  - caesar salad with chicken
+  - салат цезарь с курицей
+  - салате цезарь с курицей
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: салат Цезарь с курицей
+  flags:
+  - conventional_dish_prior
+- name: pasta carbonara
+  nutrition_per_100g:
+    calories_kcal: 220
+    protein_g: 9.0
+    fat_g: 11.0
+    carbs_g: 24.0
+  aliases:
+  - pasta carbonara
+  - carbonara
+  - паста карбонара
+  - пасте карбонара
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: паста карбонара
+  flags:
+  - conventional_dish_prior
+- name: borscht
+  nutrition_per_100g:
+    calories_kcal: 55
+    protein_g: 2.5
+    fat_g: 2.0
+    carbs_g: 6.5
+  aliases:
+  - borscht
+  - borsch
+  - борщ
+  - борща
+  - борще
+  - борщом
+  default_portion_g:
+  - 350
+  - 450
+  localized_names:
+    ru: борщ
+  flags:
+  - conventional_dish_prior
+- name: borscht with sour cream
+  nutrition_per_100g:
+    calories_kcal: 70
+    protein_g: 3.0
+    fat_g: 3.5
+    carbs_g: 7.0
+  aliases:
+  - borscht with sour cream
+  - borsch with sour cream
+  - борщ со сметаной
+  - борща со сметаной
+  - борще со сметаной
+  default_portion_g:
+  - 300
+  - 450
+  localized_names:
+    ru: борщ со сметаной
+  flags:
+  - conventional_dish_prior
+- name: pelmeni
+  nutrition_per_100g:
+    calories_kcal: 250
+    protein_g: 10.0
+    fat_g: 12.0
+    carbs_g: 28.0
+  aliases:
+  - pelmeni
+  - meat dumpling
+  - meat dumplings
+  - пельмень
+  - пельменя
+  - пельмени
+  - пельменей
+  - пельмешка
+  - пельмешке
+  - пельмешки
+  default_portion_g:
+  - 12
+  - 18
+  localized_names:
+    ru: пельмени
+  flags:
+  - conventional_dish_prior
+- name: KFC chicken wing
+  nutrition_per_100g:
+    calories_kcal: 290
+    protein_g: 18.0
+    fat_g: 21.0
+    carbs_g: 9.0
+  aliases:
+  - kfc chicken wing
+  - kfc wing
+  - chicken wing kfc
+  - крылышко kfc
+  - крылышка kfc
+  - крылышке kfc
+  - крыло kfc
+  default_portion_g:
+  - 35
+  - 50
+  localized_names:
+    ru: крылышко KFC
+  flags:
+  - conventional_dish_prior
+- name: mashed potatoes
+  nutrition_per_100g:
+    calories_kcal: 113
+    protein_g: 2.0
+    fat_g: 4.2
+    carbs_g: 17.5
+  aliases:
+  - mashed potato
+  - mashed potatoes
+  - potato puree
+  - картофельное пюре
+  - картофельного пюре
+  - пюре
+  - пюрешка
+  - пюрешки
+  default_portion_g:
+  - 180
+  - 250
+  localized_names:
+    ru: картофельное пюре
+  flags:
+  - conventional_dish_prior
+- name: meat cutlet
+  nutrition_per_100g:
+    calories_kcal: 250
+    protein_g: 16.0
+    fat_g: 18.0
+    carbs_g: 8.0
+  aliases:
+  - meat cutlet
+  - meat patty
+  - cutlet
+  - котлета
+  - котлеты
+  - котлетой
+  - котлетка
+  - котлетке
+  - котлеткой
+  default_portion_g:
+  - 80
+  - 120
+  localized_names:
+    ru: котлета
+  flags:
+  - conventional_dish_prior
+products:
+- canonical_product: Coca-Cola Zero Sugar
+  brand: Coca-Cola
+  category: zero_sugar_soft_drink
+  variant: zero_sugar
+  aliases:
+  - coca cola zero sugar
+  - coca-cola zero sugar
+  - coca cola zero
+  - coca-cola zero
+  - coke zero
+  - cola zero
+  - diet coke
+  - diet cola
+  - coca cola light
+  - coca-cola light
+  - coke light
+  - cola light
+  - кока кола зеро
+  - кока-кола зеро
+  - кола зеро
+  - кока кола без сахара
+  - кока-кола без сахара
+  - кола без сахара
+  - кока кола лайт
+  - кока-кола лайт
+  - кола лайт
+  product_type: soft drink
+  default_serving_amount: 330
+  default_serving_unit: ml
+- canonical_product: Coca-Cola
+  brand: Coca-Cola
+  category: sugary_soft_drink
+  variant: regular
+  aliases:
+  - coca cola
+  - coca-cola
+  - cocacola
+  - coke
+  - regular cola soft drink
+  - regular cola
+  - cola
+  - кока кола
+  - кока-кола
+  - кока колы
+  - кока-колы
+  - кока коле
+  - кока-коле
+  - кола
+  - колы
+  - коле
+  - колу
+  product_type: soft drink
+  default_serving_amount: 330
+  default_serving_unit: ml
+- canonical_product: Snickers
+  brand: Snickers
+  category: chocolate_bar
+  variant: regular
+  aliases:
+  - snickers
+  - snickers bar
+  - сникерс
+  - сникерса
+  - сникерсе
+  - сникерсом
+  - сникерсу
+  product_type: chocolate bar
+  query_expansions:
+  - Snickers bar
+  - Snickers chocolate bar
+  default_serving_amount: 50
+  default_serving_unit: g
+- canonical_product: Twix
+  brand: Twix
+  category: chocolate_bar
+  variant: regular
+  aliases:
+  - twix
+  - twix bar
+  - твикс
+  - твикса
+  - твиксе
+  - твиксом
+  - твиксу
+  product_type: chocolate bar
+  query_expansions:
+  - Twix bar
+  - Twix chocolate bar
+  default_serving_amount: 50
+  default_serving_unit: g
+- canonical_product: Bounty
+  brand: Bounty
+  category: chocolate_bar
+  variant: regular
+  aliases:
+  - bounty
+  - bounty bar
+  - баунти
+  product_type: coconut chocolate bar
+  query_expansions:
+  - Bounty bar
+  - Bounty coconut chocolate bar
+  default_serving_amount: 57
+  default_serving_unit: g
+brand_aliases:
+  danone: Danone
+  snickers: Snickers
+  coca cola: Coca-Cola
+  coca-cola: Coca-Cola
+  nestle: Nestle
+  несквик: Nesquik
+restaurant_aliases:
+  mcdonalds: McDonald's
+  mcdonald s: McDonald's
+  mc donalds: McDonald's
+  макдоналдс: McDonald's
+  макдональдс: McDonald's
+  burger king: Burger King
+  kfc: KFC
+  starbucks: Starbucks
+region_aliases:
+  france: FR
+  франция: FR
+  франции: FR
+  usa: US
+  us: US
+  сша: US
+  russia: RU
+  россия: RU
+  россии: RU
+phrase_translations:
+- phrase: жареная куриная грудка
+  replacement: fried chicken breast
+  preparation: fried
+- phrase: жареной куриной грудки
+  replacement: fried chicken breast
+  preparation: fried
+- phrase: куриная грудка
+  replacement: chicken breast
+- phrase: куриной грудки
+  replacement: chicken breast
+- phrase: биг мак
+  replacement: Big Mac
+- phrase: борщ со сметаной
+  replacement: borscht with sour cream
+- phrase: борщ
+  replacement: borscht
+- phrase: паста карбонара
+  replacement: pasta carbonara
+- phrase: пасты карбонара
+  replacement: pasta carbonara
+- phrase: гречка с курицей
+  replacement: buckwheat with chicken
+- phrase: гречки с курицей
+  replacement: buckwheat with chicken
+- phrase: овсяная каша
+  replacement: oatmeal cooked
+- phrase: овсяной каши
+  replacement: oatmeal cooked
+- phrase: овсяную кашу
+  replacement: oatmeal cooked
+- phrase: сметана
+  replacement: sour cream
+- phrase: сметаной
+  replacement: sour cream
+- phrase: скыр
+  replacement: skyr
+standard_prepared_dishes:
+- big mac
+- borsch
+- borscht
+- burger
+- caesar salad
+- carbonara
+- hamburger
+- mashed potatoes
+- meat cutlet
+- meat dumpling
+- omelet
+- omelette
+- pasta carbonara
+- pelmeni
+- pizza
+- salad
+- soup
+- борщ
+- карбонара
+- омлет
+- паста карбонара
+- пицца
+- салат
+- суп
+scope:
+  additional_food_terms:
+  - ate
+  - bowl
+  - breakfast
+  - calorie
+  - calories
+  - carbs
+  - dinner
+  - eaten
+  - fat
+  - fish
+  - fruit
+  - kcal
+  - lunch
+  - macros
+  - meal
+  - meat
+  - plate
+  - portion
+  - protein
+  - sandwich
+  - serving
+  - snack
+  - sushi
+  - taco
+  - vegetables
+  - wrap
+  - белка
+  - белки
+  - белок
+  - бжу
+  - блюдо
+  - еда
+  - жир
+  - жиров
+  - жиры
+  - завтрак
+  - калории
+  - калорий
+  - калорийность
+  - калория
+  - калрий
+  - кбжу
+  - ккал
+  - макросы
+  - нутриенты
+  - обед
+  - перекус
+  - порция
+  - прием пищи
+  - приём пищи
+  - тарелка
+  - углеводов
+  - углеводы
+  - ужин
+  generic_intent_terms:
+  - ate
+  - bowl
+  - breakfast
+  - calorie
+  - calories
+  - carbs
+  - dinner
+  - eaten
+  - fat
+  - kcal
+  - lunch
+  - macros
+  - meal
+  - plate
+  - portion
+  - protein
+  - serving
+  - snack
+  - белка
+  - белки
+  - белок
+  - бжу
+  - блюдо
+  - еда
+  - жир
+  - жиров
+  - жиры
+  - завтрак
+  - калории
+  - калорий
+  - калорийность
+  - калория
+  - калрий
+  - кбжу
+  - ккал
+  - макросы
+  - нутриенты
+  - обед
+  - перекус
+  - порция
+  - прием пищи
+  - тарелка
+  - углеводов
+  - углеводы
+  - ужин
+  russian_food_stems:
+  - банан
+  - бургер
+  - гамбургер
+  - говядин
+  - греч
+  - йогурт
+  - картоф
+  - картош
+  - курин
+  - куриц
+  - лосос
+  - макарон
+  - молок
+  - овощ
+  - овсян
+  - огур
+  - омлет
+  - паст
+  - пицц
+  - помидор
+  - рыб
+  - салат
+  - сахар
+  - сметан
+  - творог
+  - томат
+  - фрукт
+  - яблок
+  packaged_terms:
+  - barcode
+  - brand
+  - label
+  - nutrition facts
+  - package
+  - packaged
+  - product
+  - wrapper
+  - бренд
+  - пищевая ценность
+  - продукт
+  - упаковка
+  - штрихкод
+  - этикетка

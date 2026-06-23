@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     nutrition_retrieval_max_workers: int = Field(default=3, ge=1, le=8)
     nutrition_diagnostics_include_raw: bool = False
     nutrition_diagnostics_max_payload_chars: int = 2000
+    food_linker_embeddings_enabled: bool = False
+    food_linker_shadow_enabled: bool = False
+    food_linker_similarity_threshold: float = Field(default=0.62, ge=0.0, le=1.0)
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
     memory_db_path: str | None = None

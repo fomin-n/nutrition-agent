@@ -1,13 +1,20 @@
 import re
 from dataclasses import dataclass
 
+from app.llm.client import get_settings
 from app.tools.fallback_nutrition import (
     FALLBACK_FOODS,
     is_plain_water_query,
     lookup_fallback_profile,
     normalize_food_query,
 )
+from app.tools.food_linker import (
+    LinkedFoodSpan,
+    find_embedding_food_mentions,
+    record_shadow_disagreement,
+)
 from app.tools.food_query import PRODUCT_ALIASES, ProductAliasProfile
+from app.tools.food_vocabulary import load_food_vocabulary
 
 
 @dataclass(frozen=True)
@@ -35,122 +42,18 @@ class PortionEstimate:
     explicit: bool
 
 
+_VOCABULARY = load_food_vocabulary()
+
 # Patterns are intentionally conservative. They cover common inflections without a
 # morphology dependency and avoid short prefixes such as `рис`, which can collide
 # with unrelated words.
 RUSSIAN_FOOD_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("banana", (r"банан\w*",)),
-    ("apple", (r"яблок\w*",)),
-    ("salmon cooked", (r"лосос\w*", r"семг\w*")),
-    ("egg", (r"яйц\w*", r"яиц")),
-    ("almonds", (r"миндал\w*",)),
-    ("beef cooked", (r"говядин\w*",)),
-    ("bread", (r"хлеб\w*",)),
-    ("yogurt plain", (r"йогурт\w*",)),
-    ("skyr plain", (r"ск[иы]р\w*",)),
-    ("cottage cheese", (r"творог\w*",)),
-    ("tofu firm", (r"тофу",)),
-    ("lentils cooked", (r"чечевиц\w*",)),
-    ("chickpeas cooked", (r"нут(?:а|е|ом|у)?",)),
-    ("avocado", (r"авокадо",)),
-    ("cooked buckwheat", (r"греч\w*",)),
-    ("cooked white rice", (r"рис(?:а|е|ом|у)?",)),
-    ("oatmeal cooked", (r"овсян\w*",)),
-    ("potato boiled", (r"картоф\w*", r"картош\w*")),
-    ("cheese", (r"сыр(?:а|е|ом|у|ы)?",)),
-    ("milk", (r"молок\w*",)),
-    ("tomato", (r"помидор\w*", r"томат\w*")),
-    ("cucumber", (r"огур\w*",)),
-    ("beet cooked", (r"свекл\w*",)),
-    ("cabbage cooked", (r"капуст\w*",)),
-    ("carrot cooked", (r"морков\w*",)),
-    ("onion", (r"лук(?:а|е|ом|у)?",)),
-    ("cooked pasta", (r"паст\w*", r"макарон\w*")),
-    ("mixed salad vegetables", (r"салат\w*",)),
-    ("hamburger", (r"бургер\w*", r"гамбургер\w*", r"чизбургер\w*")),
-    ("vegetable soup", (r"суп\w*",)),
-    ("water", (r"вод(?:а|ы|е|у|ой|ою)?",)),
+    _VOCABULARY.russian_food_patterns
 )
 
-DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = {
-    "cooked white rice": (150, 220),
-    "cooked pasta": (160, 240),
-    "cooked buckwheat": (150, 220),
-    "chicken breast cooked": (120, 180),
-    "beef cooked": (100, 170),
-    "salmon cooked": (120, 180),
-    "egg": (45, 60),
-    "olive oil": (10, 18),
-    "butter": (8, 15),
-    "potato boiled": (150, 250),
-    "bread": (35, 55),
-    "banana": (100, 140),
-    "apple": (150, 220),
-    "tomato": (80, 150),
-    "cucumber": (80, 160),
-    "beet cooked": (80, 150),
-    "cabbage cooked": (80, 160),
-    "carrot cooked": (70, 140),
-    "onion": (30, 80),
-    "mixed salad vegetables": (80, 180),
-    "cheese": (25, 45),
-    "yogurt plain": (125, 200),
-    "skyr plain": (125, 200),
-    "milk": (200, 300),
-    "water": (250, 250),
-    "oatmeal cooked": (180, 280),
-    "almonds": (25, 35),
-    "avocado": (120, 180),
-    "tofu firm": (100, 180),
-    "lentils cooked": (150, 220),
-    "chickpeas cooked": (150, 220),
-    "cottage cheese": (150, 220),
-    "Nutella": (15, 20),
-    "peanut butter": (25, 35),
-    "protein bar": (50, 65),
-    "instant noodles dry": (75, 100),
-    "vanilla ice cream": (80, 140),
-    "tuna canned in water": (100, 150),
-    "dark chocolate": (20, 35),
-    "mozzarella": (100, 125),
-    "hummus": (80, 150),
-    "granola": (40, 60),
-    "butter croissant": (55, 75),
-    "pain au chocolat": (65, 85),
-    "baguette": (80, 120),
-    "potato chips": (25, 40),
-    "McDonald's Big Mac": (215, 215),
-    "Coca-Cola": (330, 330),
-    "Coca-Cola Zero Sugar": (330, 330),
-    "pizza": (100, 160),
-    "hamburger": (180, 280),
-    "vegetable soup": (250, 400),
-    "Greek salad": (250, 350),
-    "chicken Caesar salad": (300, 400),
-    "pasta carbonara": (300, 400),
-    "borscht": (350, 450),
-    "borscht with sour cream": (300, 450),
-    "pelmeni": (12, 18),
-    "KFC chicken wing": (35, 50),
-    "mashed potatoes": (180, 250),
-    "meat cutlet": (80, 120),
-}
+DEFAULT_PORTIONS_G: dict[str, tuple[float, float]] = dict(_VOCABULARY.default_portions_g)
 
-CONVENTIONAL_DISH_PRIORS = {
-    "cooked pasta",
-    "mixed salad vegetables",
-    "hamburger",
-    "vegetable soup",
-    "Greek salad",
-    "chicken Caesar salad",
-    "pasta carbonara",
-    "borscht",
-    "borscht with sour cream",
-    "pelmeni",
-    "KFC chicken wing",
-    "mashed potatoes",
-    "meat cutlet",
-}
+CONVENTIONAL_DISH_PRIORS = set(_VOCABULARY.conventional_dish_priors)
 
 COUNT_WORDS: dict[str, float] = {
     "one": 1,
@@ -235,12 +138,7 @@ VOLUME_ML: dict[str, float] = {
     "литров": 1000,
 }
 
-HIGH_VARIANCE_FOODS = {
-    "mixed salad vegetables",
-    "hamburger",
-    "cooked pasta",
-    "vegetable soup",
-}
+HIGH_VARIANCE_FOODS = set(_VOCABULARY.high_variance_foods)
 
 PREPARATION_PATTERNS: tuple[tuple[str, str], ...] = (
     ("fried", r"\b(fried|pan fried|жарен\w*)\b"),
@@ -253,6 +151,21 @@ PREPARATION_PATTERNS: tuple[tuple[str, str], ...] = (
 
 
 def find_food_mentions(text: str) -> tuple[FoodMention, ...]:
+    legacy_mentions = _find_food_mentions_legacy(text)
+    settings = get_settings()
+    if settings.food_linker_shadow_enabled or settings.food_linker_embeddings_enabled:
+        embedding_mentions = _embedding_food_mentions(text, settings.food_linker_similarity_threshold)
+        if settings.food_linker_shadow_enabled:
+            record_shadow_disagreement(
+                legacy=tuple(mention.canonical_name for mention in legacy_mentions),
+                embedding=tuple(mention.canonical_name for mention in embedding_mentions),
+            )
+        if settings.food_linker_embeddings_enabled and embedding_mentions:
+            return embedding_mentions
+    return legacy_mentions
+
+
+def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
     normalized = normalize_food_query(text)
     candidates: list[FoodMention] = []
 
@@ -318,6 +231,28 @@ def find_food_mentions(text: str) -> tuple[FoodMention, ...]:
             continue
         selected.append(candidate)
     return tuple(sorted(selected, key=lambda item: item.start))
+
+
+def _embedding_food_mentions(text: str, threshold: float) -> tuple[FoodMention, ...]:
+    return tuple(_linked_span_to_mention(link) for link in find_embedding_food_mentions(text, threshold=threshold))
+
+
+def _linked_span_to_mention(link: LinkedFoodSpan) -> FoodMention:
+    product = next(
+        (
+            profile
+            for profile in PRODUCT_ALIASES
+            if profile.canonical_product == link.canonical_name
+        ),
+        None,
+    )
+    return FoodMention(
+        canonical_name=link.canonical_name,
+        matched_text=link.matched_text,
+        start=link.start,
+        end=link.end,
+        product=product if link.is_product else None,
+    )
 
 
 def extract_quantity_mentions(text: str) -> tuple[QuantityMention, ...]:

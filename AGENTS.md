@@ -131,8 +131,11 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 
 ## Data Source Adapters
 
-- `fallback_nutrition.py`: small local table for common foods.
-- `food_query.py`: deterministic English/Russian query normalization, centralized product aliases, bounded provider-query expansion, brand/restaurant/region extraction, category/variant metadata, and query-kind classification.
+- `food_vocabulary.yaml`: single data-backed source of truth for canonical names, aliases, fallback per-100 g nutrition, default portions, localized display labels, product metadata, Russian regex patterns, and scope-gate food terms. Canonical names are frozen downstream join keys.
+- `food_vocabulary.py`: typed loader and validation for the shared vocabulary.
+- `fallback_nutrition.py`: fallback nutrition exports backed by the shared vocabulary.
+- `food_query.py`: deterministic English/Russian query normalization, vocabulary-backed product aliases, bounded provider-query expansion, brand/restaurant/region extraction, category/variant metadata, and query-kind classification.
+- `food_linker.py`: experimental exact-first, local character-ngram cosine linker over the shared vocabulary. It is behind `FOOD_LINKER_SHADOW_ENABLED` and `FOOD_LINKER_EMBEDDINGS_ENABLED`, both default `false`; shadow mode logs/attributes disagreements and continues serving the legacy matcher.
 - `nutrition_tools.py`: provider router and explicit tool functions such as `search_fatsecret_foods`, `get_fatsecret_food`, `search_usda_foods`, `get_usda_food`, and `retrieve_nutrition_candidates`.
 - `nutrition_ranking.py`: deterministic candidate ranking with score components.
 - `nutrition_validation.py`: semantic candidate validation, including plain-water/valid-zero checks, beverage macro checks, regular/zero-sugar checks, and branded chocolate-bar identity/plausibility checks.
@@ -157,6 +160,7 @@ Provider credentials are optional and independently disabled:
 Never log or trace API keys, FatSecret client secrets, access tokens, or Authorization headers. Provider failures must degrade to another provider or explicit fallback rather than failing the whole user request.
 Do not use `generic_mixed_food` for branded products, beverages, or unknown single ingredients. If providers and an explicit food/category fallback fail validation, return a localized reliable-match clarification.
 Add non-English aliases only for high-confidence product identities. Keep query expansion deterministic and bounded; do not add an LLM or web-search call to every retrieval request.
+Add new food aliases, portions, localized labels, or Russian patterns in `app/tools/food_vocabulary.yaml`, not in scattered Python dictionaries. If the food-linker flags are enabled during testing, keep exact aliases first, keep the embedding threshold explicit, and generate a shadow report with `uv run python -m app.evals.food_linker_shadow_report --threshold 0.62` before promoting behavior.
 
 ## Tests And Evals
 

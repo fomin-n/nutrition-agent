@@ -20,59 +20,11 @@ from app.tools.food_normalization import (
     is_high_variance_without_detail,
 )
 from app.tools.food_query import product_profiles_in_text
+from app.tools.food_vocabulary import load_food_vocabulary
 
 LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
-    "ru": {
-        "cooked white rice": "вареный рис",
-        "cooked pasta": "паста",
-        "cooked buckwheat": "гречка",
-        "chicken breast cooked": "курица",
-        "beef cooked": "говядина",
-        "salmon cooked": "лосось",
-        "egg": "яйца",
-        "olive oil": "оливковое масло",
-        "butter": "сливочное масло",
-        "potato boiled": "картофель",
-        "bread": "хлеб",
-        "banana": "банан",
-        "apple": "яблоко",
-        "tomato": "помидор",
-        "cucumber": "огурец",
-        "mixed salad vegetables": "салатные овощи",
-        "cheese": "сыр",
-        "yogurt plain": "йогурт",
-        "skyr plain": "скир",
-        "milk": "молоко",
-        "water": "вода",
-        "oatmeal cooked": "овсянка",
-        "almonds": "миндаль",
-        "avocado": "авокадо",
-        "tofu firm": "тофу",
-        "lentils cooked": "чечевица",
-        "chickpeas cooked": "нут",
-        "cottage cheese": "творог",
-        "Snickers": "Snickers",
-        "Twix": "Twix",
-        "Bounty": "Bounty",
-        "Coca-Cola": "Coca-Cola",
-        "Coca-Cola Zero Sugar": "Coca-Cola без сахара",
-        "pizza": "пицца",
-        "hamburger": "бургер",
-        "vegetable soup": "овощной суп",
-        "Greek salad": "греческий салат",
-        "chicken Caesar salad": "салат Цезарь с курицей",
-        "pasta carbonara": "паста карбонара",
-        "borscht with sour cream": "борщ со сметаной",
-        "borscht": "борщ",
-        "pelmeni": "пельмени",
-        "KFC chicken wing": "крылышко KFC",
-        "mashed potatoes": "картофельное пюре",
-        "meat cutlet": "котлета",
-        "beet cooked": "свекла",
-        "cabbage cooked": "капуста",
-        "carrot cooked": "морковь",
-        "onion": "лук",
-    }
+    language: dict(names)
+    for language, names in load_food_vocabulary().localized_food_names.items()
 }
 
 

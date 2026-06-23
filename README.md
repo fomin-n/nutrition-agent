@@ -123,6 +123,10 @@ For recognizable ordinary foods and prepared dishes, the service follows an esti
 - Open Food Facts lookup remains available for packaged-food fallback.
 - Local fallback nutrition table for common foods and explicit category profiles such as regular/zero-sugar cola and standard Snickers, Twix, and Bounty bars.
 
+Food detection now uses one data-backed vocabulary file, [app/tools/food_vocabulary.yaml](app/tools/food_vocabulary.yaml). It is the source of truth for canonical food names, aliases, fallback per-100 g nutrition, default portions, localized display labels, product alias metadata, Russian regex patterns, and scope-gate food terms. Canonical names remain the stable join keys for retrieval, calculation, synthesis, and tests.
+
+An experimental multilingual linker is available behind flags. Exact vocabulary aliases are still checked first; if no exact match is found, a deterministic local character-ngram cosine index can link a span to the nearest canonical food. This local embedder was chosen for the first shadow-mode rollout because it has no OpenAI cost, no startup network dependency, and deterministic behavior over the small vocabulary. `FOOD_LINKER_SHADOW_ENABLED=true` computes legacy and embedding results, logs/attributes disagreements, and still serves the legacy matcher. `FOOD_LINKER_EMBEDDINGS_ENABLED=true` promotes the embedding linker to primary when it finds a match. Both flags default to `false`; the tuned default threshold is `FOOD_LINKER_SIMILARITY_THRESHOLD=0.62`.
+
 Provider outputs are normalized into a common candidate schema with a stable `source + source_id + serving_id` identity, serving metadata, per-100 g values when safely available, and deterministic ranking score components. Unknown single ingredients, branded products, and beverages never use the generic mixed-food fallback; the bot asks for a brand, serving, or label when no semantically valid candidate exists. The app does not persist FatSecret raw API responses or tokens.
 
 Independent ingredient lookups use a bounded thread pool because the provider clients are synchronous and I/O-bound. `NUTRITION_RETRIEVAL_MAX_WORKERS` defaults to `3` and is bounded to `1-8`; set it to `1` to restore serial lookup. Provider calls within one ingredient remain sequential, and results are always reassembled in meal-input order before calculation.
@@ -210,6 +214,14 @@ uv run python -m app.evals.run_golden_eval \
 ```
 
 Run the full golden split by replacing `smoke` with `golden`. Reports are written as Markdown and JSON under `reports/eval/`; exact reference prose is not scored. Behavior, required/forbidden text, and calorie-range overlap determine pass/fail, while macro range checks are advisory. The default is offline and no-LLM; use `--live-providers` explicitly for provider integration checks.
+
+Generate the food-linker shadow disagreement report with:
+
+```bash
+uv run python -m app.evals.food_linker_shadow_report --threshold 0.62
+```
+
+The frozen detector baseline lives in `tests/fixtures/food_detection_baseline.json` and covers the golden single-turn and conversation datasets. Shadow reports are ignored under `reports/eval/`.
 
 Upload a source JSONL to Phoenix with:
 

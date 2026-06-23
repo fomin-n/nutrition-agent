@@ -35,6 +35,9 @@ build-backend = "setuptools.build_meta"
 include = ["app*"]
 exclude = ["tests*", "systemd*", "scripts*", "data*"]
 
+[tool.setuptools.package-data]
+"app.tools" = ["food_vocabulary.yaml"]
+
 [tool.uv]
 package = false
 

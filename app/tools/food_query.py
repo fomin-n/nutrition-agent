@@ -4,6 +4,7 @@ from typing import Literal
 
 from app.i18n import detect_language
 from app.tools.fallback_nutrition import lookup_fallback_profile, normalize_food_query
+from app.tools.food_vocabulary import load_food_vocabulary
 
 QueryKind = Literal[
     "generic_ingredient",
@@ -58,197 +59,31 @@ class NormalizedFoodQuery:
     query_expansions: tuple[str, ...] = ()
 
 
-PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = (
+_VOCABULARY = load_food_vocabulary()
+
+PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = tuple(
     ProductAliasProfile(
-        canonical_product="Coca-Cola Zero Sugar",
-        brand="Coca-Cola",
-        category="zero_sugar_soft_drink",
-        variant="zero_sugar",
-        aliases=(
-            "coca cola zero sugar",
-            "coca-cola zero sugar",
-            "coca cola zero",
-            "coca-cola zero",
-            "coke zero",
-            "cola zero",
-            "diet coke",
-            "diet cola",
-            "coca cola light",
-            "coca-cola light",
-            "coke light",
-            "cola light",
-            "кока кола зеро",
-            "кока-кола зеро",
-            "кола зеро",
-            "кока кола без сахара",
-            "кока-кола без сахара",
-            "кола без сахара",
-            "кока кола лайт",
-            "кока-кола лайт",
-            "кола лайт",
-        ),
-        product_type="soft drink",
-        default_serving_amount=330,
-        default_serving_unit="ml",
-    ),
-    ProductAliasProfile(
-        canonical_product="Coca-Cola",
-        brand="Coca-Cola",
-        category="sugary_soft_drink",
-        variant="regular",
-        aliases=(
-            "coca cola",
-            "coca-cola",
-            "cocacola",
-            "coke",
-            "regular cola soft drink",
-            "regular cola",
-            "cola",
-            "кока кола",
-            "кока-кола",
-            "кока колы",
-            "кока-колы",
-            "кока коле",
-            "кока-коле",
-            "кола",
-            "колы",
-            "коле",
-            "колу",
-        ),
-        product_type="soft drink",
-        default_serving_amount=330,
-        default_serving_unit="ml",
-    ),
-    ProductAliasProfile(
-        canonical_product="Snickers",
-        brand="Snickers",
-        category="chocolate_bar",
-        variant="regular",
-        aliases=(
-            "snickers",
-            "snickers bar",
-            "сникерс",
-            "сникерса",
-            "сникерсе",
-            "сникерсом",
-            "сникерсу",
-        ),
-        product_type="chocolate bar",
-        query_expansions=("Snickers bar", "Snickers chocolate bar"),
-        default_serving_amount=50,
-        default_serving_unit="g",
-    ),
-    ProductAliasProfile(
-        canonical_product="Twix",
-        brand="Twix",
-        category="chocolate_bar",
-        variant="regular",
-        aliases=(
-            "twix",
-            "twix bar",
-            "твикс",
-            "твикса",
-            "твиксе",
-            "твиксом",
-            "твиксу",
-        ),
-        product_type="chocolate bar",
-        query_expansions=("Twix bar", "Twix chocolate bar"),
-        default_serving_amount=50,
-        default_serving_unit="g",
-    ),
-    ProductAliasProfile(
-        canonical_product="Bounty",
-        brand="Bounty",
-        category="chocolate_bar",
-        variant="regular",
-        aliases=("bounty", "bounty bar", "баунти"),
-        product_type="coconut chocolate bar",
-        query_expansions=("Bounty bar", "Bounty coconut chocolate bar"),
-        default_serving_amount=57,
-        default_serving_unit="g",
-    ),
+        canonical_product=product.canonical_product,
+        brand=product.brand,
+        category=product.category,  # type: ignore[arg-type]
+        variant=product.variant,  # type: ignore[arg-type]
+        aliases=product.aliases,
+        product_type=product.product_type,
+        query_expansions=product.query_expansions,
+        default_serving_amount=product.default_serving_amount,
+        default_serving_unit=product.default_serving_unit,
+    )
+    for product in _VOCABULARY.products
 )
 
-
-BRAND_ALIASES = {
-    "danone": "Danone",
-    "snickers": "Snickers",
-    "coca cola": "Coca-Cola",
-    "coca-cola": "Coca-Cola",
-    "nestle": "Nestle",
-    "несквик": "Nesquik",
-}
-
-RESTAURANT_ALIASES = {
-    "mcdonalds": "McDonald's",
-    "mcdonald s": "McDonald's",
-    "mc donalds": "McDonald's",
-    "макдоналдс": "McDonald's",
-    "макдональдс": "McDonald's",
-    "burger king": "Burger King",
-    "kfc": "KFC",
-    "starbucks": "Starbucks",
-}
-
-REGION_ALIASES = {
-    "france": "FR",
-    "франция": "FR",
-    "франции": "FR",
-    "usa": "US",
-    "us": "US",
-    "сша": "US",
-    "russia": "RU",
-    "россия": "RU",
-    "россии": "RU",
-}
-
+BRAND_ALIASES = dict(_VOCABULARY.brand_aliases)
+RESTAURANT_ALIASES = dict(_VOCABULARY.restaurant_aliases)
+REGION_ALIASES = dict(_VOCABULARY.region_aliases)
 PHRASE_TRANSLATIONS = {
-    "жареная куриная грудка": ("fried chicken breast", "fried"),
-    "жареной куриной грудки": ("fried chicken breast", "fried"),
-    "куриная грудка": ("chicken breast", None),
-    "куриной грудки": ("chicken breast", None),
-    "биг мак": ("Big Mac", None),
-    "борщ со сметаной": ("borscht with sour cream", None),
-    "борщ": ("borscht", None),
-    "паста карбонара": ("pasta carbonara", None),
-    "пасты карбонара": ("pasta carbonara", None),
-    "гречка с курицей": ("buckwheat with chicken", None),
-    "гречки с курицей": ("buckwheat with chicken", None),
-    "овсяная каша": ("oatmeal cooked", None),
-    "овсяной каши": ("oatmeal cooked", None),
-    "овсяную кашу": ("oatmeal cooked", None),
-    "сметана": ("sour cream", None),
-    "сметаной": ("sour cream", None),
-    "скыр": ("skyr", None),
+    item.phrase: (item.replacement, item.preparation)
+    for item in _VOCABULARY.phrase_translations
 }
-
-STANDARD_PREPARED_DISHES = {
-    "borscht",
-    "borsch",
-    "pasta carbonara",
-    "carbonara",
-    "pizza",
-    "omelet",
-    "omelette",
-    "salad",
-    "caesar salad",
-    "soup",
-    "burger",
-    "hamburger",
-    "big mac",
-    "борщ",
-    "pelmeni",
-    "meat dumpling",
-    "mashed potatoes",
-    "meat cutlet",
-    "паста карбонара",
-    "карбонара",
-    "пицца",
-    "омлет",
-    "салат",
-    "суп",
-}
+STANDARD_PREPARED_DISHES = set(_VOCABULARY.standard_prepared_dishes)
 
 
 def normalize_food_description(
