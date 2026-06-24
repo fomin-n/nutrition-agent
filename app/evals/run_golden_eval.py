@@ -1,12 +1,21 @@
 import argparse
 import json
+import logging
+import subprocess
+import sys
+import time
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Lock
 from typing import Any
+
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
+from pydantic import BaseModel
 
 from app.evals.golden import (
     DEFAULT_GOLDEN_DATASET,
@@ -15,6 +24,7 @@ from app.evals.golden import (
     load_golden_examples,
 )
 from app.evals.llm_stub import STUB_VERSION, build_golden_llm_stub
+from app.graph import graph as graph_module
 from app.graph.graph import process_request
 from app.graph.nodes import (
     coordinator,
@@ -25,12 +35,23 @@ from app.graph.nodes import (
     safety_gate,
     text_parser,
 )
+from app.llm import structured
+from app.llm.client import get_settings
 from app.memory.service import MemoryService
 from app.tools.fallback_nutrition import normalize_food_query
 from app.tools.nutrition_tools import NutritionSourceRouter
 
 DEFAULT_OUTPUT_DIR = Path("reports/eval")
 LLM_MODES = ("off", "stub", "live")
+MODEL_PRICING_USD_PER_MILLION = {
+    "gpt-4.1-mini": {
+        "input": 0.40,
+        "cached_input": 0.10,
+        "output": 1.60,
+        "source": "https://developers.openai.com/api/docs/models/gpt-4.1-mini",
+        "checked_date": "2026-06-24",
+    }
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -119,6 +140,7 @@ def run_golden_eval(
 ) -> dict[str, Any]:
     resolved_llm_mode = _resolve_llm_mode(use_llm=use_llm, llm_mode=llm_mode)
     timestamp = datetime.now(UTC)
+    started = time.perf_counter()
     with _retrieval_mode(live_providers=live_providers), _llm_parser_mode(
         llm_mode=resolved_llm_mode,
         examples=examples,
@@ -131,6 +153,7 @@ def run_golden_eval(
     failed = sum(1 for result in results if result["status"] == "fail")
     unknown = sum(1 for result in results if result["status"] == "unknown")
     total = len(results)
+    llm_usage = _aggregate_llm_usage(results)
     summary = {
         "total": total,
         "passed": passed,
@@ -139,11 +162,16 @@ def run_golden_eval(
         "pass_rate": passed / total if total else 0.0,
         "breakdowns": _build_breakdowns(examples, results),
         "issue_classifications": _count_issue_classifications(results),
+        "duration_seconds": round(time.perf_counter() - started, 3),
+        "llm_usage": llm_usage,
     }
     run_scope = split or "all"
+    settings = get_settings()
     return {
         "run_id": f"golden_baseline_{run_scope}_{timestamp.strftime('%Y%m%dT%H%M%S%fZ')}",
         "timestamp_utc": timestamp.isoformat(),
+        "git_commit": _git_commit(),
+        "python_version": sys.version.split()[0],
         "dataset_path": str(Path(dataset_path)),
         "filters": {"split": split, "tags": list(tags)},
         "config": {
@@ -152,6 +180,19 @@ def run_golden_eval(
             "llm_stub_version": STUB_VERSION if resolved_llm_mode == "stub" else None,
             "live_providers": live_providers,
             "macro_ranges_are_advisory": True,
+            "openai_text_model": settings.openai_text_model,
+            "openai_vision_model": settings.openai_vision_model,
+            "openai_critic_model": settings.openai_critic_model,
+            "temperature": 0.0,
+            "critic_max_iterations": settings.critic_max_iterations,
+            "openai_moderation_enabled": settings.openai_moderation_enabled,
+            "provider_flags": {
+                "usda": settings.enable_usda,
+                "fatsecret": settings.enable_fatsecret,
+                "open_food_facts": settings.enable_open_food_facts,
+            },
+            "nutrition_cache_dir": settings.nutrition_cache_dir if live_providers else None,
+            "pricing": MODEL_PRICING_USD_PER_MILLION,
         },
         "summary": summary,
         "examples": results,
@@ -169,11 +210,21 @@ def write_golden_results(run_output: dict[str, Any], output_dir: Path) -> tuple[
 
 
 def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
+    started = time.perf_counter()
     try:
-        if example.input.kind == "single_turn":
-            answer, execution = _run_single_turn(example, use_llm=use_llm)
-        else:
-            answer, execution = _run_conversation(example, use_llm=use_llm)
+        with (
+            _capture_graph_states() as graph_states,
+            _capture_llm_usage(enabled=use_llm) as usage,
+            _capture_provider_events() as provider_events,
+        ):
+            if example.input.kind == "single_turn":
+                answer, execution = _run_single_turn(example, use_llm=use_llm)
+            else:
+                answer, execution = _run_conversation(example, use_llm=use_llm)
+        execution["duration_seconds"] = round(time.perf_counter() - started, 3)
+        execution["llm_usage"] = usage.summary()
+        execution["graph_invocations"] = [_graph_state_snapshot(state) for state in graph_states]
+        execution["provider_events"] = provider_events
         evaluation = evaluate_answer(example, answer)
         memory_failures = _evaluate_conversation_expectations(example, execution)
         evaluation["failed_checks"].extend(memory_failures)
@@ -219,7 +270,262 @@ def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
             "issue_classification": "evaluator_issue",
             "status": "fail",
             "passed": False,
+            "duration_seconds": round(time.perf_counter() - started, 3),
         }
+
+
+class LLMUsageCollector(BaseCallbackHandler):
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self.calls: list[dict[str, Any]] = []
+        self.errors = 0
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        del kwargs
+        call = _usage_from_llm_result(response)
+        with self._lock:
+            self.calls.append(call)
+
+    def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
+        del error, kwargs
+        with self._lock:
+            self.errors += 1
+
+    def summary(self) -> dict[str, Any]:
+        totals = {
+            "calls": len(self.calls),
+            "errors": self.errors,
+            "input_tokens": sum(int(call["input_tokens"]) for call in self.calls),
+            "cached_input_tokens": sum(
+                int(call["cached_input_tokens"]) for call in self.calls
+            ),
+            "output_tokens": sum(int(call["output_tokens"]) for call in self.calls),
+            "total_tokens": sum(int(call["total_tokens"]) for call in self.calls),
+        }
+        models: dict[str, dict[str, int | float | None]] = {}
+        for call in self.calls:
+            model = str(call["model"] or "unknown")
+            model_totals = models.setdefault(
+                model,
+                {
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost_usd": None,
+                },
+            )
+            for key in (
+                "calls",
+                "input_tokens",
+                "cached_input_tokens",
+                "output_tokens",
+                "total_tokens",
+            ):
+                model_totals[key] = int(model_totals[key] or 0) + (
+                    1 if key == "calls" else int(call[key])
+                )
+        estimated_cost = 0.0
+        cost_complete = True
+        for model, model_totals in models.items():
+            cost = _estimate_model_cost(model, model_totals)
+            model_totals["estimated_cost_usd"] = cost
+            if cost is None:
+                cost_complete = False
+            else:
+                estimated_cost += cost
+        totals["models"] = models
+        totals["estimated_cost_usd"] = round(estimated_cost, 6) if cost_complete else None
+        totals["calls_detail"] = self.calls
+        return totals
+
+
+class _CapturingGraph:
+    def __init__(self, graph: Any, states: list[dict[str, Any]]) -> None:
+        self.graph = graph
+        self.states = states
+
+    def invoke(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        state = self.graph.invoke(*args, **kwargs)
+        self.states.append(state)
+        return state
+
+
+class _ProviderEventHandler(logging.Handler):
+    def __init__(self, events: list[dict[str, str]]) -> None:
+        super().__init__(level=logging.WARNING)
+        self.events = events
+
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        if record.name.startswith("app.tools."):
+            self.events.append({"logger": record.name, "level": record.levelname, "message": message})
+
+
+@contextmanager
+def _capture_graph_states() -> Iterator[list[dict[str, Any]]]:
+    states: list[dict[str, Any]] = []
+    original = graph_module.get_compiled_graph
+    graph = original()
+    graph_module.get_compiled_graph = lambda: _CapturingGraph(graph, states)
+    try:
+        yield states
+    finally:
+        graph_module.get_compiled_graph = original
+
+
+@contextmanager
+def _capture_llm_usage(*, enabled: bool) -> Iterator[LLMUsageCollector]:
+    collector = LLMUsageCollector()
+    if not enabled:
+        yield collector
+        return
+
+    original_structured = structured.build_chat_model
+    original_image = image_recognizer.build_chat_model
+
+    def build_with_collector(model_name: str, *, temperature: float = 0.0):
+        model = original_structured(model_name, temperature=temperature)
+        callbacks = [*(model.callbacks or []), collector]
+        return model.model_copy(update={"callbacks": callbacks})
+
+    structured.build_chat_model = build_with_collector
+    image_recognizer.build_chat_model = build_with_collector
+    try:
+        yield collector
+    finally:
+        structured.build_chat_model = original_structured
+        image_recognizer.build_chat_model = original_image
+
+
+@contextmanager
+def _capture_provider_events() -> Iterator[list[dict[str, str]]]:
+    events: list[dict[str, str]] = []
+    handler = _ProviderEventHandler(events)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    try:
+        yield events
+    finally:
+        root.removeHandler(handler)
+
+
+def _usage_from_llm_result(response: LLMResult) -> dict[str, Any]:
+    message = None
+    if response.generations and response.generations[0]:
+        message = getattr(response.generations[0][0], "message", None)
+    usage = dict(getattr(message, "usage_metadata", None) or {})
+    response_metadata = dict(getattr(message, "response_metadata", None) or {})
+    token_usage = dict((response.llm_output or {}).get("token_usage") or {})
+    input_tokens = int(
+        usage.get("input_tokens")
+        or token_usage.get("prompt_tokens")
+        or 0
+    )
+    output_tokens = int(
+        usage.get("output_tokens")
+        or token_usage.get("completion_tokens")
+        or 0
+    )
+    total_tokens = int(
+        usage.get("total_tokens")
+        or token_usage.get("total_tokens")
+        or input_tokens + output_tokens
+    )
+    input_details = dict(usage.get("input_token_details") or {})
+    prompt_details = dict(token_usage.get("prompt_tokens_details") or {})
+    cached_input_tokens = int(
+        input_details.get("cache_read")
+        or prompt_details.get("cached_tokens")
+        or 0
+    )
+    model = (
+        response_metadata.get("model_name")
+        or (response.llm_output or {}).get("model_name")
+        or "unknown"
+    )
+    return {
+        "model": str(model),
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _estimate_model_cost(
+    model: str,
+    usage: dict[str, int | float | None],
+) -> float | None:
+    pricing = next(
+        (
+            rates
+            for prefix, rates in MODEL_PRICING_USD_PER_MILLION.items()
+            if model == prefix or model.startswith(f"{prefix}-")
+        ),
+        None,
+    )
+    if pricing is None:
+        return None
+    input_tokens = int(usage["input_tokens"] or 0)
+    cached_tokens = min(input_tokens, int(usage["cached_input_tokens"] or 0))
+    uncached_tokens = input_tokens - cached_tokens
+    output_tokens = int(usage["output_tokens"] or 0)
+    cost = (
+        uncached_tokens * float(pricing["input"])
+        + cached_tokens * float(pricing["cached_input"])
+        + output_tokens * float(pricing["output"])
+    ) / 1_000_000
+    return round(cost, 6)
+
+
+def _aggregate_llm_usage(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    collector = LLMUsageCollector()
+    for result in results:
+        usage = result.get("execution", {}).get("llm_usage", {})
+        collector.errors += int(usage.get("errors", 0))
+        collector.calls.extend(usage.get("calls_detail", []))
+    return collector.summary()
+
+
+def _graph_state_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "scope_decision",
+        "meal",
+        "ingredient_nutrition",
+        "totals",
+        "critic_result",
+        "critic_history",
+        "critic_feedback",
+        "critic_iteration",
+        "retrieval_failures",
+        "retrieval_diagnostics",
+        "errors",
+    )
+    return {key: _jsonable(state[key]) for key in keys if key in state}
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def _git_commit() -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def _classify_issue(evaluation: dict[str, Any]) -> str | None:

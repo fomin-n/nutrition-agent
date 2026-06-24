@@ -3,13 +3,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 from app.evals.compare_golden_lanes import build_lane_comparison
 from app.evals.compare_golden_lanes import render_markdown as render_lane_markdown
 from app.evals.compare_golden_runs import build_comparison, render_comparison_markdown
 from app.evals.golden import evaluate_answer, load_golden_examples, parse_nutrition_ranges
 from app.evals.phoenix_datasets import upload_golden_dataset
-from app.evals.run_golden_eval import run_golden_eval, write_golden_results
+from app.evals.run_golden_eval import LLMUsageCollector, run_golden_eval, write_golden_results
 
 DATASET = Path("evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl")
 SINGLE_TURN_DATASET = Path("evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl")
@@ -113,6 +115,9 @@ def test_golden_conversation_runner_captures_effective_text_and_memory(tmp_path)
     result = run["examples"][0]
     assert result["execution"]["turns"][-1]["effective_text"] == "лосось, 200 г, запеченный"
     assert result["execution"]["final_unresolved_task"] is None
+    assert result["execution"]["llm_usage"]["calls"] == 0
+    assert result["execution"]["graph_invocations"][-1]["critic_result"]["action"] == "accept"
+    assert result["execution"]["duration_seconds"] >= 0
     assert json_path.exists()
     assert "na_conv_003_ru_fish_followup" not in markdown_path.read_text(encoding="utf-8")
 
@@ -135,6 +140,37 @@ def test_golden_eval_stub_llm_lane_is_deterministic_and_records_mode() -> None:
     assert run["config"]["llm_mode"] == "stub"
     assert run["config"]["llm_stub_version"]
     assert run["summary"]["passed"] == 1
+
+
+def test_golden_usage_collector_records_tokens_model_and_cost() -> None:
+    collector = LLMUsageCollector()
+    response = LLMResult(
+        generations=[
+            [
+                ChatGeneration(
+                    message=AIMessage(
+                        content="",
+                        usage_metadata={
+                            "input_tokens": 1_000,
+                            "output_tokens": 100,
+                            "total_tokens": 1_100,
+                            "input_token_details": {"cache_read": 200},
+                        },
+                        response_metadata={"model_name": "gpt-4.1-mini-2025-04-14"},
+                    )
+                )
+            ]
+        ]
+    )
+
+    collector.on_llm_end(response)
+    usage = collector.summary()
+
+    assert usage["calls"] == 1
+    assert usage["input_tokens"] == 1_000
+    assert usage["cached_input_tokens"] == 200
+    assert usage["output_tokens"] == 100
+    assert usage["estimated_cost_usd"] == pytest.approx(0.0005)
 
 
 def test_golden_lane_comparison_reports_per_case_flips() -> None:
