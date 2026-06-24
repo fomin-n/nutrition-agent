@@ -16,6 +16,7 @@ from app.llm.client import Settings
 from app.observability import phoenix
 from app.observability.request_context import TelegramRequestContext
 from app.observability.trace_logging import TraceContextFilter
+from app.tools.provider_utils import retrieval_span
 
 
 def test_phoenix_tracing_disabled() -> None:
@@ -218,6 +219,37 @@ def test_request_span_is_parent_of_instrumented_work(monkeypatch) -> None:
     assert child.parent.span_id == root.context.span_id
     assert root.attributes["user.id"] == "1001"
     assert root.attributes["telegram.message.id"] == 3001
+
+
+def test_manual_provider_span_copies_request_identity(monkeypatch) -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(phoenix, "is_phoenix_tracing_enabled", lambda: True)
+    monkeypatch.setattr(trace, "get_tracer", lambda name: provider.get_tracer(name))
+
+    with phoenix.phoenix_trace_context(
+        user_id=1001,
+        session_id=2001,
+        metadata={
+            "request_id": "request-provider",
+            "telegram.user.username": "demo_user",
+            "telegram.message.id": 3001,
+        },
+    ), retrieval_span("usda", "foods.search", query="apple"):
+        pass
+
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    root = spans["nutrition_agent.request"]
+    provider_span = spans["nutrition.usda.foods.search"]
+    assert provider_span.parent is not None
+    assert provider_span.parent.span_id == root.context.span_id
+    assert provider_span.attributes["openinference.span.kind"] == "TOOL"
+    assert provider_span.attributes["user.id"] == "1001"
+    assert provider_span.attributes["session.id"] == "2001"
+    metadata = json.loads(str(provider_span.attributes["metadata"]))
+    assert metadata["telegram.user.username"] == "demo_user"
+    assert metadata["telegram.message.id"] == 3001
 
 
 def test_trace_log_filter_adds_current_trace_and_span_ids() -> None:

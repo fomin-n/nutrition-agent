@@ -90,6 +90,11 @@ def log_provider_failure(logger: logging.Logger, exc: ProviderUnavailableError, 
 @contextmanager
 def retrieval_span(provider: str, operation: str, **attributes: str | int | float | bool | None):
     try:
+        from openinference.instrumentation import get_attributes_from_context
+        from openinference.semconv.trace import (
+            OpenInferenceSpanKindValues,
+            SpanAttributes,
+        )
         from opentelemetry import trace
     except Exception:  # pragma: no cover - optional tracing dependency
         yield None
@@ -97,6 +102,11 @@ def retrieval_span(provider: str, operation: str, **attributes: str | int | floa
 
     tracer = trace.get_tracer("nutrition-agent.retrieval")
     with tracer.start_as_current_span(f"nutrition.{provider}.{operation}") as span:
+        span.set_attribute(
+            SpanAttributes.OPENINFERENCE_SPAN_KIND,
+            OpenInferenceSpanKindValues.TOOL.value,
+        )
+        span.set_attributes(dict(get_attributes_from_context()))
         span.set_attribute("nutrition.provider", provider)
         span.set_attribute("nutrition.operation", operation)
         for key, value in attributes.items():
