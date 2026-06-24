@@ -178,6 +178,30 @@ PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces
 
 If the app runs in Docker Compose on the same network as Phoenix, use `PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces` instead. If Phoenix is disabled or unavailable, the app logs a warning and continues without tracing.
 
+Each processed request creates a `nutrition_agent.request` root span. Existing
+LangGraph, LangChain, OpenAI, and nutrition-provider spans remain children of that
+request span. Phoenix uses the standard `user.id` attribute for the Telegram user
+ID and `session.id` for the Telegram chat ID. The request metadata also contains
+the available fields below:
+
+- `telegram.update.id`
+- `telegram.user.id`, `username`, `first_name`, `last_name`, `display_name`,
+  `language_code`, and `is_bot`
+- `telegram.chat.id`, `type`, `title`, `username`, and `is_forum`
+- `telegram.conversation.id`
+- `telegram.message.id`, `thread_id`, `date`, `media_group_id`, and
+  `is_topic_message`
+- request ID, source, request type, language, graph/app versions, model names,
+  and critic configuration
+
+Optional Telegram fields are omitted when unavailable. Message text, captions,
+complete Telegram updates, authorization credentials, API keys, and bot tokens
+are not added to trace metadata. Telegram names and usernames are personally
+identifying data, so keep Phoenix bound to localhost and restrict SSH/UI access.
+Application logs include OpenTelemetry `trace_id` and `span_id` values plus
+request/user/chat/message numeric IDs where relevant, but not Telegram names or
+message contents.
+
 Useful commands:
 
 ```bash
@@ -192,7 +216,9 @@ Smoke check:
 2. Open the UI through the SSH tunnel.
 3. Enable tracing and restart the bot.
 4. Send one meal request.
-5. Confirm a trace appears under the `nutrition-agent` project.
+5. Confirm a `nutrition_agent.request` trace appears under the
+   `nutrition-agent` project and shows the expected `user.id`, `session.id`, and
+   `telegram.*` metadata.
 6. Disable tracing and confirm the bot still answers normally.
 
 ## Evaluation

@@ -93,7 +93,9 @@ Conversation and user memory live in `app/memory/service.py`.
 
 Phoenix tracing is optional and must be enabled explicitly with `ENABLE_PHOENIX_TRACING=true`. The self-hosted Compose file is `deploy/phoenix/docker-compose.yml`; it runs one `arizephoenix/phoenix:17.2.0` container with a named `nutrition_agent_phoenix_data` volume and localhost-only bindings for ports `6006` and `4317`.
 
-The app uses `arize-phoenix-otel` with `auto_instrument=True` and `openinference-instrumentation-langchain`, which also covers LangGraph. Trace context is attached around `process_request` with user ID, session ID, request language/type, model names, app version, and graph version. Do not add raw prompts, auth keys, tokens, usernames, or display names to trace metadata.
+The app uses `arize-phoenix-otel` with `auto_instrument=True` and `openinference-instrumentation-langchain`, which also covers LangGraph. Each request has an explicit `nutrition_agent.request` root span; trace context is attached around `process_request` with the Telegram user/chat/message identity metadata, request language/type, model names, app version, and graph version. Authenticated Telegram usernames and display names are allowed only in this controlled Phoenix metadata because they are required for user-level investigation. Do not put those names in application logs. Do not add raw prompts, message text, complete Telegram updates, auth keys, tokens, or credentials to trace metadata or logs.
+
+Application logs include OpenTelemetry trace/span IDs for correlation. Optional Telegram fields must be omitted safely, and concurrent requests must rely on OpenTelemetry context propagation rather than shared mutable request metadata.
 
 Host-based deployment should use `PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces`. If the app is later moved into Docker Compose on the same network as Phoenix, use `http://phoenix:6006/v1/traces`.
 

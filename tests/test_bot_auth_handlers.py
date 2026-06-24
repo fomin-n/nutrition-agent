@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.bot import handlers
@@ -19,10 +20,16 @@ class FakeAuthService:
 
 
 class FakeMessage:
-    def __init__(self, text: str | None = None, photo: list[object] | None = None) -> None:
+    def __init__(
+        self,
+        text: str | None = None,
+        photo: list[object] | None = None,
+        message_id: int | None = None,
+    ) -> None:
         self.text = text
         self.caption = None
         self.photo = photo or []
+        self.message_id = message_id
         self.replies: list[str] = []
 
     async def reply_text(self, text: str) -> None:
@@ -99,3 +106,65 @@ def test_logout_revokes_current_user(monkeypatch) -> None:
 
     assert auth.revoked_users == [1001]
     assert message.replies == ["Logged out."]
+
+
+def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) -> None:
+    message = FakeMessage(text="100 g chicken", message_id=3001)
+    message.message_thread_id = 77
+    message.date = datetime(2026, 6, 24, 12, 30, tzinfo=UTC)
+    message.media_group_id = None
+    message.is_topic_message = True
+    update = SimpleNamespace(
+        update_id=4001,
+        effective_message=message,
+        effective_user=SimpleNamespace(
+            id=1001,
+            username="demo_user",
+            first_name="Demo",
+            last_name="Tester",
+            full_name="Demo Tester",
+            language_code="en",
+            is_bot=False,
+        ),
+        effective_chat=SimpleNamespace(
+            id=2001,
+            type="supergroup",
+            title="Nutrition QA",
+            username=None,
+            is_forum=True,
+        ),
+    )
+    context = SimpleNamespace(bot=FakeBot())
+    captured: dict[str, object] = {}
+
+    def fake_process_request(**kwargs):
+        captured.update(kwargs)
+        return "Estimated."
+
+    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "process_request", fake_process_request)
+
+    asyncio.run(handlers.handle_text(update, context))
+
+    assert message.replies == ["Estimated."]
+    assert captured["user_id"] == 1001
+    assert captured["session_id"] == 2001
+    assert captured["trace_metadata"] == {
+        "telegram.update.id": 4001,
+        "telegram.user.id": 1001,
+        "telegram.user.username": "demo_user",
+        "telegram.user.first_name": "Demo",
+        "telegram.user.last_name": "Tester",
+        "telegram.user.display_name": "Demo Tester",
+        "telegram.user.language_code": "en",
+        "telegram.user.is_bot": False,
+        "telegram.chat.id": 2001,
+        "telegram.chat.type": "supergroup",
+        "telegram.chat.title": "Nutrition QA",
+        "telegram.chat.is_forum": True,
+        "telegram.conversation.id": 2001,
+        "telegram.message.id": 3001,
+        "telegram.message.thread_id": 77,
+        "telegram.message.date": "2026-06-24T12:30:00+00:00",
+        "telegram.message.is_topic_message": True,
+    }

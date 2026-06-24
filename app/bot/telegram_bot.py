@@ -16,6 +16,7 @@ from app.bot.handlers import (
 )
 from app.llm.client import get_settings, reveal_secret
 from app.observability.phoenix import configure_phoenix_tracing
+from app.observability.trace_logging import configure_trace_log_correlation
 
 
 def build_application() -> Application:
@@ -43,8 +44,12 @@ def build_application() -> Application:
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        format=(
+            "%(asctime)s %(levelname)s %(name)s "
+            "trace_id=%(trace_id)s span_id=%(span_id)s: %(message)s"
+        ),
     )
+    configure_trace_log_correlation()
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     try:

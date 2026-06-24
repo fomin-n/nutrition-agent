@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 
 from app.auth.service import AuthConfigurationError, AuthService
 from app.graph.graph import process_request
+from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
 ACCESS_REQUIRED_MESSAGE = "Access required. Send /login <access_key>."
@@ -142,23 +143,24 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _process_and_reply(update: Update, *, text: str | None, image_path: str | None = None) -> None:
-    user = update.effective_user
-    chat = update.effective_chat
-    message = update.effective_message
+    request_context = TelegramRequestContext.from_update(update)
     try:
         answer = await asyncio.to_thread(
             process_request,
             text=text,
             image_path=image_path,
             source="telegram",
-            user_id=user.id if user else None,
-            session_id=chat.id if chat else None,
-            trace_metadata={
-                "telegram_message_id": message.message_id if message else None,
-            },
+            user_id=request_context.user_id,
+            session_id=request_context.session_id,
+            trace_metadata=request_context.to_trace_metadata(),
         )
     except Exception:
-        LOGGER.exception("Failed to process Telegram message")
+        LOGGER.exception(
+            "Failed to process Telegram message user_id=%s chat_id=%s message_id=%s",
+            request_context.user_id,
+            request_context.chat_id,
+            request_context.message_id,
+        )
         answer = "I couldn’t process that safely. Please try again with a clear meal description or food photo."
     await _reply(update, answer)
 

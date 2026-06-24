@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from uuid import uuid4
 
@@ -28,6 +29,7 @@ from app.schemas.inputs import UserInput
 
 APP_VERSION = "0.1.0"
 GRAPH_VERSION = "nutrition-graph-v1"
+LOGGER = logging.getLogger(__name__)
 
 
 def build_graph():
@@ -140,31 +142,66 @@ def process_request(
         extra=trace_metadata,
     )
     metadata["request_id"] = request_id
+    telegram_update_id = metadata.get("telegram.update.id")
+    telegram_message_id = metadata.get("telegram.message.id")
     with phoenix_trace_context(user_id=user_id, session_id=session_id, metadata=metadata):
-        result = graph.invoke(
-            {
-                "user_input": UserInput(
-                    text=effective_text,
-                    image_path=image_path,
-                    image_mime_type=image_mime_type,
-                    source=source,  # type: ignore[arg-type]
+        try:
+            result = graph.invoke(
+                {
+                    "user_input": UserInput(
+                        text=effective_text,
+                        image_path=image_path,
+                        image_mime_type=image_mime_type,
+                        source=source,  # type: ignore[arg-type]
+                    ),
+                    "use_llm": use_llm,
+                    "memory_context": memory_context.model_dump() if memory_context else {},
+                    "request_id": request_id,
+                }
+            )
+            final = result.get("final_estimate")
+            answer = final.text if final else "I couldn’t generate a response."
+            if (
+                user_id is not None
+                and conversation_id is not None
+                and memory_service is not None
+            ):
+                memory_service.record_turn(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    user_text=text,
+                    assistant_text=answer,
+                    effective_text=effective_text,
+                    final_state=result,
+                    prepared_task=(
+                        prepared_memory_input.unresolved_task if prepared_memory_input else None
+                    ),
+                )
+        except Exception:
+            LOGGER.exception(
+                (
+                    "Nutrition request failed request_id=%s source=%s user_id=%s "
+                    "session_id=%s telegram_update_id=%s telegram_message_id=%s"
                 ),
-                "use_llm": use_llm,
-                "memory_context": memory_context.model_dump() if memory_context else {},
-                "request_id": request_id,
-            }
-        )
-    final = result.get("final_estimate")
-    answer = final.text if final else "I couldn’t generate a response."
-    if user_id is not None and conversation_id is not None and memory_service is not None:
-        memory_service.record_turn(
-            user_id=user_id,
-            conversation_id=conversation_id,
-            user_text=text,
-            assistant_text=answer,
-            effective_text=effective_text,
-            final_state=result,
-            prepared_task=prepared_memory_input.unresolved_task if prepared_memory_input else None,
+                request_id,
+                source,
+                user_id,
+                session_id,
+                telegram_update_id,
+                telegram_message_id,
+            )
+            raise
+        LOGGER.info(
+            (
+                "Nutrition request completed request_id=%s source=%s user_id=%s "
+                "session_id=%s telegram_update_id=%s telegram_message_id=%s"
+            ),
+            request_id,
+            source,
+            user_id,
+            session_id,
+            telegram_update_id,
+            telegram_message_id,
         )
     return answer
 
