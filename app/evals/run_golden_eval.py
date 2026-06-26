@@ -689,7 +689,7 @@ def _llm_parser_mode(
         yield
         return
     class LocalModerationService:
-        def moderate_text(self, text: str | None):
+        def moderate_text(self, text: str | None, *, request_id: str | None = None):
             return safety_gate.local_moderate_text(text)
 
     original_has_openai_key = text_parser.has_openai_key

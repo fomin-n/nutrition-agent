@@ -1,3 +1,4 @@
+import logging
 import re
 
 from app.graph.state import NutritionGraphState
@@ -15,6 +16,7 @@ from app.tools.food_normalization import find_food_mentions
 from app.tools.food_vocabulary import load_food_vocabulary
 
 _VOCABULARY = load_food_vocabulary()
+LOGGER = logging.getLogger(__name__)
 
 RAW_FOOD_WORDS = fallback_names() | set(_VOCABULARY.scope.additional_food_terms)
 
@@ -83,7 +85,13 @@ def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:
             ):
                 return {"scope_decision": local_decision}
             return {"scope_decision": llm_decision}
-        except Exception:
+        except Exception as exc:
+            LOGGER.warning(
+                "Scope classifier LLM unavailable request_id=%s; using local decision route=%s: %s",
+                state.get("request_id"),
+                local_decision.route,
+                exc,
+            )
             return {"scope_decision": local_decision}
 
     return {"scope_decision": local_decision}

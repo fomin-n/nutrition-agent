@@ -27,7 +27,10 @@ def output_moderation(state: NutritionGraphState) -> NutritionGraphState:
     if state.get("use_llm") is False:
         decision = local_moderate_text(final.text)
     else:
-        decision = ModerationService().moderate_text(final.text)
+        decision = ModerationService().moderate_text(
+            final.text,
+            request_id=state.get("request_id"),
+        )
     if not decision.allowed:
         text = (
             "Я могу оценивать калории и макронутриенты блюд, но не могу предоставлять "

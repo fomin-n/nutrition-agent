@@ -1,5 +1,7 @@
 import re
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -95,7 +97,7 @@ class MemoryService:
     def load_context(self, user_id: str | int, conversation_id: str | int) -> MemoryContext:
         user_key = str(user_id)
         conversation_key = str(conversation_id)
-        with self._connect() as conn:
+        with self._connection() as conn:
             state = conn.execute(
                 """
                 SELECT summary, unresolved_task_json
@@ -179,7 +181,7 @@ class MemoryService:
             text=effective_text or user_text,
             prepared_task=prepared_task,
         )
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 """
@@ -323,8 +325,13 @@ class MemoryService:
         conn.execute("PRAGMA busy_timeout = 30000")
         return conn
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as conn, conn:
+            yield conn
+
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(
                 """

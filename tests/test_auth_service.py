@@ -29,6 +29,13 @@ def test_valid_login_authorizes_user(tmp_path) -> None:
     assert result.ok
     assert service.is_authorized(1001)
 
+    with sqlite3.connect(tmp_path / "auth.sqlite3") as conn:
+        row = conn.execute(
+            "SELECT used_by_user_id FROM access_keys WHERE id = ?",
+            (created.key_id,),
+        ).fetchone()
+    assert row == (1001,)
+
 
 def test_reused_one_time_key_fails(tmp_path) -> None:
     service = AuthService(tmp_path / "auth.sqlite3", "test-secret")
@@ -41,6 +48,17 @@ def test_reused_one_time_key_fails(tmp_path) -> None:
     assert not second.ok
     assert second.reason == "used"
     assert not service.is_authorized(1002)
+
+
+def test_failed_login_releases_write_lock(tmp_path) -> None:
+    service = AuthService(tmp_path / "auth.sqlite3", "test-secret")
+
+    result = service.login(raw_key="not-a-real-key", telegram_user_id=1001)
+
+    assert not result.ok
+    with sqlite3.connect(tmp_path / "auth.sqlite3", timeout=0.1) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.rollback()
 
 
 def test_logout_revokes_access(tmp_path) -> None:

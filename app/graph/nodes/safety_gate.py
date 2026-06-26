@@ -10,7 +10,10 @@ def input_moderation(state: NutritionGraphState) -> NutritionGraphState:
     if state.get("use_llm") is False:
         decision = local_moderate_text(normalized.text)
     else:
-        decision = ModerationService().moderate_text(normalized.text)
+        decision = ModerationService().moderate_text(
+            normalized.text,
+            request_id=state.get("request_id"),
+        )
     return {"input_moderation": decision}
 
 

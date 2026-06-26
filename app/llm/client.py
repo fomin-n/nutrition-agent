@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     food_linker_similarity_threshold: float = Field(default=0.62, ge=0.0, le=1.0)
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
+    usage_db_path: str | None = None
+    bot_daily_user_request_limit: int = Field(default=100, ge=0)
+    bot_daily_global_request_limit: int = Field(default=1000, ge=0)
     memory_db_path: str | None = None
     memory_recent_messages: int = 10
     memory_summarize_after_messages: int = 16
@@ -86,6 +89,17 @@ PROMPT_INJECTION_PATTERNS = (
     r"\bdan mode\b",
     r"bypass (safety|policy|instructions)",
     r"you are now",
+    r"игнорируй(те)?.{0,40}(инструкци|правил|указани)",
+    r"забудь(те)?.{0,40}(инструкци|правил|указани)",
+    r"(покажи|выведи|раскрой|расскажи).{0,40}(системн\w*|developer|разработч\w*)"
+    r".{0,30}(промпт|инструкци|сообщени)",
+    r"(системн\w*|developer|разработч\w*).{0,30}(промпт|инструкци|сообщени)"
+    r".{0,40}(покажи|выведи|раскрой)",
+    r"обойди(те)?.{0,40}(безопасност|политик|инструкци|ограничени|правил)",
+    r"\bджейлбрейк\b",
+    r"\bdan режим\b",
+    r"\bрежим dan\b",
+    r"\bты теперь (не|будешь|являешься|должен|должна)\b",
 )
 
 HACKING_PATTERNS = (
@@ -94,6 +108,14 @@ HACKING_PATTERNS = (
     r"steal (a )?(token|password|api key)",
     r"telegram bot token",
     r"bypass authentication",
+    r"\bвзлом\w*\b",
+    r"\bхакн\w*\b",
+    r"(укради|украсть|получи|получить|достань|добыть).{0,40}"
+    r"(токен|парол|api[ -]?ключ|ключ|секрет)",
+    r"(токен|парол|api[ -]?ключ|ключ|секрет).{0,40}"
+    r"(укради|украсть|получи|получить|достань|добыть)",
+    r"(обойди|обойти).{0,40}(аутентификац|авторизац|логин|доступ)",
+    r"telegram.{0,20}(бот)?.{0,20}токен",
 )
 
 UNSAFE_DIET_PATTERNS = (
@@ -107,6 +129,14 @@ UNSAFE_DIET_PATTERNS = (
     r"\banorexia\b",
     r"\bbulimia\b",
     r"eating disorder",
+    r"\bголодат\w*\b",
+    r"\bголодани\w*\b",
+    r"\bанорекси\w*\b",
+    r"\bбулими\w*\b",
+    r"\bслабительн\w*\b",
+    r"\bпро[-\s]?ана\b",
+    r"(похудеть|сбросить).{0,20}\b\d+\s*(кг|килограмм\w*)\b.{0,30}"
+    r"(за неделю|за нескольк\w* дн\w*|за \d+\s*дн\w*)",
 )
 
 MEDICAL_PATTERNS = (
@@ -114,6 +144,12 @@ MEDICAL_PATTERNS = (
     r"\btreat\b.*\b(diabetes|kidney|cancer|disease|condition)\b",
     r"medical nutrition therapy",
     r"\binsulin\b.*\bdose\b",
+    r"\bдиагноз\b",
+    r"\bдиагностир\w*\b",
+    r"\bлечи\w*.{0,40}(диабет|почк\w*|рак|болезн\w*|заболеван\w*)",
+    r"\bлечение\b.{0,40}(диабет|почк\w*|рак|болезн\w*|заболеван\w*)",
+    r"(доз\w*|сколько).{0,30}инсулин\w*",
+    r"инсулин\w*.{0,30}доз\w*",
 )
 
 
@@ -139,7 +175,7 @@ class ModerationService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
-    def moderate_text(self, text: str | None) -> ModerationDecision:
+    def moderate_text(self, text: str | None, *, request_id: str | None = None) -> ModerationDecision:
         local = local_moderate_text(text)
         if not local.allowed:
             return local
@@ -163,6 +199,10 @@ class ModerationService:
                     reason=f"OpenAI moderation flagged: {', '.join(flagged)}",
                 )
         except Exception as exc:  # pragma: no cover - network/API fallback
-            LOGGER.warning("OpenAI moderation unavailable; using local fallback: %s", exc)
+            LOGGER.warning(
+                "OpenAI moderation unavailable request_id=%s; using local fallback: %s",
+                request_id,
+                exc,
+            )
 
         return local

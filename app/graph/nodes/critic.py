@@ -12,15 +12,16 @@ LOGGER = logging.getLogger(__name__)
 
 def critic(state: NutritionGraphState) -> NutritionGraphState:
     iteration = state.get("critic_iteration", 0)
+    request_id = state.get("request_id")
     deterministic = _deterministic_critic(state).model_copy(
         update={"source": "deterministic", "iteration": iteration}
     )
     if deterministic.action != "accept":
-        _log_result(deterministic)
+        _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
     if not state.get("use_llm", False) or not has_openai_key():
-        _log_result(deterministic)
+        _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
     try:
@@ -32,19 +33,27 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
         )
     except Exception as exc:  # pragma: no cover - network/API fallback
         LOGGER.warning(
-            "LLM critic unavailable at iteration=%d; accepting deterministic result: %s",
+            (
+                "LLM critic unavailable request_id=%s iteration=%d; "
+                "accepting deterministic result: %s"
+            ),
+            request_id,
             iteration,
             exc,
         )
-        _log_result(deterministic)
+        _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
     if llm_result.action not in {"accept", "revise"}:
         LOGGER.warning(
-            "LLM critic returned unsupported qualitative action=%s; accepting deterministic result",
+            (
+                "LLM critic returned unsupported qualitative action=%s request_id=%s; "
+                "accepting deterministic result"
+            ),
             llm_result.action,
+            request_id,
         )
-        _log_result(deterministic)
+        _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
     issues = [issue.strip() for issue in llm_result.issues if issue.strip()]
@@ -58,7 +67,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
             "iteration": iteration,
         }
     )
-    _log_result(result)
+    _log_result(result, request_id=request_id)
     return {"critic_result": result}
 
 
@@ -147,7 +156,11 @@ def prepare_critic_revision(state: NutritionGraphState) -> NutritionGraphState:
         return {}
     iteration = state.get("critic_iteration", 0) + 1
     LOGGER.info(
-        "Preparing deterministic answer regeneration critic_iteration=%d issue_count=%d",
+        (
+            "Preparing deterministic answer regeneration request_id=%s "
+            "critic_iteration=%d issue_count=%d"
+        ),
+        state.get("request_id"),
         iteration,
         len(result.issues),
     )
@@ -170,7 +183,8 @@ def finalize_critic_cap(state: NutritionGraphState) -> NutritionGraphState:
         iteration=iteration,
     )
     LOGGER.warning(
-        "Critic iteration cap reached iteration=%d; settling on clarification",
+        "Critic iteration cap reached request_id=%s iteration=%d; settling on clarification",
+        state.get("request_id"),
         iteration,
     )
     return {
@@ -232,9 +246,10 @@ def _range(minimum: float, maximum: float) -> str:
     return f"{minimum:.0f}-{maximum:.0f}"
 
 
-def _log_result(result: CriticResult) -> None:
+def _log_result(result: CriticResult, *, request_id: str | None) -> None:
     LOGGER.info(
-        "Critic result iteration=%d source=%s action=%s issue_count=%d",
+        "Critic result request_id=%s iteration=%d source=%s action=%s issue_count=%d",
+        request_id,
         result.iteration,
         result.source,
         result.action,

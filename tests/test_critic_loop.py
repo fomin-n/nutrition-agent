@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -99,6 +100,7 @@ def test_llm_critic_uses_configured_model_and_schema(monkeypatch: pytest.MonkeyP
 
 def test_llm_critic_error_degrades_to_deterministic_accept(
     monkeypatch: pytest.MonkeyPatch,
+    caplog,
 ) -> None:
     monkeypatch.setattr(critic_module, "has_openai_key", lambda: True)
     monkeypatch.setattr(
@@ -115,10 +117,15 @@ def test_llm_critic_error_degrades_to_deterministic_accept(
         lambda **_kwargs: (_ for _ in ()).throw(TimeoutError("critic timeout")),
     )
 
-    result = critic_module.critic(_estimate_state(use_llm=True))["critic_result"]
+    state = _estimate_state(use_llm=True)
+    state["request_id"] = "request-critic"
+
+    with caplog.at_level(logging.WARNING):
+        result = critic_module.critic(state)["critic_result"]
 
     assert result.action == "accept"
     assert result.source == "deterministic"
+    assert "request-critic" in caplog.text
 
 
 def test_graph_always_rejected_answer_stops_at_cap(

@@ -1,6 +1,8 @@
 import hmac
 import secrets
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -53,7 +55,7 @@ class AuthService:
         raw_key = secrets.token_urlsafe(32)
         key_id = uuid4().hex
         now = _now()
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO access_keys (id, label, key_digest, created_at, expires_at)
@@ -64,7 +66,7 @@ class AuthService:
         return CreatedAccessKey(key_id=key_id, raw_key=raw_key, label=label, expires_at=expires_at)
 
     def list_keys(self) -> list[sqlite3.Row]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             return list(
                 conn.execute(
                     """
@@ -77,7 +79,7 @@ class AuthService:
 
     def revoke_key(self, key_id: str) -> bool:
         now = _now()
-        with self._connect() as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 "UPDATE access_keys SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?",
                 (now, key_id),
@@ -94,7 +96,7 @@ class AuthService:
     ) -> LoginResult:
         digest = self.digest_key(raw_key)
         now = _now()
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 """
@@ -137,7 +139,7 @@ class AuthService:
             return LoginResult(ok=True, reason="ok", key_id=row["id"])
 
     def is_authorized(self, telegram_user_id: int) -> bool:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 """
                 SELECT 1 FROM authorized_users
@@ -149,7 +151,7 @@ class AuthService:
 
     def revoke_user(self, telegram_user_id: int) -> bool:
         now = _now()
-        with self._connect() as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE authorized_users
@@ -161,7 +163,7 @@ class AuthService:
             return cursor.rowcount > 0
 
     def list_users(self) -> list[sqlite3.Row]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             return list(
                 conn.execute(
                     """
@@ -181,8 +183,13 @@ class AuthService:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as conn, conn:
+            yield conn
+
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS access_keys (

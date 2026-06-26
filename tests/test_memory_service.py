@@ -45,8 +45,9 @@ def test_memory_persists_unresolved_task(tmp_path) -> None:
 
 
 def test_memory_compacts_old_messages_without_discarding_recent(tmp_path) -> None:
+    db_path = tmp_path / "memory.sqlite3"
     service = MemoryService(
-        tmp_path / "memory.sqlite3",
+        db_path,
         MemoryConfig(recent_messages=4, summarize_after_messages=6, summary_max_chars=500),
     )
 
@@ -63,6 +64,16 @@ def test_memory_compacts_old_messages_without_discarding_recent(tmp_path) -> Non
     assert context.summary
     assert len(context.recent_messages) == 4
     assert context.recent_messages[-1].text == "answer 4"
+
+    reloaded = MemoryService(
+        db_path,
+        MemoryConfig(recent_messages=4, summarize_after_messages=6, summary_max_chars=500),
+    )
+    reloaded_context = reloaded.load_context(1, 10)
+    assert reloaded_context.summary == context.summary
+    assert [message.text for message in reloaded_context.recent_messages] == [
+        message.text for message in context.recent_messages
+    ]
 
 
 def test_memory_concurrent_writes_remain_isolated(tmp_path) -> None:

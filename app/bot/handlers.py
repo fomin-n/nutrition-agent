@@ -9,7 +9,9 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from app.auth.service import AuthConfigurationError, AuthService
+from app.bot.rate_limit import UsageLimitService, get_usage_limit_service
 from app.graph.graph import process_request
+from app.i18n import detect_language, response_language
 from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
@@ -19,6 +21,11 @@ ACCESS_REQUIRED_MESSAGE = "Access required. Send /login <access_key>."
 @lru_cache(maxsize=1)
 def get_auth_service() -> AuthService:
     return AuthService.from_settings()
+
+
+@lru_cache(maxsize=1)
+def get_rate_limit_service() -> UsageLimitService:
+    return get_usage_limit_service()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -59,36 +66,45 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = getattr(context, "args", [])
+    should_delete_key_message = bool(args and args[0].strip())
     user = update.effective_user
-    if user is None:
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
-        return
-
-    if not context.args:
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
-        return
-
-    access_key = context.args[0].strip()
-    if not access_key:
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
-        return
-
     try:
-        result = get_auth_service().login(
-            raw_key=access_key,
-            telegram_user_id=user.id,
-            username=user.username,
-            display_name=user.full_name,
-        )
-    except AuthConfigurationError:
-        LOGGER.exception("Bot auth is not configured")
-        await _reply(update, "Access control is not configured. Ask the administrator to set BOT_AUTH_SECRET.")
-        return
+        if user is None:
+            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            return
 
-    if result.ok:
-        await _reply(update, "Access granted.")
-    else:
-        await _reply(update, "Invalid or expired access key.")
+        if not args:
+            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            return
+
+        access_key = args[0].strip()
+        if not access_key:
+            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            return
+
+        try:
+            result = get_auth_service().login(
+                raw_key=access_key,
+                telegram_user_id=user.id,
+                username=user.username,
+                display_name=user.full_name,
+            )
+        except AuthConfigurationError:
+            LOGGER.exception("Bot auth is not configured")
+            await _reply(
+                update,
+                "Access control is not configured. Ask the administrator to set BOT_AUTH_SECRET.",
+            )
+            return
+
+        if result.ok:
+            await _reply(update, "Access granted.")
+        else:
+            await _reply(update, "Invalid or expired access key.")
+    finally:
+        if should_delete_key_message:
+            await _delete_login_message(update)
 
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -121,6 +137,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
+    if not await _consume_usage_or_reply(update, text=message.text, has_image=False):
+        return
     await _send_typing(update, context)
     await _process_and_reply(update, text=message.text)
 
@@ -131,6 +149,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        return
+    if not await _consume_usage_or_reply(update, text=message.caption, has_image=True):
         return
 
     await _send_typing(update, context)
@@ -169,6 +189,65 @@ async def _reply(update: Update, text: str) -> None:
     message = update.effective_message
     if message:
         await message.reply_text(text)
+
+
+async def _delete_login_message(update: Update) -> None:
+    message = update.effective_message
+    if message is None:
+        return
+    delete = getattr(message, "delete", None)
+    if delete is None:
+        return
+    try:
+        await delete()
+    except Exception as exc:
+        user_id = getattr(update.effective_user, "id", None)
+        chat_id = getattr(update.effective_chat, "id", None)
+        message_id = getattr(message, "message_id", None)
+        LOGGER.warning(
+            "Failed to delete login message user_id=%s chat_id=%s message_id=%s: %s",
+            user_id,
+            chat_id,
+            message_id,
+            exc,
+        )
+
+
+async def _consume_usage_or_reply(update: Update, *, text: str | None, has_image: bool) -> bool:
+    user = update.effective_user
+    if user is None:
+        return False
+    try:
+        result = await asyncio.to_thread(get_rate_limit_service().check_and_increment, user.id)
+    except Exception:
+        LOGGER.exception(
+            "Failed to verify request limits user_id=%s chat_id=%s",
+            user.id,
+            getattr(update.effective_chat, "id", None),
+        )
+        await _reply(update, _rate_limit_unavailable_message(text=text, has_image=has_image))
+        return False
+    if result.allowed:
+        return True
+    await _reply(update, _rate_limit_message(text=text, has_image=has_image))
+    return False
+
+
+def _rate_limit_message(*, text: str | None, has_image: bool) -> str:
+    language = response_language(detect_language(text, has_image=has_image))
+    if language == "ru":
+        return (
+            "Дневной лимит запросов исчерпан. Попробуйте завтра или попросите "
+            "администратора увеличить лимит."
+        )
+    return "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
+
+
+def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str:
+    language = response_language(detect_language(text, has_image=has_image))
+    if language == "ru":
+        return "Не удалось безопасно проверить лимит запросов. Попробуйте позже."
+    return "I couldn’t safely verify the request limit. Please try again later."
 
 
 async def _send_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from app.graph.nodes import coordinator
@@ -131,6 +133,34 @@ def test_scope_classifier_keeps_local_food_route_when_llm_requests_clarification
     decision = result["scope_decision"]
     assert decision.route == "text_meal"
     assert decision.is_food_related
+
+
+def test_scope_classifier_logs_llm_fallback_with_request_id(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
+    monkeypatch.setattr(
+        coordinator,
+        "invoke_structured_text",
+        lambda **_: (_ for _ in ()).throw(TimeoutError("scope timeout")),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result = scope_classifier(
+            {
+                "normalized_input": NormalizedInput(
+                    text="Сколько калорий в неизвестной штуке?",
+                    has_text=True,
+                    has_image=False,
+                    language="ru",
+                ),
+                "input_moderation": ModerationDecision(),
+                "request_id": "request-scope",
+                "use_llm": True,
+            }
+        )
+
+    assert result["scope_decision"].route == "text_meal"
+    assert "request-scope" in caplog.text
+    assert "неизвестной штуке" not in caplog.text
 
 
 def test_scope_classifier_rejects_off_topic() -> None:
