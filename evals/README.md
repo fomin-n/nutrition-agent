@@ -14,7 +14,7 @@ JSONL is the source of truth for the runner and Phoenix upload. CSV files are pr
 
 ## Local Runs
 
-Run the 17-case deterministic smoke split:
+Run the 18-case deterministic smoke split:
 
 ```bash
 uv run python -m app.evals.run_golden_eval \
@@ -77,6 +77,40 @@ uv run python -m app.evals.compare_golden_lanes \
 
 The 2026-06-21 deterministic parser update improved smoke from 64.7% to 100%, full golden from 25.5% to 60.9%, Russian from 22.8% to 59.6%, and single-turn from 21.0% to 58.0%. Memory/follow-up and safety/refusal tags remained at 100%. See the committed comparison under `reports/eval/post_change/` for category changes and remaining failures.
 
+## Other Local Evals
+
+Run the adversarial safety eval without API keys:
+
+```bash
+uv run python -m app.evals.run_eval --mock
+```
+
+Run the tiny nutrition-quality eval:
+
+```bash
+uv run python -m app.evals.run_nutrition_eval --max-examples 3
+```
+
+The tiny nutrition eval uses 3 committed rows derived from OpenIntro's public `fastfood` dataset because it is small, CSV-based, downloadable without authentication, and includes calories plus protein, fat, and carbohydrate values. The sample lives in `app/evals/fastfood_tiny_sample.jsonl`; the full dataset is not committed.
+
+OpenIntro describes the source dataset as 515 fast-food items with nutrition fields such as calories, total fat, total carbs, and protein. OpenIntro's license page says most OpenIntro resources are released under Creative Commons BY-SA 3.0; see:
+
+- Dataset: https://www.openintro.org/data/index.php?data=fastfood
+- CSV: https://www.openintro.org/data/csv/fastfood.csv
+- License: https://www.openintro.org/license/
+
+By default, the tiny nutrition eval runs exactly 3 examples with `use_llm=False`, so it exercises the deterministic/local graph path and does not call OpenAI. Processing more than 3 examples requires `--allow-more-examples`; using LLM-backed graph paths requires both `--use-llm` and `--allow-paid-api`.
+
+Metrics are intentionally simple: predicted calorie midpoint versus ground-truth calories, absolute error, percentage error, mean absolute calorie error, and macro errors for protein, fat, and carbs when present. Fast-food menu rows describe complete prepared items, while the default no-LLM parser may map them to generic ingredients with assumed portions, so this is a smoke check rather than a benchmark.
+
+Generate the food-linker shadow disagreement report:
+
+```bash
+uv run python -m app.evals.food_linker_shadow_report --threshold 0.62
+```
+
+The frozen detector baseline lives in `tests/fixtures/food_detection_baseline.json` and covers the golden single-turn and conversation datasets. Shadow reports are ignored under `reports/eval/`.
+
 ## Phoenix Upload
 
 Phoenix 17 exposes dataset upload at `/v1/datasets/upload`. The uploader uses the existing `httpx` dependency and stable `metadata.id` values; repeated uploads update the dataset rather than duplicating examples.
@@ -92,3 +126,7 @@ Use the same command for `nutrition-agent-golden-conversations-v1` and `nutritio
 ## Adding A Case
 
 Add the case to the appropriate source JSONL and CSV, then regenerate or update the combined JSONL. Keep `metadata.id` globally unique, assign `golden` plus optional `smoke` splits, and use stable tags. Expectations should describe behavior and acceptable ranges, not exact prose. Run loader tests, the smoke split, and the full golden split before changing production logic in response to failures.
+
+## Larger Future Datasets
+
+Potential future datasets include Nutrition5k for image meal evaluation, NutriBench for text meal evaluation, and NutritionVerse-Real for real food image evaluation. Large datasets are intentionally not downloaded by this repository.

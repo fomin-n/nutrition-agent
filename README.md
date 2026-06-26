@@ -2,23 +2,30 @@
 
 ![NutritionAgent cover](docs/assets/nutrition-agent-cover.png)
 
-`nutrition-agent` is an experimental agentic nutrition-estimation bot. It accepts a meal description and, optionally, a food photo through Telegram, then returns an approximate calorie and macronutrient range with explicit assumptions.
+`nutrition-agent` is an experimental Telegram bot that estimates approximate calories and macronutrients from a meal description or one food photo. It is an allow-list-only, single-maintainer MVP with no packaged releases yet.
 
-The project is designed as an engineering MVP: language and vision models help classify and structure uncertain meal input, while calorie and macro arithmetic is deterministic Python.
+The main design point is control: language and vision models help classify and structure uncertain food input, while calorie and macro arithmetic, answer formatting, and safety gates stay in deterministic Python.
 
-This is not a medical product and does not provide diagnosis, treatment plans, eating-disorder advice, or medical nutrition therapy.
+This is not a medical product. It does not provide diagnosis, treatment plans, eating-disorder advice, or medical nutrition therapy.
 
-## What It Solves
+## Quickstart
 
-Meal logging is often too slow because users must manually search foods, estimate portions, and enter each ingredient. This project explores a controlled agent workflow that can turn natural meal descriptions or photos into a practical estimate:
+```bash
+git clone git@github.com:fomin-n/nutrition-agent.git
+cd nutrition-agent
+uv sync --extra dev
+cp .env.example .env
+# edit .env and set:
+TELEGRAM_BOT_TOKEN=replace-me
+BOT_AUTH_SECRET=replace-me
+OPENAI_API_KEY=replace-me
+uv run python -m app.cli.auth create-key --label "demo-user"
+uv run python -m app.bot.telegram_bot
+```
 
-1. A user sends a food description or photo to the Telegram bot.
-2. The bot verifies that the sender is authorized.
-3. The graph rejects off-topic, unsafe, or prompt-injection attempts.
-4. The graph extracts ingredients and portion ranges.
-5. Nutrition sources are retrieved for each ingredient.
-6. A deterministic calculator computes calories, protein, fat, and carbs.
-7. The response is sanity checked and returned with assumptions and confidence.
+Send `/login <access_key>` to the bot, then send a meal description or food photo.
+
+Meal logging is often slow because users must search foods, estimate portions, and enter each ingredient manually. This project explores a controlled agent workflow that turns natural meal descriptions or photos into practical estimates with explicit assumptions.
 
 Example response shape:
 
@@ -30,145 +37,108 @@ Carbs: 55-75 g
 Main assumptions:
 * cooked rice: 180-220 g
 * cooked chicken breast: 120-160 g
-* olive oil: 8-14 g
 Confidence: medium
 ```
+
+English and Russian text requests are supported. Image-only requests default to English because there is no language signal.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A["Telegram user input"] --> B["Access-key authorization gate"]
-    B -->|Unauthorized| C["Minimal login message"]
-    B -->|Authorized| D["Input moderation"]
-    D --> E["Scope classifier"]
-    E -->|Off-topic or unsafe| F["Refusal"]
-    E -->|Food request| G["Coordinator / router"]
-    G --> H["Text meal parser"]
-    G --> I["Image meal recognizer"]
-    G --> J["Packaging / OCR recognizer"]
-    H --> K["Nutrition retrieval"]
-    I --> K
-    J --> K
-    K --> L["Deterministic macro calculator"]
-    L --> M["Answer synthesizer"]
-    M --> N["Critic / sanity checker"]
-    N --> O["Output moderation"]
-    O --> P["Telegram response"]
+    U["Telegram input<br/>(text / one photo)"] --> AUTH{"Access-key<br/>authorization"}
+    AUTH -->|unauthorized| LOGIN["Minimal login prompt"]
+    AUTH -->|authorized| LIMIT{"Daily request<br/>limit"}
+    LIMIT -->|limit hit| RATE["Localized limit message"]
+    LIMIT -->|allowed| MEM[("Memory load<br/>recent messages / facts / pending task")]
+    MEM --> MOD1["Input moderation"]
+    MOD1 --> SCOPE["Scope classifier"]
+    SCOPE -->|off-topic / unsafe| REF["Refusal"]
+    SCOPE -->|ambiguous| CLR["Clarification"]
+    SCOPE -->|food request| ROUTE{"Coordinator / router"}
+    ROUTE --> TP["Text meal parser"]
+    ROUTE --> IR["Image recognizer"]
+    ROUTE --> PK["Packaging / OCR"]
+    TP --> RET["Nutrition retrieval"]
+    IR --> RET
+    PK --> RET
+    RET --> CALC["Macro calculator"]
+    CALC --> SYN["Answer synthesizer<br/>(deterministic)"]
+    SYN --> CRIT{"Critic / sanity check"}
+    CRIT -->|revise, <= CRITIC_MAX_ITERATIONS| SYN
+    CRIT -->|cap reached| CLR
+    CRIT -->|accept| MOD2["Output moderation"]
+    REF --> MOD2
+    CLR --> MOD2
+    MOD2 --> OUT["Telegram response"]
+    OUT --> MEMW[("Memory record<br/>turn / unresolved task")]
+
+    classDef llm fill:#fde2c4,stroke:#d98324,color:#111;
+    classDef det fill:#cfe8d4,stroke:#3a7d44,color:#111;
+    classDef mem fill:#e6e0f8,stroke:#6b4fa0,color:#111;
+    class MOD1,SCOPE,TP,IR,PK,CRIT,MOD2 llm;
+    class RET,CALC,SYN det;
+    class MEM,MEMW mem;
 ```
 
-## Pipeline Stages
+Legend: orange nodes may use an LLM when enabled and configured; green nodes are deterministic; purple nodes use SQLite memory. LLM-assisted nodes fall back to deterministic/local behavior when LLMs are disabled or unavailable.
 
-- **Telegram input** handles text messages and one photo with an optional caption.
-- **Authorization gate** blocks unauthenticated users before any model call, image download, nutrition lookup, or graph execution.
-- **Input moderation** applies conservative local checks and can use OpenAI moderation when configured.
-- **Scope classifier** decides whether the request is food-related, off-topic, unsafe, or needs clarification. English and Russian meal requests are supported; image-only requests default to English responses.
-- **Coordinator/router** sends the request to a text, image, combined image+text, or packaged-food branch.
-- **Text meal parser** extracts ingredients and practical gram ranges from a written meal description.
-- **Image meal recognizer** uses a vision-capable model to identify visible food and estimate portion ranges.
-- **Packaging/OCR recognizer** supports a basic packaged-food branch for product names, labels, and future barcode/OCR work.
-- **Nutrition retrieval** normalizes provider results into ranked candidates from USDA FoodData Central, FatSecret, Open Food Facts, and explicit local food/category fallbacks. Candidates must pass category and product-variant validation before reaching the deterministic calculator.
-- **Deterministic macro calculator** computes calories, protein, fat, and carbs from ingredient gram ranges and nutrition data.
-- **Answer synthesizer** formats the result with ranges, assumptions, warnings, and confidence.
-- **Critic/sanity checker** catches missing detail, inconsistent ranges, and overly wide estimates before output.
-- **Output moderation** prevents unsafe or out-of-scope final content.
+```mermaid
+sequenceDiagram
+    actor U as User (Telegram)
+    participant H as Bot handler
+    participant G as process_request / LangGraph
+    participant M as MemoryService (SQLite)
+    participant P as Nutrition providers
+    U->>H: text / photo
+    Note over H: authorize and rate-limit before expensive work
+    H->>G: process_request(text, image, user_id, chat_id)
+    G->>M: load_context(user_id, conversation_id)
+    M-->>G: recent messages / facts / pending task
+    G->>P: lookup ingredients
+    P-->>G: ranked candidates
+    Note over G: deterministic calc -> synth -> critic loop
+    G->>M: record_turn(...)
+    G-->>H: final answer
+    H-->>U: reply
+```
+
+## Model And Deterministic Boundaries
+
+| Area | Behavior |
+| --- | --- |
+| Text model | Structured scope tiebreaks and meal parsing when local logic is insufficient. |
+| Vision model | Food-photo and image+caption recognition. |
+| Critic model | Optional schema-validated qualitative review after deterministic checks. |
+| Moderation API | Optional; local moderation always runs first. |
+| Deterministic code | Retrieval ranking, candidate validation, macro calculation, answer formatting, memory merging, rate limiting, and auth. |
+
+The bounded `critic -> synthesize -> critic` loop can only revisit answer formatting; it cannot reparse food or recompute nutrition values. Model names and limits are configured through `.env`; see [.env.example](.env.example) for the canonical list.
 
 ## Memory
 
-The bot has a lightweight memory layer in `app/memory/service.py`. It is intentionally SQLite-backed and deterministic; there is no vector database or unconstrained agent loop.
-
-- Short-term memory is keyed by `(user_id, conversation_id)`, where Telegram uses the user ID and chat ID passed into `process_request`. This keeps users and separate chats isolated.
-- Short-term memory stores recent user/assistant messages, a compact older-summary string, and one current unresolved nutrition task. Pending tasks can retain a canonical food, brand, subtype, product variant, quantity, preparation, and cut together with the fields still required.
-- Follow-up answers are resolved before the graph runs. For example, after “How many calories in rice?” the bot stores the unresolved rice task; “150 g cooked” becomes “rice, 150 g, cooked” internally. The same deterministic flow supports English and Russian foods, fish subtypes, branded yogurt, and other common products. Known packaged products with a reliable standard serving may still be estimated directly.
-- Rewriting is conservative: the follow-up must be short and supply a relevant missing detail or a compatible food subtype. A distinct food question, an off-topic request, or locally detected unsafe/prompt-injection text starts a separate graph request and is never appended to the pending food.
-- Long-term memory stores only stable nutrition context extracted from user text: allergies, dietary preferences, measurement preferences, and recurring goals. It does not promote every message into long-term memory.
-- Conversation compaction keeps the most recent 10 messages by default. When a conversation exceeds 16 messages, older messages are appended to a bounded plain-text summary, capped at 2000 characters by default.
-- SQLite writes use short transactions with `BEGIN IMMEDIATE`, WAL mode, and composite keys, so concurrent requests cannot mix users or corrupt a conversation record.
-- Previous assistant estimates are retained for conversation display/compaction but are excluded from parser evidence; only unresolved tasks, stable facts, the bounded summary, and recent user messages are supplied as context.
-
-Memory configuration:
-
-- `MEMORY_DB_PATH`: optional SQLite path. Defaults to `memory.sqlite3` next to `AUTH_DB_PATH`.
-- `MEMORY_RECENT_MESSAGES`: recent short-term messages to retain, default `10`.
-- `MEMORY_SUMMARIZE_AFTER_MESSAGES`: compaction threshold, default `16`.
-- `MEMORY_SUMMARY_MAX_CHARS`: compact summary character cap, default `2000`.
-
-## Model Map
-
-Model names are configurable through environment variables so the project can move with API availability:
-
-- `OPENAI_TEXT_MODEL`: structured scope classification and text meal parsing when LLM mode is enabled.
-- `OPENAI_VISION_MODEL`: food-photo recognition and image+caption interpretation.
-- `OPENAI_CRITIC_MODEL`: schema-validated qualitative answer review after deterministic critic checks when LLM mode is enabled.
-- `CRITIC_MAX_ITERATIONS`: hard cap for critic-driven answer regeneration, default `2` and bounded to `0-3`.
-- Answer synthesis remains deterministic. A fixable critique regenerates the canonical localized answer from calculator totals and assumptions; the model cannot replace or recompute nutrition values.
-- User-facing estimates, clarifications, and refusals are localized for English and Russian text requests. If the user sends only an image, the default response language is English.
+The SQLite memory layer is scoped by `(user_id, conversation_id)` and stores recent messages, a compact older summary, one unresolved nutrition task, and stable nutrition context such as allergies or measurement preferences. This lets follow-ups like “100 g, fried” resolve against an earlier chicken question without mixing users or chats. Previous assistant estimates are retained for history but excluded from parser evidence; contributor-level details live in [AGENTS.md](AGENTS.md).
 
 ## Safety Design
 
-- The graph is a controlled LangGraph state machine, not an unconstrained agent loop.
-- LLM outputs that affect control flow are validated with Pydantic schemas.
-- Untrusted user text, OCR-like text, image observations, and external data are treated as data, not instructions.
-- Off-topic, hacking, prompt-extraction, unsafe diet, and medical-treatment requests are refused.
-- Unauthorized Telegram users receive only a minimal login prompt and cannot trigger expensive work.
-- Access keys are one-time by default. The application stores HMAC-SHA256 digests, not raw keys.
-- Final answers pass deterministic total/format checks and optional LLM qualitative review before output moderation. The controlled `critic -> synthesize -> critic` cycle can only revisit synthesis and terminates at `CRITIC_MAX_ITERATIONS`; an answer still rejected at the cap becomes a clarification.
+- Controlled LangGraph state machine, not an unconstrained agent loop.
+- Model outputs that affect routing or calculation inputs are parsed through Pydantic schemas.
+- User text, OCR-like text, image observations, and provider data are treated as untrusted data.
+- Off-topic, hacking, prompt-extraction, unsafe diet, and medical-treatment requests are refused in English or Russian where possible.
+- Unauthorized users cannot trigger expensive work; one-time access keys are stored only as HMAC-SHA256 digests.
+- Telegram request limits provide a simple daily spend/abuse guard for authorized users.
 
 ## Data Sources
 
-For recognizable ordinary foods and prepared dishes, the service follows an estimate-first policy. Missing portion or recipe details use documented standard-serving and conventional-dish assumptions with reduced confidence. Exact branded/provider data is still preferred; deterministic local priors are used when providers are unavailable or semantically invalid. A few unresolved ingredients no longer suppress an otherwise useful estimate: sufficiently covered partial totals are returned with an explicit omission warning. Mandatory clarification remains for unidentifiable foods, materially ambiguous requests, or requests with no defensible nutrition match.
+The retrieval policy is estimate-first but conservative: exact branded/provider data is preferred, defensible local priors are allowed, and materially ambiguous or unidentifiable foods become clarifications. Generic ingredients prefer USDA; branded, packaged, and restaurant items prefer FatSecret or branded/provider records; Open Food Facts remains a packaged-food fallback.
 
-- USDA FoodData Central lookup when `USDA_API_KEY` is configured. Generic ingredients prefer Foundation/SR Legacy data, and prepared dishes prefer FNDDS where relevant.
-- FatSecret Platform API lookup when `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` are configured. Branded products and restaurant menu items prefer FatSecret first.
-- Open Food Facts lookup remains available for packaged-food fallback.
-- Local fallback nutrition table for common foods and explicit category profiles such as regular/zero-sugar cola and standard Snickers, Twix, and Bounty bars.
+Food detection uses [app/tools/food_vocabulary.yaml](app/tools/food_vocabulary.yaml) as the source of truth for canonical names, aliases, fallback nutrition, default portions, localized labels, product metadata, Russian patterns, and scope-gate terms.
 
-Food detection now uses one data-backed vocabulary file, [app/tools/food_vocabulary.yaml](app/tools/food_vocabulary.yaml). It is the source of truth for canonical food names, aliases, fallback per-100 g nutrition, default portions, localized display labels, product alias metadata, Russian regex patterns, and scope-gate food terms. Canonical names remain the stable join keys for retrieval, calculation, synthesis, and tests.
+See [docs/nutrition-retrieval.md](docs/nutrition-retrieval.md) for provider details, candidate validation, diagnostics, cache behavior, and known limitations.
 
-An experimental multilingual linker is available behind flags. Exact vocabulary aliases are still checked first; if no exact match is found, a deterministic local character-ngram cosine index can link a span to the nearest canonical food. This local embedder was chosen for the first shadow-mode rollout because it has no OpenAI cost, no startup network dependency, and deterministic behavior over the small vocabulary. `FOOD_LINKER_SHADOW_ENABLED=true` computes legacy and embedding results, logs/attributes disagreements, and still serves the legacy matcher. `FOOD_LINKER_EMBEDDINGS_ENABLED=true` promotes the embedding linker to primary when it finds a match. Both flags default to `false`; the tuned default threshold is `FOOD_LINKER_SIMILARITY_THRESHOLD=0.62`.
+## Observability
 
-Provider outputs are normalized into a common candidate schema with a stable `source + source_id + serving_id` identity, serving metadata, per-100 g values when safely available, and deterministic ranking score components. Unknown single ingredients, branded products, and beverages never use the generic mixed-food fallback; the bot asks for a brand, serving, or label when no semantically valid candidate exists. The app does not persist FatSecret raw API responses or tokens.
-
-Independent ingredient lookups use a bounded thread pool because the provider clients are synchronous and I/O-bound. `NUTRITION_RETRIEVAL_MAX_WORKERS` defaults to `3` and is bounded to `1-8`; set it to `1` to restore serial lookup. Provider calls within one ingredient remain sequential, and results are always reassembled in meal-input order before calculation.
-
-Regular Coca-Cola aliases in English and Russian normalize to one branded sugary-soft-drink product. A can defaults to 330 ml, and volume is converted to calculator grams only for this recorded water-density beverage profile. Candidate validation rejects soft-drink records with implausible protein/fat or a regular/zero-sugar mismatch.
-
-Common international packaged products use a small deterministic alias registry before provider lookup. Russian forms such as `Сникерс`, `Сникерсе`, `Твикс`, `Твиксе`, and `Баунти` map to canonical English product names and bounded provider-query expansions such as `Snickers bar`. Explicit package weights are used exactly; otherwise the documented standard product serving is assumed. If structured providers fail, a product-specific per-100 g profile is used instead of `generic_mixed_food`. Values may differ by market or variant, so unusual editions still require a label photo.
-
-Retrieval diagnostics log the request UUID, canonical query, amount, provider queries, candidate identities, scores, validation reasons, selected identity, fallback path, and calculated totals. Raw user context is excluded by default. Set `NUTRITION_DIAGNOSTICS_INCLUDE_RAW=true` only during a controlled investigation; `NUTRITION_DIAGNOSTICS_MAX_PAYLOAD_CHARS` bounds and redacts that context.
-
-See [docs/nutrition-retrieval.md](docs/nutrition-retrieval.md) for the audit, runtime call chain, provider priority, and known limitations.
-
-External nutrition data can be incomplete or inconsistent, especially for packaged products. The app surfaces assumptions rather than claiming precision.
-
-## Phoenix Observability
-
-The project includes a minimal self-hosted Arize Phoenix setup for LangChain/LangGraph tracing. Phoenix is optional and disabled by default.
-
-Start Phoenix on the server:
-
-```bash
-./scripts/phoenix.sh start
-```
-
-Phoenix stores SQLite-backed data in the Docker volume `nutrition_agent_phoenix_data` and binds only to localhost:
-
-- `127.0.0.1:6006` for the UI and OTLP HTTP collector.
-- `127.0.0.1:4317` for the OTLP gRPC collector.
-
-Access the UI through an SSH tunnel:
-
-```bash
-ssh -L 6006:127.0.0.1:6006 <user>@<server-ip>
-```
-
-Then open:
-
-```text
-http://localhost:6006
-```
-
-Enable tracing for the bot by setting:
+Phoenix tracing is optional and disabled by default. When enabled, each request gets a `nutrition_agent.request` root span and LangGraph/LangChain/provider spans remain children of that request.
 
 ```bash
 ENABLE_PHOENIX_TRACING=true
@@ -176,62 +146,11 @@ PHOENIX_PROJECT_NAME=nutrition-agent
 PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces
 ```
 
-If the app runs in Docker Compose on the same network as Phoenix, use `PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces` instead. If Phoenix is disabled or unavailable, the app logs a warning and continues without tracing.
-
-Each processed request creates a `nutrition_agent.request` root span. Existing
-LangGraph, LangChain, OpenAI, and nutrition-provider spans remain children of that
-request span. Phoenix uses the standard `user.id` attribute for the Telegram user
-ID and `session.id` for the Telegram chat ID. The request metadata also contains
-the available fields below:
-
-- `telegram.update.id`
-- `telegram.user.id`, `username`, `first_name`, `last_name`, `display_name`,
-  `language_code`, and `is_bot`
-- `telegram.chat.id`, `type`, `title`, `username`, and `is_forum`
-- `telegram.conversation.id`
-- `telegram.message.id`, `thread_id`, `date`, `media_group_id`, and
-  `is_topic_message`
-- request ID, source, request type, language, graph/app versions, model names,
-  and critic configuration
-
-Optional Telegram fields are omitted when unavailable. Message text, captions,
-complete Telegram updates, authorization credentials, API keys, and bot tokens
-are not added to trace metadata. Telegram names and usernames are personally
-identifying data, so keep Phoenix bound to localhost and restrict SSH/UI access.
-Application logs include OpenTelemetry `trace_id` and `span_id` values plus
-request/user/chat/message numeric IDs where relevant, but not Telegram names or
-message contents.
-
-Useful commands:
-
-```bash
-./scripts/phoenix.sh status
-./scripts/phoenix.sh logs
-./scripts/phoenix.sh stop
-```
-
-Smoke check:
-
-1. Start Phoenix.
-2. Open the UI through the SSH tunnel.
-3. Enable tracing and restart the bot.
-4. Send one meal request.
-5. Confirm a `nutrition_agent.request` trace appears under the
-   `nutrition-agent` project and shows the expected `user.id`, `session.id`, and
-   `telegram.*` metadata.
-6. Disable tracing and confirm the bot still answers normally.
+Start Phoenix with `./scripts/phoenix.sh start`. Keep it bound to localhost because trace metadata includes Telegram user/chat identifiers. Full setup, SSH tunnel, metadata, and smoke-check notes are in [docs/observability.md](docs/observability.md).
 
 ## Evaluation
 
-Current checks include:
-
-- Unit tests for calculator aggregation, fallback lookup, graph routing, refusal behavior, auth, and secret hygiene.
-- A local adversarial eval suite for off-topic, prompt-injection, hacking, unsafe diet, and medical requests.
-- Mock evaluation mode that can run without API keys.
-- A tiny nutrition-quality eval using 3 rows derived from OpenIntro's public `fastfood` dataset.
-- A committed 111-case English/Russian golden regression set with 101 single-turn and 10 conversation-memory examples.
-
-Run the deterministic 17-case golden smoke split:
+The repository includes offline tests, adversarial safety checks, a tiny nutrition eval, and a 111-case English/Russian golden regression set. Most evals are no-LLM/no-provider by default.
 
 ```bash
 uv run python -m app.evals.run_golden_eval \
@@ -239,137 +158,41 @@ uv run python -m app.evals.run_golden_eval \
   --split smoke
 ```
 
-Run the full golden split by replacing `smoke` with `golden`. Reports are written as Markdown and JSON under `reports/eval/`; exact reference prose is not scored. Behavior, required/forbidden text, and calorie-range overlap determine pass/fail, while macro range checks are advisory. The default is offline and no-LLM; use `--live-providers` explicitly for provider integration checks.
-
-Golden evals have three parser lanes:
-
-- `--llm-mode off`: default deterministic fallback path with no LLM calls.
-- `--llm-mode stub`: production parser branch with deterministic golden fixtures, no paid API calls, and local moderation/scope/critic checks.
-- `--llm-mode live --allow-paid-api`: real configured production LLM parser path.
-
-Compare fallback and LLM-path lanes case-by-case with:
-
-```bash
-uv run python -m app.evals.compare_golden_lanes \
-  --fallback-run reports/eval/<fallback-run>.json \
-  --llm-run reports/eval/<llm-run>.json
-```
-
-Generate the food-linker shadow disagreement report with:
-
-```bash
-uv run python -m app.evals.food_linker_shadow_report --threshold 0.62
-```
-
-The frozen detector baseline lives in `tests/fixtures/food_detection_baseline.json` and covers the golden single-turn and conversation datasets. Shadow reports are ignored under `reports/eval/`.
-
-Upload a source JSONL to Phoenix with:
-
-```bash
-uv run python -m app.evals.phoenix_datasets \
-  --dataset evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl \
-  --name nutrition-agent-golden-single-turn-v2
-```
-
-See [evals/README.md](evals/README.md) for dataset structure, filters, all Phoenix dataset names, report semantics, and contribution guidance.
-
-Run the adversarial safety eval:
-
-```bash
-uv run python -m app.evals.run_eval --mock
-```
-
-Run the tiny nutrition eval:
-
-```bash
-uv run python -m app.evals.run_nutrition_eval --max-examples 3
-```
-
-The nutrition eval uses the OpenIntro `fastfood` dataset because it is public, small, downloadable as CSV without authentication, and includes calories plus protein, fat, and carbohydrate values. The tiny committed sample lives in `app/evals/fastfood_tiny_sample.jsonl`; the full dataset is not committed. OpenIntro describes the dataset as 515 fast-food items with nutrition fields such as calories, total fat, total carbs, and protein. OpenIntro's license page says most OpenIntro resources are released under Creative Commons BY-SA 3.0; see the dataset and license pages for attribution details:
-
-- Dataset: https://www.openintro.org/data/index.php?data=fastfood
-- CSV: https://www.openintro.org/data/csv/fastfood.csv
-- License: https://www.openintro.org/license/
-
-By default, the nutrition eval runs exactly 3 examples with `use_llm=False`, so it exercises the deterministic/local graph path and does not call OpenAI. Processing more than 3 examples requires `--allow-more-examples`; using LLM-backed graph paths requires both `--use-llm` and `--allow-paid-api`.
-
-Metrics are intentionally simple: predicted calorie midpoint versus ground-truth calories, absolute error, percentage error, mean absolute calorie error, and macro errors for protein, fat, and carbs when present. Results are written to `reports/eval/` as timestamped JSON and Markdown files; generated result files are ignored by git.
-
-This first nutrition eval is a smoke test, not a benchmark. Fast-food menu rows describe full prepared items, while the default no-LLM parser may map them to generic ingredients with assumed portions. Portion estimates are recorded for debugging but not scored because the dataset does not include serving weights.
-
-Future evaluation targets:
-
-- Nutrition5k for image meal evaluation.
-- NutriBench for text meal evaluation.
-- NutritionVerse-Real for real food image evaluation.
-
-Large datasets are intentionally not downloaded by this repository.
-
-## Known Limitations
-
-- Portion estimation from images is approximate.
-- Hidden oils, sauces, dressings, and mixed ingredients are difficult.
-- Packaged-food data can be incomplete or user-contributed.
-- The current packaging branch is basic and does not perform robust barcode scanning.
-- The project is not medical advice and should not be used for medical nutrition therapy.
+See [evals/README.md](evals/README.md) for adversarial evals, tiny nutrition evals, full golden runs, Phoenix dataset upload, report semantics, and contribution guidance.
 
 ## Local Development
 
 ```bash
 uv sync --extra dev
-cp .env.example .env
-uv run python -m app.bot.telegram_bot
-```
-
-Required environment variables:
-
-- `OPENAI_API_KEY`
-- `TELEGRAM_BOT_TOKEN`
-- `BOT_AUTH_SECRET`
-
-Optional environment variables:
-
-- `USDA_API_KEY`
-- `FATSECRET_CLIENT_ID`
-- `FATSECRET_CLIENT_SECRET`
-- `ENABLE_USDA`
-- `ENABLE_FATSECRET`
-- `ENABLE_OPEN_FOOD_FACTS`
-- `NUTRITION_RETRIEVAL_MAX_WORKERS`
-- `OPENAI_TEXT_MODEL`
-- `OPENAI_VISION_MODEL`
-- `OPENAI_CRITIC_MODEL`
-- `OPENAI_MODERATION_ENABLED`
-- `AUTH_DB_PATH`
-- `MEMORY_DB_PATH`
-- `MEMORY_RECENT_MESSAGES`
-- `MEMORY_SUMMARIZE_AFTER_MESSAGES`
-- `MEMORY_SUMMARY_MAX_CHARS`
-
-Generate a local access key:
-
-```bash
-uv run python -m app.cli.auth create-key --label "demo-user"
-```
-
-Run checks:
-
-```bash
-uv run pytest
 uv run ruff check .
+uv run pytest
 uv run python -m app.evals.run_eval --mock
 uv run python -m app.evals.run_retrieval_smoke
 ```
 
-Live nutrition-provider tests are disabled by default. To run them intentionally:
+Live provider checks are available with `uv run python -m app.evals.run_retrieval_smoke --live` and are disabled by default.
 
-```bash
-RUN_LIVE_NUTRITION_TESTS=1 uv run pytest tests/test_live_nutrition_providers.py
-uv run python -m app.evals.run_retrieval_smoke --live
-```
+## Configuration
 
-## Deployment
+| Variable | Required? | Default | Purpose |
+| --- | --- | --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Yes | none | Telegram polling bot token. |
+| `BOT_AUTH_SECRET` | Yes | none | HMAC secret for one-time access keys. |
+| `OPENAI_API_KEY` | Yes for normal LLM operation | none | Structured text, vision, critic, and optional moderation calls. |
+| `USDA_API_KEY` | Optional | empty | Enables USDA FoodData Central lookup. |
+| `FATSECRET_CLIENT_ID` / `FATSECRET_CLIENT_SECRET` | Optional | empty | Enables FatSecret lookup. |
+| `ENABLE_PHOENIX_TRACING` | Optional | `false` | Enables OpenTelemetry/Phoenix tracing. |
+| `AUTH_DB_PATH`, `MEMORY_DB_PATH`, `USAGE_DB_PATH` | Optional | `data/*.sqlite3` | SQLite locations for auth, memory, and request limits. |
+| `BOT_DAILY_USER_REQUEST_LIMIT`, `BOT_DAILY_GLOBAL_REQUEST_LIMIT` | Optional | `100`, `1000` | Telegram request caps; `0` disables each cap. |
+
+See [.env.example](.env.example) for the full configuration surface.
+
+## Known Limitations
+
+Portion estimation from images is approximate; hidden oils, sauces, and mixed ingredients are difficult; packaged-food data can be incomplete or user-contributed; and the packaging branch does not yet perform robust barcode scanning. The app surfaces assumptions rather than claiming precision.
+
+## Deployment And License
 
 Deployment is intentionally documented with placeholders only. Do not commit real server addresses, usernames, bot tokens, API keys, auth databases, logs, downloaded images, or environment files.
 
-See [AGENTS.md](AGENTS.md) for contributor-oriented technical notes.
+See [AGENTS.md](AGENTS.md) for contributor-oriented technical notes. This project is released under the [MIT License](LICENSE).
