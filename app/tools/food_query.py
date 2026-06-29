@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from app.i18n import detect_language
 from app.tools.fallback_nutrition import lookup_fallback_profile, normalize_food_query
@@ -23,6 +23,17 @@ FoodCategory = Literal[
     "unknown",
 ]
 ProductVariant = Literal["regular", "zero_sugar", "unknown"]
+_FOOD_CATEGORY_VALUES: frozenset[str] = frozenset(
+    {
+        "food",
+        "chocolate_bar",
+        "sugary_soft_drink",
+        "zero_sugar_soft_drink",
+        "plain_water",
+        "unknown",
+    }
+)
+_PRODUCT_VARIANT_VALUES: frozenset[str] = frozenset({"regular", "zero_sugar", "unknown"})
 
 
 @dataclass(frozen=True)
@@ -59,14 +70,26 @@ class NormalizedFoodQuery:
     query_expansions: tuple[str, ...] = ()
 
 
+def _food_category(value: str | None) -> FoodCategory:
+    if value in _FOOD_CATEGORY_VALUES:
+        return cast(FoodCategory, value)
+    return "unknown"
+
+
+def _product_variant(value: str | None) -> ProductVariant:
+    if value in _PRODUCT_VARIANT_VALUES:
+        return cast(ProductVariant, value)
+    return "unknown"
+
+
 _VOCABULARY = load_food_vocabulary()
 
 PRODUCT_ALIASES: tuple[ProductAliasProfile, ...] = tuple(
     ProductAliasProfile(
         canonical_product=product.canonical_product,
         brand=product.brand,
-        category=product.category,  # type: ignore[arg-type]
-        variant=product.variant,  # type: ignore[arg-type]
+        category=_food_category(product.category),
+        variant=_product_variant(product.variant),
         aliases=product.aliases,
         product_type=product.product_type,
         query_expansions=product.query_expansions,
@@ -139,7 +162,7 @@ def normalize_food_description(
         quantity=quantity,
         unit=unit,
         region=region,
-        food_category=(
+        food_category=_food_category(
             product.category
             if product
             else fallback_profile.food_category

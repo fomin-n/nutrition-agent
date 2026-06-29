@@ -1,5 +1,6 @@
 import logging
 from functools import lru_cache
+from typing import Literal
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -112,7 +113,7 @@ def process_request(
     text: str | None = None,
     image_path: str | None = None,
     image_mime_type: str | None = None,
-    source: str = "telegram",
+    source: Literal["telegram", "cli", "test", "phoenix_eval"] = "telegram",
     use_llm: bool = True,
     user_id: str | int | None = None,
     session_id: str | int | None = None,
@@ -152,7 +153,7 @@ def process_request(
                         text=effective_text,
                         image_path=image_path,
                         image_mime_type=image_mime_type,
-                        source=source,  # type: ignore[arg-type]
+                        source=source,
                     ),
                     "use_llm": use_llm,
                     "memory_context": memory_context.model_dump() if memory_context else {},

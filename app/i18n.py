@@ -1,4 +1,5 @@
 import re
+from collections.abc import Mapping
 from typing import Any, Literal
 
 LanguageCode = Literal["en", "ru", "unknown"]
@@ -16,7 +17,7 @@ def response_language(language: str | None) -> Literal["en", "ru"]:
     return "ru" if language == "ru" else "en"
 
 
-def state_language(state: dict[str, Any]) -> Literal["en", "ru"]:
+def state_language(state: Mapping[str, Any]) -> Literal["en", "ru"]:
     normalized = state.get("normalized_input")
     if normalized is not None and getattr(normalized, "language", None):
         return response_language(normalized.language)

@@ -27,8 +27,14 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Type check
+        run: uv run mypy app
+
       - name: Test
-        run: uv run pytest
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=75
+
+      - name: Dependency audit
+        run: uv run pip-audit --progress-spinner off
 
       - name: Mock adversarial eval
         run: uv run python -m app.evals.run_eval --mock

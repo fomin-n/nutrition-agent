@@ -1,5 +1,7 @@
 import argparse
 import sys
+from collections.abc import Sequence
+from typing import Any
 
 from app.auth.service import AuthConfigurationError, AuthService
 
@@ -68,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-def _print_table(headers: list[str], rows: list[object]) -> None:
+def _print_table(headers: list[str], rows: Sequence[Any]) -> None:
     print("\t".join(headers))
     for row in rows:
         print("\t".join(str(row[header] or "") for header in headers))
@@ -76,4 +78,3 @@ def _print_table(headers: list[str], rows: list[object]) -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

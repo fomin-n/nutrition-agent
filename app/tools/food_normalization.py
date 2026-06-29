@@ -300,8 +300,8 @@ def estimate_portion(
 
     if mention.product and mention.product.default_serving_amount:
         amount = mention.product.default_serving_amount
-        count = _nearby_count(normalized, mention) or 1
-        amount *= count
+        serving_count = _nearby_count(normalized, mention) or 1
+        amount *= serving_count
         unit = mention.product.default_serving_unit
         if unit in VOLUME_ML:
             density = _density_g_per_ml(mention.canonical_name)

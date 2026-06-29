@@ -58,7 +58,7 @@ class TelegramRequestContext:
             is_topic_message=_optional_bool(getattr(message, "is_topic_message", None)),
         )
 
-    def to_trace_metadata(self) -> dict[str, str | int | bool]:
+    def to_trace_metadata(self) -> dict[str, str | int | float | bool | None]:
         values: dict[str, str | int | bool | None] = {
             "telegram.update.id": self.update_id,
             "telegram.user.id": self.user_id,

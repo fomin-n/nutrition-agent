@@ -460,13 +460,12 @@ def extract_long_term_facts(text: str | None) -> list[tuple[str, str, str]]:
 def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str:
     if not context:
         return ""
-    if isinstance(context, dict):
-        context = MemoryContext.model_validate(context)
+    memory_context = MemoryContext.model_validate(context) if isinstance(context, dict) else context
     lines: list[str] = []
-    if context.summary:
-        lines.append(f"Older conversation summary: {context.summary}")
-    if context.unresolved_task:
-        task = context.unresolved_task
+    if memory_context.summary:
+        lines.append(f"Older conversation summary: {memory_context.summary}")
+    if memory_context.unresolved_task:
+        task = memory_context.unresolved_task
         missing = ", ".join(task.missing_fields) or "none"
         lines.append(
             "Current unresolved task: "
@@ -476,13 +475,13 @@ def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str
             f"variant={task.variant or 'unknown'}; "
             f"missing={missing}."
         )
-    if context.facts:
-        facts = "; ".join(f"{fact.fact_type}:{fact.key}={fact.value}" for fact in context.facts[:12])
+    if memory_context.facts:
+        facts = "; ".join(f"{fact.fact_type}:{fact.key}={fact.value}" for fact in memory_context.facts[:12])
         lines.append(f"Stable user facts: {facts}")
-    if context.recent_messages:
+    if memory_context.recent_messages:
         compact_messages = [
             f"user: {_compact_text(message.text, 120)}"
-            for message in context.recent_messages[-6:]
+            for message in memory_context.recent_messages[-6:]
             if message.role == "user"
         ]
         if compact_messages:

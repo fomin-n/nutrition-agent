@@ -91,7 +91,7 @@ def validate_candidate(
         if protein < 12 or fat > 35 or carbs > 8:
             reasons.append("plain_beef_macros_out_of_range")
     elif canonical == "potato boiled":
-        excluded_terms = ("fried", "fries", "chips", "salad", "mashed", "gratin")
+        excluded_terms: tuple[str, ...] = ("fried", "fries", "chips", "salad", "mashed", "gratin")
         if any(term in candidate_haystack for term in excluded_terms):
             reasons.append("boiled_potato_preparation_mismatch")
         if not 45 <= calories <= 150 or fat > 3 or not 8 <= carbs <= 35:

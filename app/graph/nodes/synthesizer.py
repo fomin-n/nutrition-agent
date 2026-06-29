@@ -67,7 +67,8 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
 
     confidence = _combined_confidence(meal, totals, has_failures=bool(failures))
     normalized = state.get("normalized_input")
-    if len(items) >= 2 and _is_comparison_request(normalized.text if normalized else ""):
+    normalized_text = normalized.text if normalized and normalized.text else ""
+    if len(items) >= 2 and _is_comparison_request(normalized_text):
         return {
             "final_estimate": FinalEstimate(
                 text=_format_calorie_comparison(items, language=language, confidence=confidence),
