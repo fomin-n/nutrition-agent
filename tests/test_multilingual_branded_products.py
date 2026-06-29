@@ -20,10 +20,10 @@ def offline_retrieval(monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("text", "calories", "macros"),
     [
-        ("Сколько калорий в Сникерс (50g)?", "250-250 ккал", ("4-4 г", "12-12 г", "31-31 г")),
-        ("Сколько калорий в Сникерсе?", "250-250 ккал", ("4-4 г", "12-12 г", "31-31 г")),
-        ("Сколько калорий в Твиксе?", "250-250 ккал", ("2-2 г", "12-12 г", "32-32 г")),
-        ("Сколько калорий в Баунти?", "280-280 ккал", ("2-2 г", "15-15 г", "34-34 г")),
+        ("Сколько калорий в Сникерс (50g)?", "250 ккал", ("4 г", "12 г", "31 г")),
+        ("Сколько калорий в Сникерсе?", "250 ккал", ("4 г", "12 г", "31 г")),
+        ("Сколько калорий в Твиксе?", "250 ккал", ("2 г", "12 г", "32 г")),
+        ("Сколько калорий в Баунти?", "280 ккал", ("2 г", "15 г", "34 г")),
     ],
 )
 def test_russian_branded_snacks_return_estimates(
@@ -43,9 +43,9 @@ def test_russian_branded_snacks_return_estimates(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("How many calories are in Snickers (50g)?", "250-250 kcal"),
-        ("How many calories are in a Twix bar?", "250-250 kcal"),
-        ("How many calories are in a Bounty bar?", "280-280 kcal"),
+        ("How many calories are in Snickers (50g)?", "250 kcal"),
+        ("How many calories are in a Twix bar?", "250 kcal"),
+        ("How many calories are in a Bounty bar?", "280 kcal"),
     ],
 )
 def test_english_branded_snacks_still_work(offline_retrieval, text: str, expected: str) -> None:
@@ -63,7 +63,7 @@ def test_russian_snack_comparison_is_not_aggregated(offline_retrieval) -> None:
         use_llm=False,
     )
 
-    assert answer.startswith("Сравнение калорийности:")
+    assert answer.startswith("🔥 Сравнение калорийности")
     assert "Snickers (50 г): 250 ккал" in answer
     assert "Twix (50 г): 250 ккал" in answer
     assert "примерно одинаковая" in answer

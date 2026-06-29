@@ -78,7 +78,7 @@ def test_zero_sugar_cola_zero_total_is_not_rejected_by_critic(monkeypatch) -> No
         use_llm=False,
     )
 
-    assert "Оценка калорий: 0-0 ккал" in answer
+    assert "🔥 Калории: 0 ккал" in answer
     assert "Нужно еще" not in answer
 
 

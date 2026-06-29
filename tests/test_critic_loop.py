@@ -52,7 +52,7 @@ def test_deterministic_revision_restores_calculator_totals() -> None:
     revised_state.update(synthesize_answer(revised_state))
     second = critic_module.critic(revised_state)["critic_result"]
 
-    assert revised_state["final_estimate"].text.startswith("Estimated calories: 100-120 kcal")
+    assert revised_state["final_estimate"].text.startswith("🔥 Calories: 100–120 kcal")
     assert "999" not in revised_state["final_estimate"].text
     assert second.action == "accept"
 
@@ -159,7 +159,7 @@ def test_graph_always_rejected_answer_stops_at_cap(
     assert state["critic_result"].action == "clarify"
     assert state["final_estimate"].is_clarification is True
     assert state["final_estimate"].text.startswith("I need one more detail")
-    assert "Estimated calories:" not in state["final_estimate"].text
+    assert "🔥 Calories:" not in state["final_estimate"].text
 
 
 def test_critic_iteration_setting_is_bounded() -> None:
@@ -183,13 +183,11 @@ def _estimate_state(
         carbs_g=MacroRange(min=15, max=20),
     )
     answer = text or (
-        "Estimated calories: 100-120 kcal\n"
-        "Protein: 10-12 g\n"
-        "Fat: 3-4 g\n"
-        "Carbs: 15-20 g\n"
-        "Main assumptions:\n"
-        "* Standard portion.\n"
-        "Confidence: high"
+        "🔥 Calories: 100–120 kcal\n\n"
+        "Protein: 10–12 g  •  Fat: 3–4 g  •  Carbs: 15–20 g\n\n"
+        "📋 Assumptions:\n"
+        "• Standard portion.\n\n"
+        "🟢 Confidence: High"
     )
     return {
         "normalized_input": NormalizedInput(

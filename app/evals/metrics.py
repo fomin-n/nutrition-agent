@@ -30,15 +30,16 @@ def calculate_route_metrics(results: list[dict[str, str]]) -> EvalMetrics:
 
 
 def final_answer_format_ok(text: str) -> bool:
-    required = (
-        "Estimated calories:",
-        "Protein:",
-        "Fat:",
-        "Carbs:",
-        "Main assumptions:",
-        "Confidence:",
+    folded = text.casefold()
+    required_groups = (
+        ("calories:", "estimated calories:", "калории:", "оценка калорий:"),
+        ("protein:", "белки:"),
+        ("fat:", "жиры:"),
+        ("carbs:", "углеводы:"),
+        ("assumptions:", "допущения:", "main assumptions:", "основные допущения:"),
+        ("confidence:", "уверенность:"),
     )
-    return all(part in text for part in required)
+    return all(any(part in folded for part in group) for group in required_groups)
 
 
 def calculator_correctness_ok(expected: float, actual: float, tolerance: float = 0.01) -> bool:

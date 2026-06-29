@@ -59,11 +59,11 @@ def test_water_with_additives_is_not_classified_as_plain_water(text: str) -> Non
 @pytest.mark.parametrize(
     ("text", "language_marker"),
     [
-        ("Сколько калорий в литре воды?", "Уверенность: высокая"),
-        ("Сколько калорий в 500 мл воды?", "Уверенность: высокая"),
-        ("Сколько калорий в обычной воде?", "Уверенность: высокая"),
-        ("How many calories are in one liter of water?", "Confidence: high"),
-        ("How many calories are in 500 ml of plain water?", "Confidence: high"),
+        ("Сколько калорий в литре воды?", "🟢 Уверенность: высокая"),
+        ("Сколько калорий в 500 мл воды?", "🟢 Уверенность: высокая"),
+        ("Сколько калорий в обычной воде?", "🟢 Уверенность: высокая"),
+        ("How many calories are in one liter of water?", "🟢 Confidence: High"),
+        ("How many calories are in 500 ml of plain water?", "🟢 Confidence: High"),
     ],
 )
 def test_plain_water_full_graph_returns_verified_zero(
@@ -75,7 +75,7 @@ def test_plain_water_full_graph_returns_verified_zero(
 
     answer = process_request(text=text, source="test", use_llm=False)
 
-    assert "0-0" in answer
+    assert "0" in answer
     assert language_marker in answer
     assert "reliable nutrition data" not in answer
     assert "надежные данные" not in answer

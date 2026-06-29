@@ -7,9 +7,9 @@ def test_graph_text_meal_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Estimated calories:" in answer
+    assert "🔥 Calories:" in answer
     assert "Protein:" in answer
-    assert "Main assumptions:" in answer
+    assert "📋 Assumptions:" in answer
     assert "Confidence:" in answer
 
 
@@ -19,9 +19,9 @@ def test_graph_russian_text_meal_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Оценка калорий:" in answer
+    assert "🔥 Калории:" in answer
     assert "Белки:" in answer
-    assert "Основные допущения:" in answer
+    assert "📋 Допущения:" in answer
     assert "Уверенность:" in answer
     assert "I can only estimate" not in answer
 
@@ -32,7 +32,7 @@ def test_graph_russian_nutrition_question_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Оценка калорий:" in answer
+    assert "🔥 Калории:" in answer
     assert "Белки:" in answer
     assert "яйца" in answer
 
@@ -43,7 +43,7 @@ def test_graph_russian_oatmeal_question_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Оценка калорий:" in answer
+    assert "🔥 Калории:" in answer
     assert "овсянка" in answer
     assert "Я могу оценивать только" not in answer
     assert "I can only estimate" not in answer
@@ -55,7 +55,7 @@ def test_graph_russian_apple_question_with_typo_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Оценка калорий:" in answer
+    assert "🔥 Калории:" in answer
     assert "яблоко" in answer
     assert "Я могу оценивать только" not in answer
     assert "I can only estimate" not in answer
@@ -67,9 +67,9 @@ def test_graph_english_caesar_salad_no_llm() -> None:
         source="test",
         use_llm=False,
     )
-    assert "Estimated calories:" in answer
+    assert "🔥 Calories:" in answer
     assert "Protein:" in answer
-    assert "Оценка калорий:" not in answer
+    assert "🔥 Калории:" not in answer
 
 
 def test_graph_refuses_off_topic_no_llm() -> None:

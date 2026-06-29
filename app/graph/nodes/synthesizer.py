@@ -115,38 +115,47 @@ def _format_estimate(
     language: str = "en",
 ) -> str:
     language = response_language(language)
-    assumption_lines = "\n".join(f"* {assumption}" for assumption in assumptions[:8])
+    assumption_lines = "\n".join(f"• {assumption}" for assumption in assumptions)
     if not assumption_lines:
         assumption_lines = (
-            "* Приняты стандартные видимые или указанные порции."
+            "• Приняты стандартные видимые или указанные порции."
             if language == "ru"
-            else "* Standard visible/mentioned portions."
+            else "• Standard visible/mentioned portions."
         )
+    calories = _format_range(totals.calories_kcal.min, totals.calories_kcal.max)
+    protein = _format_range(totals.protein_g.min, totals.protein_g.max)
+    fat = _format_range(totals.fat_g.min, totals.fat_g.max)
+    carbs = _format_range(totals.carbs_g.min, totals.carbs_g.max)
+    confidence_line = _format_confidence(confidence, language)
     if language == "ru":
         return (
-            f"Оценка калорий: {totals.calories_kcal.min:.0f}-{totals.calories_kcal.max:.0f} ккал\n"
-            f"Белки: {totals.protein_g.min:.0f}-{totals.protein_g.max:.0f} г\n"
-            f"Жиры: {totals.fat_g.min:.0f}-{totals.fat_g.max:.0f} г\n"
-            f"Углеводы: {totals.carbs_g.min:.0f}-{totals.carbs_g.max:.0f} г\n"
-            "Основные допущения:\n"
-            f"{assumption_lines}\n"
-            f"Уверенность: {_confidence_label(confidence, language)}"
+            f"🔥 Калории: {calories} ккал\n\n"
+            f"Белки: {protein} г  •  Жиры: {fat} г  •  Углеводы: {carbs} г\n\n"
+            "📋 Допущения:\n"
+            f"{assumption_lines}\n\n"
+            f"{confidence_line}"
         )
     return (
-        f"Estimated calories: {totals.calories_kcal.min:.0f}-{totals.calories_kcal.max:.0f} kcal\n"
-        f"Protein: {totals.protein_g.min:.0f}-{totals.protein_g.max:.0f} g\n"
-        f"Fat: {totals.fat_g.min:.0f}-{totals.fat_g.max:.0f} g\n"
-        f"Carbs: {totals.carbs_g.min:.0f}-{totals.carbs_g.max:.0f} g\n"
-        "Main assumptions:\n"
-        f"{assumption_lines}\n"
-        f"Confidence: {confidence}"
+        f"🔥 Calories: {calories} kcal\n\n"
+        f"Protein: {protein} g  •  Fat: {fat} g  •  Carbs: {carbs} g\n\n"
+        "📋 Assumptions:\n"
+        f"{assumption_lines}\n\n"
+        f"{confidence_line}"
     )
 
 
 def _confidence_label(confidence: Confidence, language: str) -> str:
     if language != "ru":
-        return confidence
+        return {"low": "Low", "medium": "Medium", "high": "High"}[confidence]
     return {"low": "низкая", "medium": "средняя", "high": "высокая"}[confidence]
+
+
+def _format_confidence(confidence: Confidence, language: str) -> str:
+    prefix = {"low": "🔴", "medium": "🟡", "high": "🟢"}[confidence]
+    label = _confidence_label(confidence, language)
+    if language == "ru":
+        return f"{prefix} Уверенность: {label}"
+    return f"{prefix} Confidence: {label}"
 
 
 def _combined_confidence(
@@ -166,8 +175,8 @@ def _has_usable_partial_estimate(items: list, failures: list) -> bool:
 
 def _optional_refinement_note(language: str) -> str:
     if language == "ru":
-        return "Для более точной оценки можно указать вес порции, рецепт и добавки."
-    return "For a more precise estimate, provide the portion weight, recipe, and additions."
+        return "💡 Для более точной оценки можно указать вес порции, рецепт и добавки."
+    return "💡 For a more precise estimate, provide the portion weight, recipe, and additions."
 
 
 def _is_comparison_request(text: str) -> bool:
@@ -194,38 +203,40 @@ def _format_calorie_comparison(items, *, language: str, confidence: Confidence) 
     winners = [row for row in rows if top_midpoint - row[4] <= max(10, top_midpoint * 0.05)]
     language = response_language(language)
     if language == "ru":
-        lines = ["Сравнение калорийности:"]
+        lines = ["🔥 Сравнение калорийности", ""]
         for name, grams_min, grams_max, item_totals, _ in rows:
             weight = _format_weight(grams_min, grams_max, "г")
             calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
-            lines.append(f"* {name} ({weight}): {calories} ккал")
+            lines.append(f"• {name} ({weight}): {calories} ккал")
+        lines.append("")
         if len(winners) > 1:
-            lines.append("Калорийность примерно одинаковая с учетом округления и различий между рынками.")
+            lines.append("Итог: калорийность примерно одинаковая с учетом округления и различий между рынками.")
         else:
-            lines.append(f"Больше калорий в {winners[0][0]}.")
-        lines.append(f"Уверенность: {_confidence_label(confidence, language)}")
+            lines.append(f"Итог: больше калорий в {winners[0][0]}.")
+        lines.append(_format_confidence(confidence, language))
         return "\n".join(lines)
 
-    lines = ["Calorie comparison:"]
+    lines = ["🔥 Calorie comparison", ""]
     for name, grams_min, grams_max, item_totals, _ in rows:
         weight = _format_weight(grams_min, grams_max, "g")
         calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
-        lines.append(f"* {name} ({weight}): {calories} kcal")
+        lines.append(f"• {name} ({weight}): {calories} kcal")
+    lines.append("")
     if len(winners) > 1:
-        lines.append("They are approximately equal after rounding and market variation.")
+        lines.append("Result: they are approximately equal after rounding and market variation.")
     else:
-        lines.append(f"{winners[0][0]} has more calories.")
-    lines.append(f"Confidence: {confidence}")
+        lines.append(f"Result: {winners[0][0]} has more calories.")
+    lines.append(_format_confidence(confidence, language))
     return "\n".join(lines)
 
 
 def _format_weight(minimum: float, maximum: float, unit: str) -> str:
     if minimum == maximum:
         return f"{minimum:.0f} {unit}"
-    return f"{minimum:.0f}-{maximum:.0f} {unit}"
+    return f"{minimum:.0f}–{maximum:.0f} {unit}"
 
 
 def _format_range(minimum: float, maximum: float) -> str:
     if minimum == maximum:
         return f"{minimum:.0f}"
-    return f"{minimum:.0f}-{maximum:.0f}"
+    return f"{minimum:.0f}–{maximum:.0f}"

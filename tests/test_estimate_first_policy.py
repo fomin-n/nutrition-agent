@@ -64,8 +64,8 @@ def test_common_russian_food_requests_return_estimates(
     assert final.is_clarification is False
     assert final.is_refusal is False
     assert final.confidence == expected_confidence
-    assert "Оценка калорий:" in final.text
-    assert "Основные допущения:" in final.text
+    assert "🔥 Калории:" in final.text
+    assert "📋 Допущения:" in final.text
 
 
 @pytest.mark.parametrize(
@@ -89,8 +89,8 @@ def test_russian_and_english_priors_are_consistent(
     ]
 
     assert states[0]["totals"] == states[1]["totals"]
-    assert "Оценка калорий:" in states[0]["final_estimate"].text
-    assert "Estimated calories:" in states[1]["final_estimate"].text
+    assert "🔥 Калории:" in states[0]["final_estimate"].text
+    assert "🔥 Calories:" in states[1]["final_estimate"].text
 
 
 def test_known_dish_prior_wins_over_llm_recipe_decomposition(

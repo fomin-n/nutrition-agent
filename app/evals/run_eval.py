@@ -53,11 +53,10 @@ def _infer_route_from_answer(answer: str) -> str:
         return "unsafe"
     if answer.startswith("I need one more detail"):
         return "needs_clarification"
-    if "Estimated calories:" in answer:
+    if "Estimated calories:" in answer or "🔥 Calories:" in answer:
         return "text_meal"
     return "unknown"
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

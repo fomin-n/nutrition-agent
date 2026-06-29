@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from app.graph.state import NutritionGraphState
 from app.i18n import default_clarification_question, largest_portions_question, state_language
@@ -200,25 +201,20 @@ def _answer_consistency_issues(
     totals = state.get("totals")
     if totals is None or _is_comparison_answer(final.text):
         return []
-    language = state_language(state)
-    if language == "ru":
-        expected = {
-            "calories": f"Оценка калорий: {_range(totals.calories_kcal.min, totals.calories_kcal.max)} ккал",
-            "protein": f"Белки: {_range(totals.protein_g.min, totals.protein_g.max)} г",
-            "fat": f"Жиры: {_range(totals.fat_g.min, totals.fat_g.max)} г",
-            "carbs": f"Углеводы: {_range(totals.carbs_g.min, totals.carbs_g.max)} г",
-        }
-    else:
-        expected = {
-            "calories": f"Estimated calories: {_range(totals.calories_kcal.min, totals.calories_kcal.max)} kcal",
-            "protein": f"Protein: {_range(totals.protein_g.min, totals.protein_g.max)} g",
-            "fat": f"Fat: {_range(totals.fat_g.min, totals.fat_g.max)} g",
-            "carbs": f"Carbs: {_range(totals.carbs_g.min, totals.carbs_g.max)} g",
-        }
+    expected = {
+        "calories": (
+            ("Calories", "Estimated calories", "Калории", "Оценка калорий"),
+            totals.calories_kcal.min,
+            totals.calories_kcal.max,
+        ),
+        "protein": (("Protein", "Белки"), totals.protein_g.min, totals.protein_g.max),
+        "fat": (("Fat", "Жиры"), totals.fat_g.min, totals.fat_g.max),
+        "carbs": (("Carbs", "Углеводы"), totals.carbs_g.min, totals.carbs_g.max),
+    }
     return [
         f"answer {label} does not match deterministic totals"
-        for label, required_text in expected.items()
-        if required_text not in final.text
+        for label, (labels, minimum, maximum) in expected.items()
+        if not _contains_expected_range(final.text, labels, minimum, maximum)
     ]
 
 
@@ -239,11 +235,43 @@ def _critic_payload(state: NutritionGraphState, *, iteration: int) -> str:
 
 
 def _is_comparison_answer(text: str) -> bool:
-    return text.startswith(("Calorie comparison:", "Сравнение калорийности:"))
+    normalized = text.lstrip()
+    return normalized.startswith(
+        (
+            "Calorie comparison:",
+            "🔥 Calorie comparison",
+            "Сравнение калорийности:",
+            "🔥 Сравнение калорийности",
+        )
+    )
 
 
-def _range(minimum: float, maximum: float) -> str:
-    return f"{minimum:.0f}-{maximum:.0f}"
+def _contains_expected_range(
+    text: str,
+    labels: tuple[str, ...],
+    minimum: float,
+    maximum: float,
+) -> bool:
+    expected_minimum = round(minimum)
+    expected_maximum = round(maximum)
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    range_pattern = (
+        r"(?P<minimum>\d+(?:[.,]\d+)?)"
+        r"(?:\s*[-–—]\s*(?P<maximum>\d+(?:[.,]\d+)?))?"
+    )
+    for match in re.finditer(
+        rf"(?:{label_pattern})\s*:\s*{range_pattern}",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        parsed_minimum = round(float(match.group("minimum").replace(",", ".")))
+        maximum_group = match.group("maximum")
+        parsed_maximum = (
+            round(float(maximum_group.replace(",", "."))) if maximum_group else parsed_minimum
+        )
+        if {parsed_minimum, parsed_maximum} == {expected_minimum, expected_maximum}:
+            return True
+    return False
 
 
 def _log_result(result: CriticResult, *, request_id: str | None) -> None:

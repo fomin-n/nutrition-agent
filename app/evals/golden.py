@@ -186,14 +186,21 @@ def classify_answer_behavior(answer: str) -> Literal["estimate", "clarify", "ref
         return "refuse"
     if any(marker in folded for marker in clarification_markers):
         return "clarify"
-    if "kcal" in folded or "ккал" in folded or "estimated calories" in folded or "оценка калорий" in folded:
+    if (
+        "kcal" in folded
+        or "ккал" in folded
+        or "estimated calories" in folded
+        or "оценка калорий" in folded
+        or "calories:" in folded
+        or "калории:" in folded
+    ):
         return "estimate"
     return "unknown"
 
 
 def parse_nutrition_ranges(answer: str) -> dict[str, dict[str, float]]:
     labels = {
-        "calories_kcal": ("estimated calories", "оценка калорий"),
+        "calories_kcal": ("calories", "estimated calories", "калории", "оценка калорий"),
         "protein_g": ("protein", "белки"),
         "fat_g": ("fat", "жиры"),
         "carbs_g": ("carbs", "углеводы"),

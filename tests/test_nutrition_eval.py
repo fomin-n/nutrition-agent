@@ -73,7 +73,7 @@ def test_nutrition_eval_no_llm_graph_path() -> None:
 
     assert len(results) == 1
     result = results[0]
-    assert result["model_output"]["text"].startswith("Estimated calories:")
+    assert result["model_output"]["text"].startswith("🔥 Calories:")
     assert result["components"]["scope_route"] == "text_meal"
     assert result["components"]["extraction"]["expected_ingredient_recall"] == 1
     assert result["parsed_prediction"]["calories_kcal"]["min"] > 0

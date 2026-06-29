@@ -71,7 +71,7 @@ def test_chicken_followup_completes_after_cut(tmp_path, monkeypatch) -> None:
         memory_service=memory,
     )
 
-    assert "Estimated calories:" in final
+    assert "🔥 Calories:" in final
     assert "chicken" in final.lower()
     assert memory.load_context(1, 10).unresolved_task is None
 
@@ -148,9 +148,9 @@ def test_standalone_cola_request_is_not_contaminated_by_previous_foods(tmp_path,
         for text in requests
     ]
 
-    assert "140-140 kcal" in answers[1]
-    assert "140-140 ккал" in answers[3]
-    assert "Белки: 0-0 г" in answers[3]
+    assert "140 kcal" in answers[1]
+    assert "140 ккал" in answers[3]
+    assert "Белки: 0 г" in answers[3]
     assert "chicken" not in answers[3].lower()
 
 
@@ -182,7 +182,7 @@ def test_russian_fish_followup_resolves_generic_pending_task(tmp_path, monkeypat
 
     assert "вид рыбы" in first
     assert prepared.effective_text == "лосось, 200 г, запеченный"
-    assert "Оценка калорий:" in second
+    assert "🔥 Калории:" in second
     assert "лосось" in second
     assert memory.load_context(1, 10).unresolved_task is None
 
@@ -220,7 +220,7 @@ def test_russian_danone_and_english_rice_followups_keep_context(tmp_path, monkey
 
         assert "detail" in first or "информации" in first
         assert prepared.effective_text == expected_effective
-        assert "Estimated calories:" in second or "Оценка калорий:" in second
+        assert "🔥 Calories:" in second or "🔥 Калории:" in second
 
 
 def test_russian_chicken_followup_still_asks_only_for_cut(tmp_path) -> None:
@@ -297,7 +297,7 @@ def test_new_russian_food_request_replaces_pending_chicken(tmp_path, monkeypatch
         memory_service=memory,
     )
 
-    assert "Оценка калорий:" in answer
+    assert "🔥 Калории:" in answer
     assert "банан" in answer
     assert "куриц" not in answer
     assert memory.load_context(1, 10).unresolved_task is None
