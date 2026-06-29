@@ -1,9 +1,38 @@
 import logging
+from types import SimpleNamespace
 
 from pydantic import SecretStr
 
 from app.llm import client as client_module
-from app.llm.client import ModerationService, Settings, local_moderate_text
+from app.llm.client import ModerationService, Settings, build_chat_model, local_moderate_text
+
+
+def test_build_chat_model_uses_configured_timeout_and_retries(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(client_module, "ChatOpenAI", FakeChatOpenAI)
+    monkeypatch.setattr(
+        client_module,
+        "get_settings",
+        lambda: Settings(
+            openai_api_key=SecretStr("test-key"),
+            openai_request_timeout_seconds=12.5,
+            openai_max_retries=3,
+        ),
+    )
+
+    model = build_chat_model("test-model", temperature=0.2)
+
+    assert isinstance(model, FakeChatOpenAI)
+    assert captured["model"] == "test-model"
+    assert captured["temperature"] == 0.2
+    assert captured["api_key"] == "test-key"
+    assert captured["timeout"] == 12.5
+    assert captured["max_retries"] == 3
 
 
 def test_russian_prompt_injection_is_blocked() -> None:
@@ -67,3 +96,32 @@ def test_openai_moderation_fallback_log_includes_request_id(monkeypatch, caplog)
     assert decision.allowed
     assert "request-moderation" in caplog.text
     assert "Estimate calories for rice" not in caplog.text
+
+
+def test_openai_moderation_uses_configured_timeout_and_retries(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeModerations:
+        def create(self, **_kwargs):
+            result = SimpleNamespace(flagged=False)
+            return SimpleNamespace(results=[result])
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+            self.moderations = FakeModerations()
+
+    monkeypatch.setattr(client_module, "OpenAI", FakeOpenAI)
+    settings = Settings(
+        openai_api_key=SecretStr("test-key"),
+        openai_moderation_enabled=True,
+        openai_request_timeout_seconds=9.0,
+        openai_max_retries=2,
+    )
+
+    decision = ModerationService(settings).moderate_text("Estimate calories for rice.")
+
+    assert decision.allowed
+    assert captured["api_key"] == "test-key"
+    assert captured["timeout"] == 9.0
+    assert captured["max_retries"] == 2

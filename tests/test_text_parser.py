@@ -1,3 +1,5 @@
+import logging
+
 from app.graph.nodes import text_parser
 from app.schemas.inputs import NormalizedInput
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
@@ -135,6 +137,36 @@ def test_english_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> No
     assert called is True
     assert not meal.needs_clarification
     assert meal.ingredients[0].name == "chicken breast cooked"
+
+
+def test_text_parser_logs_llm_fallback_with_request_id(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
+
+    def fail_parse(*_args, **_kwargs):
+        raise TimeoutError("parser timeout")
+
+    monkeypatch.setattr(text_parser, "parse_text_with_llm", fail_parse)
+
+    with caplog.at_level(logging.WARNING):
+        result = text_parser.parse_text_meal(
+            {
+                "normalized_input": NormalizedInput(
+                    text="150g rice and chicken breast",
+                    has_text=True,
+                    has_image=False,
+                    language="en",
+                ),
+                "request_id": "request-parser",
+                "use_llm": True,
+            }
+        )
+
+    meal = result["meal"]
+    assert meal.ingredients
+    assert "request-parser" in caplog.text
+    assert "text_meal" in caplog.text
+    assert "TimeoutError" in caplog.text
+    assert "rice and chicken" not in caplog.text
 
 
 def test_bare_generic_chicken_still_clarifies_without_llm_parser(monkeypatch) -> None:

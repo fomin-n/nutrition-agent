@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     openai_text_model: str = "gpt-4.1-mini"
     openai_vision_model: str = "gpt-4.1-mini"
     openai_critic_model: str = "gpt-4.1-mini"
+    openai_request_timeout_seconds: float = Field(default=45.0, gt=0)
+    openai_max_retries: int = Field(default=1, ge=0, le=5)
     critic_max_iterations: int = Field(default=2, ge=0, le=3)
     openai_moderation_enabled: bool = True
 
@@ -76,7 +78,13 @@ def build_chat_model(model_name: str, *, temperature: float = 0.0) -> ChatOpenAI
     api_key = reveal_secret(settings.openai_api_key)
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required for LLM calls")
-    return ChatOpenAI(model=model_name, temperature=temperature, api_key=api_key)
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        api_key=api_key,
+        timeout=settings.openai_request_timeout_seconds,
+        max_retries=settings.openai_max_retries,
+    )
 
 
 PROMPT_INJECTION_PATTERNS = (
@@ -187,7 +195,11 @@ class ModerationService:
             return local
 
         try:
-            client = OpenAI(api_key=api_key)
+            client = OpenAI(
+                api_key=api_key,
+                timeout=self.settings.openai_request_timeout_seconds,
+                max_retries=self.settings.openai_max_retries,
+            )
             response = client.moderations.create(model="omni-moderation-latest", input=text)
             result = response.results[0]
             if result.flagged:
@@ -200,8 +212,10 @@ class ModerationService:
                 )
         except Exception as exc:  # pragma: no cover - network/API fallback
             LOGGER.warning(
-                "OpenAI moderation unavailable request_id=%s; using local fallback: %s",
+                "OpenAI moderation unavailable request_id=%s error_type=%s error=%s; "
+                "using local fallback",
                 request_id,
+                type(exc).__name__,
                 exc,
             )
 

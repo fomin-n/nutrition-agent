@@ -1,3 +1,4 @@
+import logging
 import re
 
 from app.graph.state import NutritionGraphState
@@ -26,6 +27,7 @@ LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
     language: dict(names)
     for language, names in load_food_vocabulary().localized_food_names.items()
 }
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
@@ -36,7 +38,13 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     unresolved_task = derive_unresolved_task(text)
     if local_meal.needs_clarification and unresolved_task is not None:
         if state.get("use_llm", True) and _is_generic_ingredient_in_compound_dish(text, unresolved_task):
-            llm_meal = _try_parse_text_with_llm(text, language=language, memory_note=memory_note)
+            llm_meal = _try_parse_text_with_llm(
+                text,
+                language=language,
+                memory_note=memory_note,
+                request_id=state.get("request_id"),
+                branch="compound_generic",
+            )
             if llm_meal is not None and (llm_meal.ingredients or llm_meal.needs_clarification):
                 return {"meal": llm_meal}
         return {"meal": local_meal}
@@ -48,7 +56,13 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     if _uses_conventional_dish_prior(local_meal):
         return {"meal": local_meal}
     if state.get("use_llm", True) and has_openai_key():
-        llm_meal = _try_parse_text_with_llm(text, language=language, memory_note=memory_note)
+        llm_meal = _try_parse_text_with_llm(
+            text,
+            language=language,
+            memory_note=memory_note,
+            request_id=state.get("request_id"),
+            branch="text_meal",
+        )
         if llm_meal is None:
             return {"meal": local_meal}
         if llm_meal.ingredients and not llm_meal.needs_clarification:
@@ -64,12 +78,24 @@ def _try_parse_text_with_llm(
     *,
     language: LanguageCode,
     memory_note: str,
+    request_id: str | None,
+    branch: str,
 ) -> MealUnderstanding | None:
     if not has_openai_key():
         return None
     try:
         return parse_text_with_llm(text, language=language, memory_note=memory_note)
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning(
+            (
+                "Text parser LLM fallback request_id=%s branch=%s error_type=%s "
+                "error=%s; using local parser"
+            ),
+            request_id,
+            branch,
+            type(exc).__name__,
+            exc,
+        )
         return None
 
 

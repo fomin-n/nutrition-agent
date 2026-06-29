@@ -1,3 +1,5 @@
+import logging
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.nodes.text_parser import parse_text_locally
@@ -7,6 +9,8 @@ from app.llm.client import build_chat_model, get_settings, has_openai_key
 from app.llm.structured import read_prompt
 from app.schemas.nutrition import MealUnderstanding
 from app.tools.image_utils import encode_image_data_url
+
+LOGGER = logging.getLogger(__name__)
 
 
 def recognize_dish_photo(state: NutritionGraphState) -> NutritionGraphState:
@@ -20,8 +24,12 @@ def recognize_dish_photo(state: NutritionGraphState) -> NutritionGraphState:
                     language=normalized.language,
                 )
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_image_fallback(
+                request_id=state.get("request_id"),
+                branch="dish_photo",
+                exc=exc,
+            )
     return {
         "meal": MealUnderstanding(
             confidence="low",
@@ -43,9 +51,26 @@ def combine_text_and_image(state: NutritionGraphState) -> NutritionGraphState:
                     language=normalized.language,
                 )
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_image_fallback(
+                request_id=state.get("request_id"),
+                branch="image_with_text",
+                exc=exc,
+            )
     return {"meal": parse_text_locally(normalized.text or "", language=normalized.language)}
+
+
+def _log_image_fallback(*, request_id: str | None, branch: str, exc: Exception) -> None:
+    LOGGER.warning(
+        (
+            "Image recognizer LLM fallback request_id=%s branch=%s error_type=%s "
+            "error=%s; using local fallback"
+        ),
+        request_id,
+        branch,
+        type(exc).__name__,
+        exc,
+    )
 
 
 def recognize_image_with_llm(

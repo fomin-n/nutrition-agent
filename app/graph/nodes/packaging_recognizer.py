@@ -1,3 +1,4 @@
+import logging
 import re
 
 from app.graph.nodes.image_recognizer import recognize_image_with_llm
@@ -6,6 +7,8 @@ from app.i18n import LanguageCode, response_language
 from app.llm.client import has_openai_key
 from app.schemas.nutrition import IngredientEstimate, MealUnderstanding
 from app.tools.fallback_nutrition import normalize_food_query
+
+LOGGER = logging.getLogger(__name__)
 
 
 def recognize_packaging(state: NutritionGraphState) -> NutritionGraphState:
@@ -20,8 +23,16 @@ def recognize_packaging(state: NutritionGraphState) -> NutritionGraphState:
                     language=normalized.language,
                 )
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.warning(
+                (
+                    "Packaging recognizer LLM fallback request_id=%s branch=packaged_food "
+                    "error_type=%s error=%s; using local fallback"
+                ),
+                state.get("request_id"),
+                type(exc).__name__,
+                exc,
+            )
     return {"meal": recognize_packaging_locally(normalized.text or "", language=normalized.language)}
 
 
