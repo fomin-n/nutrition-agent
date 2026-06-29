@@ -142,7 +142,10 @@ class NutritionSourceRouter:
     def _open_food_facts_candidates(self, query: NormalizedFoodQuery) -> list[NutritionCandidate]:
         if self.open_food_facts is None:
             return []
-        return self.open_food_facts.search_products(query.canonical_query, page_size=5)
+        candidates: list[NutritionCandidate] = []
+        for search_query in _open_food_facts_queries(query):
+            candidates.extend(self.open_food_facts.search_products(search_query, page_size=5))
+        return _dedupe_candidates(candidates)
 
 
 @lru_cache(maxsize=1)
@@ -266,6 +269,12 @@ def provider_search_queries(query: NormalizedFoodQuery) -> list[str]:
             seen.add(key)
             result.append(item)
     return result
+
+
+def _open_food_facts_queries(query: NormalizedFoodQuery) -> list[str]:
+    if query.query_kind in {"branded_product", "restaurant_menu_item"}:
+        return provider_search_queries(query)[:5]
+    return [query.canonical_query]
 
 
 def generic_fallback_candidate(name: str) -> NutritionCandidate:

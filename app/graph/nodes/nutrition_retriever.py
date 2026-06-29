@@ -114,6 +114,7 @@ class NutritionRetriever:
             request_id=request_id,
             ingredient_name=ingredient.name,
             canonical_query=query.canonical_query,
+            query_kind=query.query_kind,
             food_category=query.food_category,
             product_variant=query.product_variant,
             product_type=query.product_type,
@@ -323,12 +324,14 @@ def _unexpected_failure_outcome(
             source_route=source_route,
         )
         canonical_query = query.canonical_query
+        query_kind: str = query.query_kind
         food_category = query.food_category
         product_variant = query.product_variant
         product_type = query.product_type
         queries = provider_search_queries(query)
     except Exception:
         canonical_query = ingredient.name.strip().casefold()
+        query_kind = "unknown"
         food_category = "unknown"
         product_variant = "unknown"
         product_type = None
@@ -343,6 +346,7 @@ def _unexpected_failure_outcome(
         request_id=request_id,
         ingredient_name=ingredient.name,
         canonical_query=canonical_query,
+        query_kind=query_kind,
         food_category=food_category,
         product_variant=product_variant,
         product_type=product_type,

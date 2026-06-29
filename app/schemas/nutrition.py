@@ -149,6 +149,7 @@ class RetrievalDiagnostic(BaseModel):
     request_id: str | None = None
     ingredient_name: str
     canonical_query: str
+    query_kind: str
     food_category: str
     product_variant: str
     product_type: str | None = None

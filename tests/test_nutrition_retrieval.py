@@ -126,11 +126,58 @@ def test_retriever_uses_ranked_candidate() -> None:
     assert item.candidate is not None
 
 
+def test_retriever_diagnostic_includes_query_kind() -> None:
+    query_candidate = NutritionCandidate(
+        source="usda",
+        source_id="banana",
+        name="Banana",
+        food_type="generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        values_per_100g=NutritionValues(calories_kcal=89, protein_g=1.1, carbohydrate_g=23, fat_g=0.3),
+    )
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    router.retrieve_candidates = lambda query: [query_candidate]  # type: ignore[method-assign]
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(name="banana", grams_min=100, grams_max=100)
+    )
+
+    assert outcome.diagnostic.query_kind == "generic_ingredient"
+    assert outcome.diagnostic.model_dump(mode="json")["query_kind"] == "generic_ingredient"
+
+
 def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))
 
     assert item is None
+
+
+def test_open_food_facts_uses_bounded_query_expansions_for_branded_products() -> None:
+    off = _FakeOpenFoodFactsClient()
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=off)  # type: ignore[arg-type]
+    query = normalize_food_description("Сколько калорий в Сникерсе?", language="ru")
+
+    candidates = router.retrieve_candidates(query, include_fallback=False)
+
+    assert off.queries == [
+        "Snickers",
+        "Snickers bar",
+        "Snickers chocolate bar",
+        "Сколько калорий в Сникерсе?",
+    ]
+    assert len(off.queries) <= 5
+    assert [candidate.source_id for candidate in candidates] == ["off-snickers"]
+
+
+def test_open_food_facts_is_not_used_for_generic_foods() -> None:
+    off = _FakeOpenFoodFactsClient()
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=off)  # type: ignore[arg-type]
+
+    router.retrieve_candidates(normalize_food_description("banana"), include_fallback=False)
+
+    assert off.queries == []
 
 
 def test_secret_redaction() -> None:
@@ -142,3 +189,28 @@ def test_secret_redaction() -> None:
     assert "hiddenvalue" not in redacted
     assert "abcvalue" not in redacted
     assert "[REDACTED]" in redacted
+
+
+class _FakeOpenFoodFactsClient:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def search_products(self, product_name: str, *, page_size: int = 5) -> list[NutritionCandidate]:
+        self.queries.append(product_name)
+        if "Snickers" not in product_name and "Сникерсе" not in product_name:
+            return []
+        return [
+            NutritionCandidate(
+                source="open_food_facts",
+                source_id="off-snickers",
+                name="Snickers",
+                brand="Snickers",
+                food_type="branded",
+                values_per_100g=NutritionValues(
+                    calories_kcal=500,
+                    protein_g=8,
+                    carbohydrate_g=62,
+                    fat_g=24,
+                ),
+            )
+        ]

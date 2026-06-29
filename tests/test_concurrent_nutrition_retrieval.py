@@ -137,6 +137,7 @@ def _successful_outcome(ingredient: IngredientEstimate) -> LookupOutcome:
         request_id="test-request",
         ingredient_name=ingredient.name,
         canonical_query=ingredient.name,
+        query_kind="generic_ingredient",
         food_category="food",
         product_variant="unknown",
         amount_min_g=ingredient.grams_min,
