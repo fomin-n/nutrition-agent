@@ -15,6 +15,15 @@ def test_key_generation_stores_digest_not_raw_key(tmp_path) -> None:
     assert created.raw_key.encode("utf-8") not in (tmp_path / "auth.sqlite3").read_bytes()
 
 
+def test_auth_db_uses_wal_and_connection_pragmas(tmp_path) -> None:
+    service = AuthService(tmp_path / "auth.sqlite3", "test-secret")
+
+    with service._connection() as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
 def test_valid_login_authorizes_user(tmp_path) -> None:
     service = AuthService(tmp_path / "auth.sqlite3", "test-secret")
     created = service.create_key(label="demo-user")

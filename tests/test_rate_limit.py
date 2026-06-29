@@ -21,6 +21,15 @@ def test_user_daily_limit_blocks_after_threshold(tmp_path) -> None:
     assert third.user_count == 2
 
 
+def test_usage_db_uses_wal_and_connection_pragmas(tmp_path) -> None:
+    service = UsageLimitService(tmp_path / "usage.sqlite3")
+
+    with service._connection() as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
 def test_global_daily_limit_blocks_across_users(tmp_path) -> None:
     service = UsageLimitService(
         tmp_path / "usage.sqlite3",

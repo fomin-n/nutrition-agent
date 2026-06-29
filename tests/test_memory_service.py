@@ -24,6 +24,15 @@ def test_memory_context_isolated_by_user_and_conversation(tmp_path) -> None:
     assert service.load_context(2, 10).recent_messages == []
 
 
+def test_memory_db_uses_wal_and_connection_pragmas(tmp_path) -> None:
+    service = MemoryService(tmp_path / "memory.sqlite3")
+
+    with service._connection() as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
 def test_memory_persists_unresolved_task(tmp_path) -> None:
     db_path = tmp_path / "memory.sqlite3"
     service = MemoryService(db_path)

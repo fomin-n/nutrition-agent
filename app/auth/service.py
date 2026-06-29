@@ -178,9 +178,10 @@ class AuthService:
         return hmac.new(self.secret, raw_key.encode("utf-8"), sha256).hexdigest()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 30000")
         return conn
 
     @contextmanager
@@ -190,6 +191,7 @@ class AuthService:
 
     def _init_db(self) -> None:
         with self._connection() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS access_keys (

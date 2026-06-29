@@ -12,6 +12,7 @@ from app.auth.service import AuthConfigurationError, AuthService
 from app.bot.rate_limit import UsageLimitService, get_usage_limit_service
 from app.graph.graph import process_request
 from app.i18n import detect_language, response_language
+from app.llm.client import get_settings
 from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
@@ -193,7 +194,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await _send_typing(update, context)
     photo = message.photo[-1]
-    with tempfile.TemporaryDirectory(prefix="nutrition-agent-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="nutrition-agent-", dir=_temp_image_base_dir()) as temp_dir:
         image_path = Path(temp_dir) / f"{photo.file_unique_id}.jpg"
         telegram_file = await photo.get_file()
         await telegram_file.download_to_drive(custom_path=str(image_path))
@@ -291,6 +292,12 @@ def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str
 def _temporary_error_message(*, text: str | None, has_image: bool) -> str:
     language = response_language(detect_language(text, has_image=has_image))
     return TEMPORARY_ERROR_MESSAGE_RU if language == "ru" else TEMPORARY_ERROR_MESSAGE
+
+
+def _temp_image_base_dir() -> str:
+    path = Path(get_settings().temp_image_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 async def _send_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

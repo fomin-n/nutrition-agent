@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +89,26 @@ class ExplodingPhoto:
 
     async def get_file(self):
         raise AssertionError("unauthorized photo should not be downloaded")
+
+
+class FakeTelegramFile:
+    def __init__(self) -> None:
+        self.download_paths: list[Path] = []
+
+    async def download_to_drive(self, *, custom_path: str) -> None:
+        path = Path(custom_path)
+        self.download_paths.append(path)
+        path.write_bytes(b"fake image")
+
+
+class DownloadablePhoto:
+    file_unique_id = "configured-photo"
+
+    def __init__(self, telegram_file: FakeTelegramFile) -> None:
+        self.telegram_file = telegram_file
+
+    async def get_file(self) -> FakeTelegramFile:
+        return self.telegram_file
 
 
 def make_update(message: FakeMessage):
@@ -324,6 +345,35 @@ def test_rate_limited_photo_does_not_download_or_call_graph(monkeypatch) -> None
         "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
     ]
     assert context.bot.actions == []
+
+
+def test_authorized_photo_uses_configured_temp_image_dir(monkeypatch, tmp_path) -> None:
+    telegram_file = FakeTelegramFile()
+    message = FakeMessage(photo=[DownloadablePhoto(telegram_file)], message_id=3001)
+    message.caption = "100g apple"
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    configured_base = tmp_path / "configured-images"
+    captured: dict[str, object] = {}
+
+    def fake_process_request(**kwargs):
+        captured.update(kwargs)
+        return "Estimated."
+
+    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(temp_image_dir=str(configured_base)))
+    monkeypatch.setattr(handlers, "process_request", fake_process_request)
+
+    asyncio.run(handlers.handle_photo(update, context))
+
+    assert message.replies == ["Estimated."]
+    assert configured_base.exists()
+    assert len(telegram_file.download_paths) == 1
+    downloaded_path = telegram_file.download_paths[0]
+    assert configured_base in downloaded_path.parents
+    assert captured["image_path"] == str(downloaded_path)
+    assert not downloaded_path.exists()
+    assert not downloaded_path.parent.exists()
 
 
 def test_global_error_handler_replies_without_logging_raw_message(caplog) -> None:
