@@ -15,6 +15,7 @@ from app.bot.handlers import (
     start,
     whoami,
 )
+from app.bot.health_server import start_health_server
 from app.llm.client import get_settings, reveal_secret
 from app.observability.phoenix import configure_phoenix_tracing
 from app.observability.trace_logging import configure_trace_log_correlation
@@ -54,12 +55,19 @@ def main() -> int:
     configure_trace_log_correlation()
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    settings = get_settings()
+    health_server = None
     try:
         application = build_application()
+        health_server = start_health_server(settings)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    application.run_polling(allowed_updates=["message"])
+    try:
+        application.run_polling(allowed_updates=["message"])
+    finally:
+        if health_server is not None:
+            health_server.stop()
     return 0
 
 
