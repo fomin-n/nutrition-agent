@@ -160,6 +160,7 @@ def process_request(
                     "request_id": request_id,
                 }
             )
+            _record_graph_trace_attributes(result.get("vision_escalation"))
             final = result.get("final_estimate")
             answer = final.text if final else "I couldn’t generate a response."
             if (
@@ -207,6 +208,20 @@ def process_request(
     return answer
 
 
+def _record_graph_trace_attributes(diagnostic: object) -> None:
+    if not isinstance(diagnostic, dict):
+        return
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        for key, value in diagnostic.items():
+            if isinstance(value, str | int | float | bool):
+                span.set_attribute(f"nutrition_agent.vision.{key}", value)
+    except Exception:
+        return
+
+
 def _trace_metadata(
     *,
     text: str | None,
@@ -228,6 +243,8 @@ def _trace_metadata(
         "use_llm": use_llm,
         "openai_text_model": settings.openai_text_model,
         "openai_vision_model": settings.openai_vision_model,
+        "openai_vision_escalation_model": settings.openai_vision_escalation_model,
+        "openai_vision_escalation_confidence": settings.openai_vision_escalation_confidence,
         "openai_critic_model": settings.openai_critic_model,
         "critic_max_iterations": settings.critic_max_iterations,
     }

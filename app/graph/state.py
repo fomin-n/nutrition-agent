@@ -31,3 +31,4 @@ class NutritionGraphState(TypedDict, total=False):
     request_id: str
     retrieval_failures: list[RetrievalFailure]
     retrieval_diagnostics: list[RetrievalDiagnostic]
+    vision_escalation: dict[str, str | bool | None]

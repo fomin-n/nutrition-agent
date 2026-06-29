@@ -68,11 +68,13 @@ Settings are loaded from environment variables via `pydantic-settings`:
 
 - `OPENAI_TEXT_MODEL`
 - `OPENAI_VISION_MODEL`
+- `OPENAI_VISION_ESCALATION_MODEL`
+- `OPENAI_VISION_ESCALATION_CONFIDENCE`
 - `OPENAI_CRITIC_MODEL`
 - `CRITIC_MAX_ITERATIONS`
 - `OPENAI_MODERATION_ENABLED`
 
-The current implementation uses OpenAI models for structured classification/parsing and image recognition when enabled. Critic hard checks and final formatting are deterministic; after those pass, `OPENAI_CRITIC_MODEL` may provide a Pydantic-validated qualitative `accept`/`revise` decision. LLM failures fall back to deterministic acceptance. Macro arithmetic and regenerated answers always use calculator-owned values.
+The current implementation uses OpenAI models for structured classification/parsing and image recognition when enabled. Food-photo and packaging recognition first uses `OPENAI_VISION_MODEL`; if the parsed meal confidence is at or below `OPENAI_VISION_ESCALATION_CONFIDENCE`, the recognizer may retry once with `OPENAI_VISION_ESCALATION_MODEL`. Leave the escalation model empty or equal to the base vision model to disable this path. Critic hard checks and final formatting are deterministic; after those pass, `OPENAI_CRITIC_MODEL` may provide a Pydantic-validated qualitative `accept`/`revise` decision. LLM failures fall back to deterministic acceptance. Macro arithmetic and regenerated answers always use calculator-owned values.
 
 The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
 

@@ -40,6 +40,12 @@ def test_trace_metadata_excludes_raw_input() -> None:
     assert metadata["request_type"] == "text"
     assert metadata["request_language"] == "en"
     assert metadata["openai_text_model"] == settings.openai_text_model
+    assert metadata["openai_vision_model"] == settings.openai_vision_model
+    assert metadata["openai_vision_escalation_model"] == settings.openai_vision_escalation_model
+    assert (
+        metadata["openai_vision_escalation_confidence"]
+        == settings.openai_vision_escalation_confidence
+    )
     assert metadata["openai_critic_model"] == settings.openai_critic_model
     assert metadata["critic_max_iterations"] == settings.critic_max_iterations
     assert metadata["telegram.message.id"] == 123

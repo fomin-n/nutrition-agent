@@ -1,7 +1,7 @@
 import logging
 import re
 
-from app.graph.nodes.image_recognizer import recognize_image_with_llm
+from app.graph.nodes.image_recognizer import recognize_image_with_optional_escalation
 from app.graph.state import NutritionGraphState
 from app.i18n import LanguageCode, response_language
 from app.llm.client import has_openai_key
@@ -15,13 +15,17 @@ def recognize_packaging(state: NutritionGraphState) -> NutritionGraphState:
     normalized = state["normalized_input"]
     if state.get("use_llm", True) and has_openai_key() and normalized.image_path:
         try:
+            meal, diagnostic = recognize_image_with_optional_escalation(
+                normalized.image_path,
+                normalized.image_mime_type,
+                caption=normalized.text,
+                language=normalized.language,
+                request_id=state.get("request_id"),
+                branch="packaged_food",
+            )
             return {
-                "meal": recognize_image_with_llm(
-                    normalized.image_path,
-                    normalized.image_mime_type,
-                    caption=normalized.text,
-                    language=normalized.language,
-                )
+                "meal": meal,
+                "vision_escalation": diagnostic,
             }
         except Exception as exc:
             LOGGER.warning(

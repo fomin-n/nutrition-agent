@@ -179,6 +179,7 @@ Live provider checks are available with `uv run python -m app.evals.run_retrieva
 | `TELEGRAM_BOT_TOKEN` | Yes | none | Telegram polling bot token. |
 | `BOT_AUTH_SECRET` | Yes | none | HMAC secret for one-time access keys. |
 | `OPENAI_API_KEY` | Yes for normal LLM operation | none | Structured text, vision, critic, and optional moderation calls. |
+| `OPENAI_VISION_ESCALATION_MODEL` | Optional | `gpt-5.4-mini` | One bounded retry for low-confidence food-photo understanding; empty or same as `OPENAI_VISION_MODEL` disables it. |
 | `USDA_API_KEY` | Optional | empty | Enables USDA FoodData Central lookup. |
 | `FATSECRET_CLIENT_ID` / `FATSECRET_CLIENT_SECRET` | Optional | empty | Enables FatSecret lookup. |
 | `ENABLE_PHOENIX_TRACING` | Optional | `false` | Enables OpenTelemetry/Phoenix tracing. |
@@ -189,7 +190,7 @@ See [.env.example](.env.example) for the full configuration surface.
 
 ## Known Limitations
 
-Portion estimation from images is approximate; hidden oils, sauces, and mixed ingredients are difficult; packaged-food data can be incomplete or user-contributed; and the packaging branch does not yet perform robust barcode scanning. The app surfaces assumptions rather than claiming precision.
+Portion estimation from images is approximate even with confidence-based vision escalation; hidden oils, sauces, and mixed ingredients are difficult; packaged-food data can be incomplete or user-contributed; and the packaging branch does not yet perform robust barcode scanning. The app surfaces assumptions rather than claiming precision.
 
 ## Deployment And License
 

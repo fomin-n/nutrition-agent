@@ -8,7 +8,7 @@ from openai import OpenAI
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.schemas.safety import ModerationDecision
+from app.schemas.safety import Confidence, ModerationDecision
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     openai_text_model: str = "gpt-4.1-mini"
     openai_vision_model: str = "gpt-4.1-mini"
+    openai_vision_escalation_model: str | None = "gpt-5.4-mini"
+    openai_vision_escalation_confidence: Confidence = "low"
     openai_critic_model: str = "gpt-4.1-mini"
     openai_request_timeout_seconds: float = Field(default=45.0, gt=0)
     openai_max_retries: int = Field(default=1, ge=0, le=5)
