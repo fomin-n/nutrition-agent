@@ -53,16 +53,20 @@ class FakeMessage:
         photo: list[object] | None = None,
         message_id: int | None = None,
         delete_raises: bool = False,
+        reply_raises: bool = False,
     ) -> None:
         self.text = text
         self.caption = None
         self.photo = photo or []
         self.message_id = message_id
         self.delete_raises = delete_raises
+        self.reply_raises = reply_raises
         self.deleted = False
         self.replies: list[str] = []
 
     async def reply_text(self, text: str) -> None:
+        if self.reply_raises:
+            raise RuntimeError("reply failed")
         self.replies.append(text)
 
     async def delete(self) -> None:
@@ -320,3 +324,40 @@ def test_rate_limited_photo_does_not_download_or_call_graph(monkeypatch) -> None
         "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
     ]
     assert context.bot.actions == []
+
+
+def test_global_error_handler_replies_without_logging_raw_message(caplog) -> None:
+    message = FakeMessage(text="/login raw-secret-key", message_id=3001)
+    update = make_update(message)
+    update.update_id = 4001
+    context = SimpleNamespace(error=RuntimeError("raw-secret-key"))
+
+    asyncio.run(handlers.handle_error(update, context))
+
+    assert message.replies == [handlers.TEMPORARY_ERROR_MESSAGE]
+    assert "Unhandled Telegram update error" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "raw-secret-key" not in caplog.text
+
+
+def test_global_error_handler_localizes_russian_fallback() -> None:
+    message = FakeMessage(text="Сколько калорий в яблоке?", message_id=3001)
+    update = make_update(message)
+    context = SimpleNamespace(error=TimeoutError("timeout"))
+
+    asyncio.run(handlers.handle_error(update, context))
+
+    assert message.replies == [handlers.TEMPORARY_ERROR_MESSAGE_RU]
+
+
+def test_global_error_handler_swallows_reply_failure(caplog) -> None:
+    message = FakeMessage(text="100 g chicken", message_id=3001, reply_raises=True)
+    update = make_update(message)
+    context = SimpleNamespace(error=TimeoutError("update failed"))
+
+    asyncio.run(handlers.handle_error(update, context))
+
+    assert "Unhandled Telegram update error" in caplog.text
+    assert "Failed to send Telegram error fallback" in caplog.text
+    assert "update failed" not in caplog.text
+    assert "100 g chicken" not in caplog.text

@@ -5,6 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from app.auth.service import AuthService
 from app.bot.handlers import (
+    handle_error,
     handle_photo,
     handle_text,
     health,
@@ -38,6 +39,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("whoami", whoami))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_error_handler(handle_error)
     return application
 
 

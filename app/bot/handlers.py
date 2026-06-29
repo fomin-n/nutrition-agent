@@ -16,6 +16,8 @@ from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
 ACCESS_REQUIRED_MESSAGE = "Access required. Send /login <access_key>."
+TEMPORARY_ERROR_MESSAGE = "Something went wrong while handling that update. Please try again."
+TEMPORARY_ERROR_MESSAGE_RU = "При обработке сообщения произошла ошибка. Попробуйте еще раз."
 
 
 @lru_cache(maxsize=1)
@@ -63,6 +65,42 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
     await _reply(update, "ok")
+
+
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    request_context = TelegramRequestContext.from_update(update)
+    error = getattr(context, "error", None)
+    LOGGER.error(
+        (
+            "Unhandled Telegram update error update_id=%s user_id=%s chat_id=%s "
+            "message_id=%s error_type=%s"
+        ),
+        request_context.update_id,
+        request_context.user_id,
+        request_context.chat_id,
+        request_context.message_id,
+        type(error).__name__ if error else None,
+    )
+
+    message = getattr(update, "effective_message", None)
+    if message is None:
+        return
+    text = getattr(message, "text", None) or getattr(message, "caption", None)
+    has_image = bool(getattr(message, "photo", None))
+    try:
+        await message.reply_text(_temporary_error_message(text=text, has_image=has_image))
+    except Exception as reply_error:
+        LOGGER.warning(
+            (
+                "Failed to send Telegram error fallback update_id=%s user_id=%s "
+                "chat_id=%s message_id=%s error_type=%s"
+            ),
+            request_context.update_id,
+            request_context.user_id,
+            request_context.chat_id,
+            request_context.message_id,
+            type(reply_error).__name__,
+        )
 
 
 async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,6 +286,11 @@ def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str
     if language == "ru":
         return "Не удалось безопасно проверить лимит запросов. Попробуйте позже."
     return "I couldn’t safely verify the request limit. Please try again later."
+
+
+def _temporary_error_message(*, text: str | None, has_image: bool) -> str:
+    language = response_language(detect_language(text, has_image=has_image))
+    return TEMPORARY_ERROR_MESSAGE_RU if language == "ru" else TEMPORARY_ERROR_MESSAGE
 
 
 async def _send_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
