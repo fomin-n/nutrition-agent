@@ -130,14 +130,18 @@ def _format_estimate(
     if language == "ru":
         return (
             f"🔥 Калории: {calories} ккал\n\n"
-            f"Белки: {protein} г  •  Жиры: {fat} г  •  Углеводы: {carbs} г\n\n"
+            f"Белки: {protein} г\n"
+            f"Жиры: {fat} г\n"
+            f"Углеводы: {carbs} г\n\n"
             "📋 Допущения:\n"
             f"{assumption_lines}\n\n"
             f"{confidence_line}"
         )
     return (
         f"🔥 Calories: {calories} kcal\n\n"
-        f"Protein: {protein} g  •  Fat: {fat} g  •  Carbs: {carbs} g\n\n"
+        f"Protein: {protein} g\n"
+        f"Fat: {fat} g\n"
+        f"Carbs: {carbs} g\n\n"
         "📋 Assumptions:\n"
         f"{assumption_lines}\n\n"
         f"{confidence_line}"

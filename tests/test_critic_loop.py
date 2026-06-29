@@ -184,7 +184,9 @@ def _estimate_state(
     )
     answer = text or (
         "🔥 Calories: 100–120 kcal\n\n"
-        "Protein: 10–12 g  •  Fat: 3–4 g  •  Carbs: 15–20 g\n\n"
+        "Protein: 10–12 g\n"
+        "Fat: 3–4 g\n"
+        "Carbs: 15–20 g\n\n"
         "📋 Assumptions:\n"
         "• Standard portion.\n\n"
         "🟢 Confidence: High"
