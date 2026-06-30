@@ -164,6 +164,8 @@ def run_golden_eval(
         "issue_classifications": _count_issue_classifications(results),
         "duration_seconds": round(time.perf_counter() - started, 3),
         "llm_usage": llm_usage,
+        "numeric_metrics": _aggregate_numeric_metrics(results),
+        "confidence_calibration": _confidence_calibration(results),
     }
     run_scope = split or "all"
     settings = get_settings()
@@ -495,6 +497,7 @@ def _graph_state_snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "meal",
         "ingredient_nutrition",
         "totals",
+        "final_estimate",
         "critic_result",
         "critic_history",
         "critic_feedback",
@@ -734,6 +737,12 @@ def _build_breakdowns(
         "expected_behavior": defaultdict(list),
         "category": defaultdict(list),
         "tag": defaultdict(list),
+        "confidence": defaultdict(list),
+        "query_kind": defaultdict(list),
+    }
+    grouped_results: dict[str, dict[str, list[dict[str, Any]]]] = {
+        dimension: defaultdict(list)
+        for dimension in dimensions
     }
     for example, result in zip(examples, results, strict=True):
         status = str(result["status"])
@@ -741,12 +750,28 @@ def _build_breakdowns(
         dimensions["language"][example.metadata.language or example.input.language].append(status)
         dimensions["expected_behavior"][example.output.expected_behavior].append(status)
         dimensions["category"][example.metadata.category or "unknown"].append(status)
+        confidence = _result_confidence(result)
+        dimensions["confidence"][confidence].append(status)
+        query_kinds = _result_query_kinds(result)
+        for query_kind in query_kinds:
+            dimensions["query_kind"][query_kind].append(status)
+        grouped_results["kind"][example.input.kind].append(result)
+        grouped_results["language"][example.metadata.language or example.input.language].append(result)
+        grouped_results["expected_behavior"][example.output.expected_behavior].append(result)
+        grouped_results["category"][example.metadata.category or "unknown"].append(result)
+        grouped_results["confidence"][confidence].append(result)
+        for query_kind in query_kinds:
+            grouped_results["query_kind"][query_kind].append(result)
         for tag in example.metadata.tags:
             dimensions["tag"][tag].append(status)
+            grouped_results["tag"][tag].append(result)
 
     return {
         dimension: {
-            key: _group_summary(values)
+            key: {
+                **_group_summary(values),
+                "numeric_metrics": _aggregate_numeric_metrics(grouped_results[dimension][key]),
+            }
             for key, values in sorted(groups.items())
         }
         for dimension, groups in dimensions.items()
@@ -767,6 +792,129 @@ def _group_summary(values: Sequence[str]) -> dict[str, float | int]:
     }
 
 
+def _aggregate_numeric_metrics(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        nutrient: _nutrient_metric_summary(
+            [
+                result.get("evaluation", {}).get("numeric_metrics", {}).get(nutrient, {})
+                for result in results
+            ]
+        )
+        for nutrient in ("calories_kcal", "protein_g", "fat_g", "carbs_g")
+    }
+
+
+def _nutrient_metric_summary(metrics: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    absolute_errors = _numeric_values(metrics, "absolute_error")
+    percentage_errors = _numeric_values(metrics, "percentage_error")
+    widths = _numeric_values(metrics, "predicted_width")
+    normalized_widths = _numeric_values(metrics, "normalized_width")
+    interval_scores = _numeric_values(metrics, "interval_score")
+    within_values = [
+        value
+        for metric in metrics
+        if isinstance(value := metric.get("within_prediction_range"), bool)
+    ]
+    return {
+        "count": len(absolute_errors),
+        "mean_absolute_error": _mean(absolute_errors),
+        "median_absolute_error": _percentile(absolute_errors, 0.5),
+        "p90_absolute_error": _percentile(absolute_errors, 0.9),
+        "p95_absolute_error": _percentile(absolute_errors, 0.95),
+        "max_absolute_error": max(absolute_errors) if absolute_errors else None,
+        "mean_percentage_error": _mean(percentage_errors),
+        "median_percentage_error": _percentile(percentage_errors, 0.5),
+        "p90_percentage_error": _percentile(percentage_errors, 0.9),
+        "p95_percentage_error": _percentile(percentage_errors, 0.95),
+        "max_percentage_error": max(percentage_errors) if percentage_errors else None,
+        "mean_predicted_width": _mean(widths),
+        "median_predicted_width": _percentile(widths, 0.5),
+        "mean_normalized_width": _mean(normalized_widths),
+        "median_normalized_width": _percentile(normalized_widths, 0.5),
+        "mean_interval_score": _mean(interval_scores),
+        "median_interval_score": _percentile(interval_scores, 0.5),
+        "within_prediction_range_rate": (
+            sum(1 for value in within_values if value) / len(within_values)
+            if within_values
+            else None
+        ),
+    }
+
+
+def _confidence_calibration(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for result in results:
+        groups[_result_confidence(result)].append(result)
+    summary = {
+        confidence: {
+            **_group_summary([str(result["status"]) for result in grouped]),
+            "numeric_metrics": _aggregate_numeric_metrics(grouped),
+        }
+        for confidence, grouped in sorted(groups.items())
+    }
+    ordered_errors = [
+        summary[level]["numeric_metrics"]["calories_kcal"]["mean_percentage_error"]
+        for level in ("low", "medium", "high")
+        if level in summary
+    ]
+    monotonic_error_decreases = (
+        all(
+            left is None or right is None or left >= right
+            for left, right in zip(ordered_errors, ordered_errors[1:], strict=False)
+        )
+        if len(ordered_errors) >= 2
+        else None
+    )
+    return {
+        "buckets": summary,
+        "calorie_mape_decreases_with_confidence": monotonic_error_decreases,
+    }
+
+
+def _result_confidence(result: dict[str, Any]) -> str:
+    invocations = result.get("execution", {}).get("graph_invocations", [])
+    for invocation in reversed(invocations):
+        final = invocation.get("final_estimate")
+        if isinstance(final, dict) and final.get("confidence"):
+            return str(final["confidence"])
+    return "unknown"
+
+
+def _result_query_kinds(result: dict[str, Any]) -> tuple[str, ...]:
+    query_kinds: list[str] = []
+    for invocation in result.get("execution", {}).get("graph_invocations", []):
+        for diagnostic in invocation.get("retrieval_diagnostics", []):
+            query_kind = str(diagnostic.get("query_kind") or "unknown")
+            if query_kind not in query_kinds:
+                query_kinds.append(query_kind)
+    return tuple(query_kinds or ["none"])
+
+
+def _numeric_values(metrics: Sequence[dict[str, Any]], key: str) -> list[float]:
+    return [
+        float(value)
+        for metric in metrics
+        if isinstance(value := metric.get(key), int | float)
+    ]
+
+
+def _mean(values: Sequence[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _percentile(values: Sequence[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
 def _render_markdown(run_output: dict[str, Any]) -> str:
     summary = run_output["summary"]
     lines = [
@@ -781,24 +929,72 @@ def _render_markdown(run_output: dict[str, Any]) -> str:
         f"- Unknown: {summary['unknown']}",
         f"- Pass rate: {summary['pass_rate']:.1%}",
         "- Numeric policy: calorie overlap is required; macro overlap is advisory.",
+        "- Magnitude policy: scalar nutrition references are summarized by midpoint error, range sharpness, and interval score.",
         "- Diagnosis policy: issue classifications are deterministic triage hints, not ground truth.",
         "",
-        "## Breakdowns",
+        "## Numeric Metrics",
         "",
+        "| Nutrient | Count | Mean Abs Error | Median Abs Error | P90 Abs Error | Mean % Error | P90 % Error | Mean Width | Mean Norm Width | Within Prediction |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+    for nutrient, metrics in summary["numeric_metrics"].items():
+        lines.append(
+            f"| {nutrient} | {metrics['count']} | "
+            f"{_fmt_number(metrics['mean_absolute_error'])} | "
+            f"{_fmt_number(metrics['median_absolute_error'])} | "
+            f"{_fmt_number(metrics['p90_absolute_error'])} | "
+            f"{_fmt_number(metrics['mean_percentage_error'])} | "
+            f"{_fmt_number(metrics['p90_percentage_error'])} | "
+            f"{_fmt_number(metrics['mean_predicted_width'])} | "
+            f"{_fmt_number(metrics['mean_normalized_width'])} | "
+            f"{_fmt_percent(metrics['within_prediction_range_rate'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Confidence Calibration",
+            "",
+            f"- Calorie MAPE decreases with confidence: `{summary['confidence_calibration']['calorie_mape_decreases_with_confidence']}`",
+            "",
+            "| Confidence | Passed | Failed | Unknown | Total | Rate | Calorie Mean % Error | Calorie P90 % Error | Calorie Mean Width |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for confidence, metrics in summary["confidence_calibration"]["buckets"].items():
+        calorie = metrics["numeric_metrics"]["calories_kcal"]
+        lines.append(
+            f"| {confidence} | {metrics['passed']} | {metrics['failed']} | "
+            f"{metrics['unknown']} | {metrics['total']} | {metrics['pass_rate']:.1%} | "
+            f"{_fmt_number(calorie['mean_percentage_error'])} | "
+            f"{_fmt_number(calorie['p90_percentage_error'])} | "
+            f"{_fmt_number(calorie['mean_predicted_width'])} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Breakdowns",
+            "",
+        ]
+    )
     for dimension, groups in summary["breakdowns"].items():
         lines.extend(
             [
                 f"### {dimension.replace('_', ' ').title()}",
                 "",
-                "| Value | Passed | Failed | Unknown | Total | Rate |",
-                "|---|---:|---:|---:|---:|---:|",
+                "| Value | Passed | Failed | Unknown | Total | Rate | Calorie Mean % Error | Calorie P90 % Error | Calorie Mean Width |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for value, metrics in groups.items():
+            calorie = metrics["numeric_metrics"]["calories_kcal"]
             lines.append(
                 f"| {value} | {metrics['passed']} | {metrics['failed']} | "
-                f"{metrics['unknown']} | {metrics['total']} | {metrics['pass_rate']:.1%} |"
+                f"{metrics['unknown']} | {metrics['total']} | {metrics['pass_rate']:.1%} | "
+                f"{_fmt_number(calorie['mean_percentage_error'])} | "
+                f"{_fmt_number(calorie['p90_percentage_error'])} | "
+                f"{_fmt_number(calorie['mean_predicted_width'])} |"
             )
         lines.append("")
 
@@ -838,6 +1034,14 @@ def _render_markdown(run_output: dict[str, Any]) -> str:
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _fmt_number(value: Any) -> str:
+    return f"{value:.2f}" if isinstance(value, int | float) else "n/a"
+
+
+def _fmt_percent(value: Any) -> str:
+    return f"{value:.1%}" if isinstance(value, int | float) else "n/a"
 
 
 if __name__ == "__main__":

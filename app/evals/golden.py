@@ -127,6 +127,7 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
     forbidden = [value for value in must_not_contain if _normalize_text_match(value) in answer_folded]
     parsed_nutrition = parse_nutrition_ranges(answer)
     numeric = _evaluate_numeric_ranges(example.output.acceptable_range, parsed_nutrition)
+    numeric_metrics = evaluate_numeric_magnitude(example.output.nutrition, parsed_nutrition)
 
     failed_checks: list[str] = []
     unknown_checks: list[str] = []
@@ -156,6 +157,7 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
         },
         "parsed_nutrition": parsed_nutrition,
         "numeric_checks": numeric,
+        "numeric_metrics": numeric_metrics,
         "failed_checks": failed_checks,
         "unknown_checks": unknown_checks,
         "status": status,
@@ -220,6 +222,85 @@ def parse_nutrition_ranges(answer: str) -> dict[str, dict[str, float]]:
         maximum = float(maximum_group.replace(",", ".")) if maximum_group else minimum
         parsed[nutrient] = {"min": min(minimum, maximum), "max": max(minimum, maximum)}
     return parsed
+
+
+def evaluate_numeric_magnitude(
+    nutrition: dict[str, Any] | None,
+    parsed: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float | bool | None]]:
+    if not nutrition:
+        return {}
+    metrics: dict[str, dict[str, float | bool | None]] = {}
+    for nutrient in ("calories_kcal", "protein_g", "fat_g", "carbs_g"):
+        actual = _float_or_none(nutrition.get(nutrient))
+        predicted = parsed.get(nutrient)
+        metrics[nutrient] = _numeric_metric(actual, predicted)
+    return metrics
+
+
+def _numeric_metric(
+    actual: float | None,
+    predicted: dict[str, float] | None,
+) -> dict[str, float | bool | None]:
+    if actual is None or predicted is None:
+        return {
+            "actual": actual,
+            "predicted_min": None,
+            "predicted_max": None,
+            "predicted_midpoint": None,
+            "absolute_error": None,
+            "percentage_error": None,
+            "predicted_width": None,
+            "normalized_width": None,
+            "within_prediction_range": None,
+            "interval_score": None,
+        }
+    predicted_min = predicted["min"]
+    predicted_max = predicted["max"]
+    midpoint = (predicted_min + predicted_max) / 2
+    width = predicted_max - predicted_min
+    absolute_error = abs(midpoint - actual)
+    percentage_error = (absolute_error / actual) * 100 if actual else None
+    normalized_width = width / midpoint if midpoint else None
+    within_prediction_range = predicted_min <= actual <= predicted_max
+    interval_score = _interval_score(
+        actual=actual,
+        predicted_min=predicted_min,
+        predicted_max=predicted_max,
+    )
+    return {
+        "actual": actual,
+        "predicted_min": predicted_min,
+        "predicted_max": predicted_max,
+        "predicted_midpoint": midpoint,
+        "absolute_error": absolute_error,
+        "percentage_error": percentage_error,
+        "predicted_width": width,
+        "normalized_width": normalized_width,
+        "within_prediction_range": within_prediction_range,
+        "interval_score": interval_score,
+    }
+
+
+def _interval_score(
+    *,
+    actual: float,
+    predicted_min: float,
+    predicted_max: float,
+    alpha: float = 0.1,
+) -> float:
+    width = predicted_max - predicted_min
+    if actual < predicted_min:
+        return width + (2 / alpha) * (predicted_min - actual)
+    if actual > predicted_max:
+        return width + (2 / alpha) * (actual - predicted_max)
+    return width
+
+
+def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    return None
 
 
 def _evaluate_numeric_ranges(

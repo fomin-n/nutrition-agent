@@ -9,7 +9,12 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from app.evals.compare_golden_lanes import build_lane_comparison
 from app.evals.compare_golden_lanes import render_markdown as render_lane_markdown
 from app.evals.compare_golden_runs import build_comparison, render_comparison_markdown
-from app.evals.golden import evaluate_answer, load_golden_examples, parse_nutrition_ranges
+from app.evals.golden import (
+    evaluate_answer,
+    evaluate_numeric_magnitude,
+    load_golden_examples,
+    parse_nutrition_ranges,
+)
 from app.evals.phoenix_datasets import upload_golden_dataset
 from app.evals.run_golden_eval import LLMUsageCollector, run_golden_eval, write_golden_results
 
@@ -69,7 +74,29 @@ def test_golden_answer_evaluator_uses_behavior_text_and_range_overlap() -> None:
     assert evaluation["status"] == "pass"
     assert evaluation["actual_behavior"] == "estimate"
     assert evaluation["numeric_checks"]["required_calorie_check"] == "pass"
+    assert evaluation["numeric_metrics"]["calories_kcal"]["absolute_error"] == 0
+    assert evaluation["numeric_metrics"]["calories_kcal"]["predicted_width"] == 30
+    assert evaluation["numeric_metrics"]["calories_kcal"]["interval_score"] == 30
     assert parse_nutrition_ranges(answer)["carbs_g"] == {"min": 25.0, "max": 29.0}
+
+
+def test_golden_numeric_magnitude_reports_tail_and_sharpness_inputs() -> None:
+    metrics = evaluate_numeric_magnitude(
+        {"calories_kcal": 100, "protein_g": 10, "fat_g": 5, "carbs_g": 20},
+        {
+            "calories_kcal": {"min": 90, "max": 110},
+            "protein_g": {"min": 8, "max": 12},
+            "fat_g": {"min": 3, "max": 4},
+            "carbs_g": {"min": 10, "max": 15},
+        },
+    )
+
+    assert metrics["calories_kcal"]["absolute_error"] == 0
+    assert metrics["calories_kcal"]["percentage_error"] == 0
+    assert metrics["calories_kcal"]["predicted_width"] == 20
+    assert metrics["calories_kcal"]["normalized_width"] == 0.2
+    assert metrics["calories_kcal"]["within_prediction_range"] is True
+    assert metrics["fat_g"]["interval_score"] == 21
 
 
 def test_golden_text_checks_normalize_typographic_apostrophes() -> None:
@@ -117,9 +144,17 @@ def test_golden_conversation_runner_captures_effective_text_and_memory(tmp_path)
     assert result["execution"]["final_unresolved_task"] is None
     assert result["execution"]["llm_usage"]["calls"] == 0
     assert result["execution"]["graph_invocations"][-1]["critic_result"]["action"] == "accept"
+    assert result["execution"]["graph_invocations"][-1]["final_estimate"]["confidence"]
     assert result["execution"]["duration_seconds"] >= 0
+    assert "calories_kcal" in run["summary"]["numeric_metrics"]
+    assert "confidence_calibration" in run["summary"]
+    assert "confidence" in run["summary"]["breakdowns"]
+    assert "query_kind" in run["summary"]["breakdowns"]
     assert json_path.exists()
-    assert "na_conv_003_ru_fish_followup" not in markdown_path.read_text(encoding="utf-8")
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "## Numeric Metrics" in markdown
+    assert "## Confidence Calibration" in markdown
+    assert "na_conv_003_ru_fish_followup" not in markdown
 
 
 def test_golden_eval_stub_llm_lane_is_deterministic_and_records_mode() -> None:
