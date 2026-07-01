@@ -129,6 +129,7 @@ class NutritionRetriever:
                     serving_id=candidate.serving_id,
                     name=candidate.name,
                     score=candidate.match_score,
+                    score_components=candidate.score_components,
                     values_per_100g=candidate.values_per_100g,
                     validation=validation,
                 )
@@ -139,6 +140,8 @@ class NutritionRetriever:
                 )
             ],
             selected_identity=selected.stable_identity if selected else None,
+            arbitration_path=selection.arbitration_path,
+            arbitration_reasons=list(selection.arbitration_reasons),
             fallback_path=fallback_path,
             raw_context=raw_context,
         )

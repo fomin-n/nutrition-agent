@@ -61,6 +61,95 @@ def test_known_packaged_product_bypasses_llm_decomposition(monkeypatch) -> None:
     assert meal.ingredients[0].grams_max == 50
 
 
+def test_russian_composite_total_portion_is_allocated_without_llm() -> None:
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="Сколько калорий в гречке с курицей, порция 350 г?",
+                has_text=True,
+                has_image=False,
+                language="ru",
+            ),
+            "use_llm": False,
+        }
+    )
+
+    meal = result["meal"]
+    assert [item.name for item in meal.ingredients] == [
+        "cooked buckwheat",
+        "chicken breast cooked",
+    ]
+    assert (meal.ingredients[0].grams_min, meal.ingredients[0].grams_max) == (168.0, 252.0)
+    assert (meal.ingredients[1].grams_min, meal.ingredients[1].grams_max) == (112.0, 168.0)
+    assert any("общего веса" in assumption for assumption in meal.assumptions)
+
+
+def test_english_composite_total_portion_is_allocated_without_llm() -> None:
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="Calories in a 400 g portion of rice with chicken",
+                has_text=True,
+                has_image=False,
+                language="en",
+            ),
+            "use_llm": False,
+        }
+    )
+
+    meal = result["meal"]
+    assert [item.name for item in meal.ingredients] == [
+        "cooked white rice",
+        "chicken breast cooked",
+    ]
+    assert (meal.ingredients[0].grams_min, meal.ingredients[0].grams_max) == (192.0, 288.0)
+    assert (meal.ingredients[1].grams_min, meal.ingredients[1].grams_max) == (128.0, 192.0)
+    assert any("total portion" in assumption for assumption in meal.assumptions)
+
+
+def test_composite_retry_replaces_opaque_llm_parse(monkeypatch) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
+
+    def parse_with_llm(*_args, force_decompose: bool = False, **_kwargs):
+        calls.append(force_decompose)
+        if force_decompose:
+            return MealUnderstanding(
+                dish_name="buckwheat with chicken",
+                ingredients=[
+                    IngredientEstimate(name="cooked buckwheat", grams_min=190, grams_max=230),
+                    IngredientEstimate(name="chicken breast cooked", grams_min=120, grams_max=160),
+                ],
+            )
+        return MealUnderstanding(
+            dish_name="гречка с курицей",
+            ingredients=[
+                IngredientEstimate(name="гречка с курицей", grams_min=350, grams_max=350)
+            ],
+        )
+
+    monkeypatch.setattr(text_parser, "parse_text_with_llm", parse_with_llm)
+
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="Сколько калорий в гречке с курицей, порция 350 г?",
+                has_text=True,
+                has_image=False,
+                language="ru",
+            ),
+            "use_llm": True,
+        }
+    )
+
+    meal = result["meal"]
+    assert calls == [False, True]
+    assert [item.name for item in meal.ingredients] == [
+        "cooked buckwheat",
+        "chicken breast cooked",
+    ]
+
+
 def test_russian_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> None:
     called = False
     monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)

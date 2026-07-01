@@ -15,8 +15,10 @@ from app.evals.golden import (
     load_golden_examples,
     parse_nutrition_ranges,
 )
+from app.evals.metrics_history import row_from_run, write_history_rows
 from app.evals.phoenix_datasets import upload_golden_dataset
 from app.evals.run_golden_eval import LLMUsageCollector, run_golden_eval, write_golden_results
+from app.evals.run_golden_gate import evaluate_golden_gate
 
 DATASET = Path("evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl")
 SINGLE_TURN_DATASET = Path("evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl")
@@ -175,6 +177,100 @@ def test_golden_eval_stub_llm_lane_is_deterministic_and_records_mode() -> None:
     assert run["config"]["llm_mode"] == "stub"
     assert run["config"]["llm_stub_version"]
     assert run["summary"]["passed"] == 1
+
+
+def test_metrics_history_extracts_stable_lane_row(tmp_path: Path) -> None:
+    run = {
+        "run_id": "golden-test",
+        "timestamp_utc": "2026-07-01T00:00:00+00:00",
+        "git_commit": "abc123",
+        "dataset_path": "evals/datasets/test.jsonl",
+        "filters": {"split": None, "tags": []},
+        "config": {"llm_mode": "live", "live_providers": True},
+        "summary": {
+            "total": 2,
+            "passed": 1,
+            "failed": 1,
+            "unknown": 0,
+            "pass_rate": 0.5,
+            "duration_seconds": 12.3,
+            "numeric_metrics": {
+                "calories_kcal": {
+                    "mean_percentage_error": 10.0,
+                    "p90_percentage_error": 20.0,
+                    "max_percentage_error": 30.0,
+                    "mean_absolute_error": 40.0,
+                    "p90_absolute_error": 50.0,
+                    "max_absolute_error": 60.0,
+                    "mean_predicted_width": 70.0,
+                    "median_predicted_width": 80.0,
+                    "mean_interval_score": 90.0,
+                    "within_prediction_range_rate": 0.6,
+                }
+            },
+            "breakdowns": {
+                "category": {"mixed_dish": {"pass_rate": 0.25}},
+                "tag": {"safety": {"pass_rate": 1.0}},
+                "expected_behavior": {"refuse": {"pass_rate": 1.0}},
+            },
+            "confidence_calibration": {
+                "buckets": {
+                    "high": {
+                        "total": 1,
+                        "pass_rate": 1.0,
+                        "numeric_metrics": {
+                            "calories_kcal": {
+                                "mean_percentage_error": 5.0,
+                                "p90_percentage_error": 5.0,
+                                "mean_interval_score": 15.0,
+                            }
+                        },
+                    }
+                }
+            },
+            "llm_usage": {"calls": 3, "errors": 0, "estimated_cost_usd": 0.01, "models": {}},
+        },
+    }
+
+    row = row_from_run(run)
+    history_path = tmp_path / "history.jsonl"
+    write_history_rows([row], history_path, append=False)
+
+    assert row["lane"] == "live_providers"
+    assert row["category_pass_rates"] == {"mixed_dish": 0.25}
+    assert row["tag_pass_rates"] == {"safety": 1.0}
+    assert row["calorie_metrics"]["mean_interval_score"] == 90.0
+    assert history_path.read_text(encoding="utf-8").count("\n") == 1
+
+
+def test_golden_gate_passes_and_fails_thresholds() -> None:
+    passing = {
+        "summary": {
+            "pass_rate": 0.62,
+            "unknown": 0,
+            "breakdowns": {
+                "tag": {"safety": {"pass_rate": 1.0}},
+                "expected_behavior": {"refuse": {"pass_rate": 1.0}},
+            },
+        }
+    }
+    failing = {
+        "summary": {
+            "pass_rate": 0.59,
+            "unknown": 1,
+            "breakdowns": {
+                "tag": {"safety": {"pass_rate": 0.5}},
+                "expected_behavior": {"refuse": {"pass_rate": 1.0}},
+            },
+        }
+    }
+
+    assert evaluate_golden_gate(passing)["passed"] is True
+    failed = evaluate_golden_gate(failing)
+    assert failed["passed"] is False
+    assert any("overall pass_rate" in check for check in failed["failed_checks"])
+    assert any("unknown examples" in check for check in failed["failed_checks"])
+    assert any("tag:safety" in check for check in failed["failed_checks"])
 
 
 def test_golden_usage_collector_records_tokens_model_and_cost() -> None:

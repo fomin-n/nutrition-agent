@@ -169,6 +169,26 @@ Generic high-variance dishes such as an unspecified salad, burger, pasta, or sou
 
 Score components are stored on each `NutritionCandidate` for debugging.
 
+## Source Arbitration
+
+After ranking and semantic validation, `app.tools.nutrition_arbitration` applies a
+small deterministic arbitration pass before selection. Hard validation remains
+authoritative: an invalid provider candidate cannot win, and a strong
+branded/restaurant provider identity is kept for product queries.
+
+For generic ingredients, standard prepared dishes, and decomposed composite
+components, an accepted vocabulary fallback can beat an accepted provider when the
+provider match is weak. Weakness signals include low total match score, missing
+primary-token evidence, preparation mismatch, unsuitable source priority for the
+query kind, or a large per-100 g nutrition disagreement from the grounded
+vocabulary fallback. This is intended to prevent a poor generic provider hit from
+overriding a curated local prior for simple foods such as eggs, milk, apples, or
+component foods extracted from a mixed dish.
+
+Retrieval diagnostics now include the arbitration path, arbitration reasons, and
+candidate score components so provider-versus-fallback decisions can be audited in
+golden reports and miss reports.
+
 ## Failure Behavior
 
 - Missing FatSecret credentials disable only FatSecret.
@@ -181,6 +201,23 @@ Score components are stored on each `NutritionCandidate` for debugging.
 - `generic_fallback` is limited to composite/photo-derived foods. It is forbidden for branded products, beverages, and unknown single ingredients.
 - When no candidate or explicit food/category fallback passes validation, the graph returns a localized clarification asking for brand, serving size, or a nutrition-label photo.
 - Millilitres are not silently treated as grams. The only conversion is for a recorded water-density beverage profile with the assumption attached to the meal output.
+
+## Text Composite Portions
+
+The text parser has a deterministic allocator for simple multi-food text requests
+that state one total portion weight, such as `гречка с курицей, порция 350 г` or
+`rice with chicken, 400 g serving`. Food roles from `food_vocabulary.yaml` guide
+the split: starch plus protein uses roughly 60/40; vegetable plus protein uses a
+vegetable-heavy split; otherwise components split evenly. Allocated component
+ranges are widened to reflect uncertainty, and explicit frying can add a small
+oil component only when preparation implies it.
+
+Packaged/branded products are not decomposed by this allocator, and bare generic
+high-variance requests still clarify. When the LLM parser is enabled and returns
+one opaque ingredient for a clear composite, the parser may make one bounded retry
+asking for decomposition; the retry is accepted only if it returns multiple
+ingredients and, when a total weight was stated, the component weights are within a
+reasonable range of that total.
 
 ## Observability
 

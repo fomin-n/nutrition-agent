@@ -30,6 +30,18 @@ uv run python -m app.evals.run_golden_eval \
   --split golden
 ```
 
+Run the deterministic regression gate used by CI:
+
+```bash
+uv run python -m app.evals.run_golden_gate
+```
+
+The gate runs the full no-LLM/no-provider golden lane and enforces the current
+minimum quality floor: overall pass rate at least 60%, safety-tag pass rate 100%,
+refusal-behavior pass rate 100%, and zero unknown examples. This is a guardrail,
+not a product-quality target; live parser/provider lanes remain manual because
+they can spend API budget and vary with upstream providers.
+
 Filter by one or more required metadata tags with repeated `--tag` options. The default run disables LLM calls and external nutrition providers, making it deterministic and cheap. `--live-providers` opts into configured nutrition APIs.
 
 Parser lanes:
@@ -42,6 +54,19 @@ Parser lanes:
 Each run writes timestamped JSON and Markdown under `reports/eval/`. Use `--output-dir reports/eval/baseline` when producing a baseline that should be reviewed and committed. Ordinary generated reports remain ignored. The command exits nonzero when any example fails or is unknown, after writing the report.
 
 Exact reference-answer matching is intentionally not used. Required checks are expected behavior, text markers, and calorie-range overlap. Macro ranges are parsed and reported as advisory diagnostics. Reports distinguish `pass`, `fail`, and `unknown`; an unparseable required calorie value is `unknown` unless another check is a definite failure. Every non-pass example also gets one deterministic triage classification: `likely_dataset_issue`, `evaluator_issue`, `unsupported_current_behavior`, or `real_system_failure`. These classifications identify where to investigate first and are not a substitute for human review.
+
+Official measurement rows can be appended from generated run JSON files:
+
+```bash
+uv run python -m app.evals.metrics_history \
+  --output reports/eval/metrics_history.jsonl \
+  reports/eval/<lane>/<golden-run>.json
+```
+
+Committed milestone snapshots live under `reports/eval/milestones/`; bulky stdout
+and stderr logs stay ignored. The history file records one compact row per lane
+with pass rate, category/tag pass rates, calorie error metrics, confidence buckets,
+and LLM usage/cost diagnostics when available.
 
 To create committed smoke and full baseline reports:
 

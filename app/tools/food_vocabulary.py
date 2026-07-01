@@ -27,6 +27,7 @@ class VocabularyFood:
     fat_g: float
     carbs_g: float
     aliases: tuple[str, ...]
+    role: str = "unknown"
     density_g_per_ml: float | None = None
     food_category: str | None = None
     default_portion_g: tuple[float, float] | None = None
@@ -96,6 +97,10 @@ class FoodVocabulary:
                 if food.default_portion_g is not None
             }
         )
+
+    @property
+    def food_roles(self) -> Mapping[str, str]:
+        return MappingProxyType({food.name: food.role for food in self.foods})
 
     @property
     def conventional_dish_priors(self) -> frozenset[str]:
@@ -187,6 +192,7 @@ def _parse_food(raw: Any) -> VocabularyFood:
         fat_g=float(nutrition["fat_g"]),
         carbs_g=float(nutrition["carbs_g"]),
         aliases=tuple(_string_list(raw, "aliases")),
+        role=_optional_str(raw, "role") or "unknown",
         density_g_per_ml=_optional_float(raw, "density_g_per_ml"),
         food_category=_optional_str(raw, "food_category"),
         default_portion_g=portion,

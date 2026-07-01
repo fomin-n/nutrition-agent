@@ -39,5 +39,8 @@ jobs:
       - name: Mock adversarial eval
         run: uv run python -m app.evals.run_eval --mock
 
+      - name: Golden deterministic gate
+        run: uv run python -m app.evals.run_golden_gate
+
       - name: Golden smoke eval
         run: uv run python -m app.evals.run_golden_eval --split smoke

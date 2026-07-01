@@ -8,6 +8,7 @@ foods:
     protein_g: 2.7
     fat_g: 0.3
     carbs_g: 28.2
+  role: starch
   aliases:
   - rice
   - white rice
@@ -28,6 +29,7 @@ foods:
     protein_g: 5.8
     fat_g: 0.9
     carbs_g: 30.9
+  role: starch
   aliases:
   - pasta
   - spaghetti
@@ -54,6 +56,7 @@ foods:
     protein_g: 3.4
     fat_g: 0.6
     carbs_g: 19.9
+  role: starch
   aliases:
   - buckwheat
   - kasha
@@ -72,6 +75,7 @@ foods:
     protein_g: 31.0
     fat_g: 3.6
     carbs_g: 0.0
+  role: protein
   aliases:
   - chicken
   - chicken breast
@@ -90,6 +94,7 @@ foods:
     protein_g: 26.0
     fat_g: 15.0
     carbs_g: 0.0
+  role: protein
   aliases:
   - beef
   - steak
@@ -109,6 +114,7 @@ foods:
     protein_g: 22.0
     fat_g: 12.0
     carbs_g: 0.0
+  role: protein
   aliases:
   - salmon
   - cooked salmon
@@ -128,6 +134,7 @@ foods:
     protein_g: 12.6
     fat_g: 9.5
     carbs_g: 0.7
+  role: protein
   aliases:
   - egg
   - eggs
@@ -152,6 +159,7 @@ foods:
     protein_g: 0.0
     fat_g: 100.0
     carbs_g: 0.0
+  role: fat
   aliases:
   - olive oil
   - oil
@@ -168,6 +176,7 @@ foods:
     protein_g: 0.9
     fat_g: 81.1
     carbs_g: 0.1
+  role: fat
   aliases:
   - butter
   - сливочное масло
@@ -182,6 +191,7 @@ foods:
     protein_g: 1.9
     fat_g: 0.1
     carbs_g: 20.1
+  role: starch
   aliases:
   - potato
   - boiled potato
@@ -202,6 +212,7 @@ foods:
     protein_g: 9.0
     fat_g: 3.2
     carbs_g: 49.0
+  role: bread
   aliases:
   - bread
   - toast
@@ -222,6 +233,7 @@ foods:
     protein_g: 1.1
     fat_g: 0.3
     carbs_g: 22.8
+  role: fruit
   aliases:
   - banana
   - bananas
@@ -240,6 +252,7 @@ foods:
     protein_g: 2.0
     fat_g: 14.7
     carbs_g: 8.5
+  role: fat
   aliases:
   - avocado
   - авокадо
@@ -256,6 +269,7 @@ foods:
     protein_g: 21.2
     fat_g: 49.9
     carbs_g: 21.6
+  role: fat
   aliases:
   - almond
   - almonds
@@ -274,6 +288,7 @@ foods:
     protein_g: 14.0
     fat_g: 7.0
     carbs_g: 2.5
+  role: protein
   aliases:
   - tofu
   - firm tofu
@@ -292,6 +307,7 @@ foods:
     protein_g: 9.0
     fat_g: 0.4
     carbs_g: 20.1
+  role: protein
   aliases:
   - lentils
   - cooked lentils
@@ -311,6 +327,7 @@ foods:
     protein_g: 8.9
     fat_g: 2.6
     carbs_g: 27.4
+  role: protein
   aliases:
   - chickpeas
   - cooked chickpeas
@@ -330,6 +347,7 @@ foods:
     protein_g: 0.3
     fat_g: 0.2
     carbs_g: 13.8
+  role: fruit
   aliases:
   - apple
   - apples
@@ -359,6 +377,7 @@ foods:
     protein_g: 0.9
     fat_g: 0.2
     carbs_g: 3.9
+  role: vegetable
   aliases:
   - tomato
   - tomatoes
@@ -379,6 +398,7 @@ foods:
     protein_g: 0.7
     fat_g: 0.1
     carbs_g: 3.6
+  role: vegetable
   aliases:
   - cucumber
   - cucumbers
@@ -397,6 +417,7 @@ foods:
     protein_g: 1.7
     fat_g: 0.2
     carbs_g: 10.0
+  role: vegetable
   aliases:
   - beet
   - beets
@@ -418,6 +439,7 @@ foods:
     protein_g: 1.3
     fat_g: 0.1
     carbs_g: 5.5
+  role: vegetable
   aliases:
   - cabbage
   - cooked cabbage
@@ -438,6 +460,7 @@ foods:
     protein_g: 0.8
     fat_g: 0.2
     carbs_g: 8.2
+  role: vegetable
   aliases:
   - carrot
   - carrots
@@ -458,6 +481,7 @@ foods:
     protein_g: 1.1
     fat_g: 0.1
     carbs_g: 9.3
+  role: vegetable
   aliases:
   - onion
   - onions
@@ -477,6 +501,7 @@ foods:
     protein_g: 1.2
     fat_g: 0.2
     carbs_g: 4.0
+  role: vegetable
   aliases:
   - mixed salad vegetables
   - salad vegetables
@@ -504,6 +529,7 @@ foods:
     protein_g: 25.0
     fat_g: 33.0
     carbs_g: 1.3
+  role: dairy
   aliases:
   - cheese
   - cheddar
@@ -524,6 +550,7 @@ foods:
     protein_g: 3.5
     fat_g: 3.3
     carbs_g: 4.7
+  role: dairy
   aliases:
   - yogurt
   - plain yogurt
@@ -542,6 +569,7 @@ foods:
     protein_g: 9.9
     fat_g: 2.0
     carbs_g: 3.9
+  role: dairy
   aliases:
   - greek yogurt
   - greek yogurt 2%
@@ -554,6 +582,7 @@ foods:
     protein_g: 11.0
     fat_g: 0.2
     carbs_g: 4.0
+  role: dairy
   aliases:
   - skyr
   - plain skyr
@@ -574,6 +603,7 @@ foods:
     protein_g: 17.0
     fat_g: 5.0
     carbs_g: 3.0
+  role: dairy
   aliases:
   - cottage cheese
   - cottage cheese 5%
@@ -593,6 +623,7 @@ foods:
     protein_g: 3.2
     fat_g: 3.3
     carbs_g: 4.8
+  role: dairy
   aliases:
   - milk
   - whole milk
@@ -646,6 +677,7 @@ foods:
     protein_g: 2.5
     fat_g: 1.5
     carbs_g: 12.0
+  role: starch
   aliases:
   - oatmeal
   - porridge
@@ -675,6 +707,7 @@ foods:
     protein_g: 16.9
     fat_g: 6.9
     carbs_g: 66.3
+  role: starch
   aliases:
   - dry oats
   - rolled oats dry
@@ -713,6 +746,7 @@ foods:
     protein_g: 8.8
     fat_g: 1.0
     carbs_g: 57.5
+  role: bread
   aliases:
   - baguette
   - багет
@@ -757,6 +791,7 @@ foods:
     protein_g: 25.0
     fat_g: 50.0
     carbs_g: 20.0
+  role: fat
   aliases:
   - peanut butter
   - арахисовая паста
@@ -811,6 +846,7 @@ foods:
     protein_g: 25.5
     fat_g: 0.8
     carbs_g: 0.0
+  role: protein
   aliases:
   - canned tuna in water
   - tuna in water
@@ -840,6 +876,7 @@ foods:
     protein_g: 28.0
     fat_g: 17.0
     carbs_g: 3.1
+  role: dairy
   aliases:
   - mozzarella
   - mozzarella ball
@@ -855,6 +892,7 @@ foods:
     protein_g: 7.9
     fat_g: 9.6
     carbs_g: 14.3
+  role: protein
   aliases:
   - hummus
   - хумус
@@ -869,6 +907,7 @@ foods:
     protein_g: 10.0
     fat_g: 20.0
     carbs_g: 64.0
+  role: starch
   aliases:
   - granola
   - гранола
@@ -983,6 +1022,7 @@ foods:
     protein_g: 11.0
     fat_g: 10.0
     carbs_g: 33.0
+  role: unknown
   aliases:
   - pizza
   - slice pizza
@@ -1000,6 +1040,7 @@ foods:
     protein_g: 12.0
     fat_g: 10.0
     carbs_g: 28.0
+  role: unknown
   aliases:
   - burger
   - hamburger
@@ -1025,6 +1066,7 @@ foods:
     protein_g: 2.0
     fat_g: 1.5
     carbs_g: 6.5
+  role: vegetable
   aliases:
   - soup
   - vegetable soup
@@ -1046,6 +1088,7 @@ foods:
     protein_g: 3.4
     fat_g: 15.0
     carbs_g: 41.0
+  role: starch
   aliases:
   - french fries
   - fries
@@ -1072,6 +1115,7 @@ foods:
     protein_g: 3.5
     fat_g: 9.0
     carbs_g: 7.0
+  role: vegetable
   aliases:
   - greek salad
   - греческий салат
@@ -1089,6 +1133,7 @@ foods:
     protein_g: 13.0
     fat_g: 11.0
     carbs_g: 9.0
+  role: unknown
   aliases:
   - chicken caesar salad
   - caesar salad with chicken
@@ -1107,6 +1152,7 @@ foods:
     protein_g: 9.0
     fat_g: 11.0
     carbs_g: 24.0
+  role: starch
   aliases:
   - pasta carbonara
   - carbonara
@@ -1164,6 +1210,7 @@ foods:
     protein_g: 10.0
     fat_g: 12.0
     carbs_g: 28.0
+  role: unknown
   aliases:
   - pelmeni
   - meat dumpling
@@ -1188,6 +1235,7 @@ foods:
     protein_g: 18.0
     fat_g: 21.0
     carbs_g: 9.0
+  role: protein
   aliases:
   - kfc chicken wing
   - kfc wing
@@ -1209,6 +1257,7 @@ foods:
     protein_g: 2.0
     fat_g: 4.2
     carbs_g: 17.5
+  role: starch
   aliases:
   - mashed potato
   - mashed potatoes
@@ -1231,6 +1280,7 @@ foods:
     protein_g: 16.0
     fat_g: 18.0
     carbs_g: 8.0
+  role: protein
   aliases:
   - meat cutlet
   - meat patty

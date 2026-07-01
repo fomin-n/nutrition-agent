@@ -42,6 +42,14 @@ class PortionEstimate:
     explicit: bool
 
 
+@dataclass(frozen=True)
+class CompositeAllocation:
+    canonical_name: str
+    grams_min: float
+    grams_max: float
+    note: str
+
+
 _VOCABULARY = load_food_vocabulary()
 
 # Patterns are intentionally conservative. They cover common inflections without a
@@ -139,6 +147,7 @@ VOLUME_ML: dict[str, float] = {
 }
 
 HIGH_VARIANCE_FOODS = set(_VOCABULARY.high_variance_foods)
+FOOD_ROLES = dict(_VOCABULARY.food_roles)
 
 PREPARATION_PATTERNS: tuple[tuple[str, str], ...] = (
     ("fried", r"\b(fried|pan fried|жарен\w*)\b"),
@@ -330,6 +339,68 @@ def estimate_portion(
     return PortionEstimate(minimum, maximum, "assumed standard portion", False)
 
 
+def allocate_composite_portions(
+    text: str,
+    mentions: tuple[FoodMention, ...],
+    *,
+    preparation: str | None = None,
+) -> tuple[CompositeAllocation, ...]:
+    if len(mentions) < 2 or any(mention.product for mention in mentions):
+        return ()
+    total_grams = extract_total_portion_grams(text, mentions)
+    if total_grams is None:
+        return ()
+    base_mentions = list(mentions)
+    add_fat = (
+        preparation == "fried"
+        and not any(_food_role(mention.canonical_name) == "fat" for mention in mentions)
+    )
+    fat_fraction = 0.05 if add_fat else 0.0
+    remaining_fraction = 1.0 - fat_fraction
+    fractions = _composite_fractions(base_mentions)
+    allocations = [
+        _allocation(
+            mention.canonical_name,
+            total_grams * remaining_fraction * fractions[mention.canonical_name],
+            "allocated from total composite portion",
+            width=0.20,
+        )
+        for mention in base_mentions
+    ]
+    if add_fat:
+        allocations.append(
+            _allocation(
+                "olive oil",
+                total_grams * fat_fraction,
+                "added for fried composite preparation",
+                width=0.20,
+            )
+        )
+    return tuple(allocations)
+
+
+def extract_total_portion_grams(
+    text: str,
+    mentions: tuple[FoodMention, ...],
+) -> float | None:
+    normalized = normalize_food_query(text)
+    quantities = [
+        quantity
+        for quantity in extract_quantity_mentions(normalized)
+        if quantity.unit in {"g", "gram", "grams", "г", "гр", "грамм", "грамма", "граммов", "kg", "кг", "oz"}
+    ]
+    if len(mentions) < 2 or len(quantities) != 1:
+        return None
+    quantity = quantities[0]
+    if not _quantity_looks_like_total_portion(normalized, quantity, mentions):
+        return None
+    if quantity.unit in {"kg", "кг"}:
+        return quantity.amount * 1000
+    if quantity.unit == "oz":
+        return quantity.amount * 28.35
+    return quantity.amount
+
+
 def detect_preparation(text: str) -> str | None:
     normalized = normalize_food_query(text)
     for preparation, pattern in PREPARATION_PATTERNS:
@@ -444,3 +515,71 @@ def _nearby_count(normalized: str, mention: FoodMention) -> float | None:
         prefix,
     )
     return _parse_number(match.group("count")) if match else None
+
+
+def _quantity_looks_like_total_portion(
+    normalized: str,
+    quantity: QuantityMention,
+    mentions: tuple[FoodMention, ...],
+) -> bool:
+    window = normalized[max(0, quantity.start - 40) : min(len(normalized), quantity.end + 24)]
+    total_markers = (
+        "portion",
+        "serving",
+        "plate",
+        "bowl",
+        "порци",
+        "тарел",
+        "мис",
+    )
+    if any(marker in window for marker in total_markers):
+        return True
+    nearest = min(mentions, key=lambda item: _span_distance(item, quantity))
+    return quantity.start > max(mention.end for mention in mentions) and _span_distance(nearest, quantity) > 18
+
+
+def _food_role(canonical_name: str) -> str:
+    return FOOD_ROLES.get(canonical_name, "unknown")
+
+
+def _composite_fractions(mentions: list[FoodMention]) -> dict[str, float]:
+    roles = {mention.canonical_name: _food_role(mention.canonical_name) for mention in mentions}
+    if len(mentions) == 2:
+        starch = [name for name, role in roles.items() if role == "starch"]
+        protein = [name for name, role in roles.items() if role == "protein"]
+        vegetable = [name for name, role in roles.items() if role == "vegetable"]
+        if starch and protein:
+            return {starch[0]: 0.60, protein[0]: 0.40}
+        if vegetable and protein:
+            return {vegetable[0]: 0.60, protein[0]: 0.40}
+    weights = {
+        "starch": 0.55,
+        "protein": 0.35,
+        "vegetable": 0.30,
+        "bread": 0.30,
+        "dairy": 0.20,
+        "fruit": 0.25,
+        "fat": 0.05,
+        "unknown": 0.25,
+    }
+    raw = {
+        mention.canonical_name: weights.get(roles[mention.canonical_name], 0.25)
+        for mention in mentions
+    }
+    total = sum(raw.values()) or 1.0
+    return {name: value / total for name, value in raw.items()}
+
+
+def _allocation(
+    canonical_name: str,
+    grams: float,
+    note: str,
+    *,
+    width: float,
+) -> CompositeAllocation:
+    return CompositeAllocation(
+        canonical_name=canonical_name,
+        grams_min=round(max(1.0, grams * (1 - width)), 1),
+        grams_max=round(max(1.0, grams * (1 + width)), 1),
+        note=note,
+    )

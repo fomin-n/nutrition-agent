@@ -20,6 +20,8 @@ def test_vocabulary_loads_canonical_food_data() -> None:
     assert {food.name for food in vocabulary.foods} == {food.name for food in FALLBACK_FOODS}
     assert fallback_names() == vocabulary.fallback_names
     assert DEFAULT_PORTIONS_G["Coca-Cola"] == (330, 330)
+    assert vocabulary.food_roles["cooked buckwheat"] == "starch"
+    assert vocabulary.food_roles["chicken breast cooked"] == "protein"
     assert vocabulary.localized_food_names["ru"]["oatmeal cooked"] == "овсянка"
     assert [product.canonical_product for product in PRODUCT_ALIASES][:2] == [
         "Coca-Cola Zero Sugar",

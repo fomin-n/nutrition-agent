@@ -135,6 +135,7 @@ class CandidateDiagnostic(BaseModel):
     serving_id: str | None = None
     name: str
     score: float | None = None
+    score_components: dict[str, float] = Field(default_factory=dict)
     values_per_100g: NutritionValues | None = None
     validation: CandidateValidationResult
 
@@ -158,6 +159,8 @@ class RetrievalDiagnostic(BaseModel):
     provider_queries: list[str] = Field(default_factory=list)
     candidates: list[CandidateDiagnostic] = Field(default_factory=list)
     selected_identity: str | None = None
+    arbitration_path: str | None = None
+    arbitration_reasons: list[str] = Field(default_factory=list)
     fallback_path: str | None = None
     calculated_totals: dict[str, Any] | None = None
     raw_context: dict[str, Any] | None = None

@@ -13,6 +13,7 @@ from app.tools.cache import JsonFileCache
 from app.tools.fallback_nutrition import lookup_fallback_food, normalize_food_query
 from app.tools.fatsecret_client import FatSecretAuthClient, FatSecretClient
 from app.tools.food_query import NormalizedFoodQuery, normalize_food_description
+from app.tools.nutrition_arbitration import arbitrate_candidate
 from app.tools.nutrition_ranking import rank_candidates
 from app.tools.nutrition_validation import validate_candidate
 from app.tools.open_food_facts_client import OpenFoodFactsClient
@@ -26,6 +27,8 @@ class CandidateSelection:
     selected: NutritionCandidate | None
     candidates: list[NutritionCandidate]
     validations: list[CandidateValidationResult]
+    arbitration_path: str | None = None
+    arbitration_reasons: tuple[str, ...] = ()
 
 
 class NutritionSourceRouter:
@@ -70,13 +73,11 @@ class NutritionSourceRouter:
     def select_candidate(self, query: NormalizedFoodQuery) -> CandidateSelection:
         candidates = self.retrieve_candidates(query)
         validations = [validate_candidate(candidate, query) for candidate in candidates]
-        selected_pair = next(
-            (
-                (candidate, validation)
-                for candidate, validation in zip(candidates, validations, strict=True)
-                if validation.accepted
-            ),
-            None,
+        decision = arbitrate_candidate(candidates, validations, query)
+        selected_pair = (
+            (candidates[decision.selected_index], validations[decision.selected_index])
+            if decision.selected_index is not None
+            else None
         )
         selected = (
             selected_pair[0].model_copy(
@@ -85,7 +86,13 @@ class NutritionSourceRouter:
             if selected_pair
             else None
         )
-        return CandidateSelection(selected=selected, candidates=candidates, validations=validations)
+        return CandidateSelection(
+            selected=selected,
+            candidates=candidates,
+            validations=validations,
+            arbitration_path=decision.path,
+            arbitration_reasons=decision.reasons,
+        )
 
     def _provider_order(self, query: NormalizedFoodQuery) -> list[str]:
         if query.food_category == "plain_water":

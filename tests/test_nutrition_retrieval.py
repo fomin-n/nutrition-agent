@@ -147,6 +147,111 @@ def test_retriever_diagnostic_includes_query_kind() -> None:
     assert outcome.diagnostic.model_dump(mode="json")["query_kind"] == "generic_ingredient"
 
 
+def test_arbitration_prefers_fallback_over_weak_generic_provider() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    avocado_oil = NutritionCandidate(
+        source="usda",
+        source_id="avocado-oil",
+        name="Oil, avocado",
+        food_type="generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.84,
+        score_components={"name": 0.26, "source": 0.35},
+        values_per_100g=NutritionValues(calories_kcal=884, protein_g=0, carbohydrate_g=0, fat_g=100),
+    )
+    avocado = NutritionCandidate(
+        source="fallback",
+        source_id="avocado",
+        name="avocado",
+        food_type="generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.82,
+        score_components={"name": 0.34, "source": 0.18},
+        values_per_100g=NutritionValues(calories_kcal=160, protein_g=2, carbohydrate_g=8.5, fat_g=14.7),
+    )
+    router.retrieve_candidates = lambda query: [avocado_oil, avocado]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("avocado"))
+
+    assert selection.selected is not None
+    assert selection.selected.source == "fallback"
+    assert selection.arbitration_path == "fallback_selected_over_weak_provider"
+    assert "provider_disagrees_with_grounded_fallback" in selection.arbitration_reasons
+
+
+def test_arbitration_keeps_strong_branded_provider() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    provider = NutritionCandidate(
+        source="fatsecret",
+        source_id="snickers-provider",
+        name="Snickers Bar",
+        brand="Snickers",
+        food_type="branded",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.9,
+        score_components={"name": 0.34, "brand": 0.18},
+        values_per_100g=NutritionValues(calories_kcal=505, protein_g=8, carbohydrate_g=61, fat_g=25),
+    )
+    fallback = NutritionCandidate(
+        source="fallback",
+        source_id="Snickers",
+        name="Snickers",
+        brand="Snickers",
+        food_type="branded",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.88,
+        score_components={"name": 0.34, "brand": 0.18},
+        values_per_100g=NutritionValues(calories_kcal=500, protein_g=8, carbohydrate_g=62, fat_g=24),
+    )
+    router.retrieve_candidates = lambda query: [provider, fallback]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("Snickers"))
+
+    assert selection.selected is not None
+    assert selection.selected.source == "fatsecret"
+    assert selection.arbitration_path == "provider_kept_for_product_identity"
+
+
+def test_retriever_diagnostic_includes_arbitration_and_scores() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    avocado_oil = NutritionCandidate(
+        source="usda",
+        source_id="avocado-oil",
+        name="Oil, avocado",
+        food_type="generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.84,
+        score_components={"name": 0.26},
+        values_per_100g=NutritionValues(calories_kcal=884, protein_g=0, carbohydrate_g=0, fat_g=100),
+    )
+    avocado = NutritionCandidate(
+        source="fallback",
+        source_id="avocado",
+        name="avocado",
+        food_type="generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=0.82,
+        score_components={"name": 0.34},
+        values_per_100g=NutritionValues(calories_kcal=160, protein_g=2, carbohydrate_g=8.5, fat_g=14.7),
+    )
+    router.retrieve_candidates = lambda query: [avocado_oil, avocado]  # type: ignore[method-assign]
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(name="avocado", grams_min=100, grams_max=100)
+    )
+
+    assert outcome.item is not None
+    assert outcome.diagnostic.arbitration_path == "fallback_selected_over_weak_provider"
+    assert outcome.diagnostic.arbitration_reasons
+    assert outcome.diagnostic.candidates[0].score_components == {"name": 0.26}
+
+
 def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))
