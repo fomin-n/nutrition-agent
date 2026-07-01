@@ -122,7 +122,7 @@ def _format_estimate(
             if language == "ru"
             else "• Standard visible/mentioned portions."
         )
-    calories = _format_range(totals.calories_kcal.min, totals.calories_kcal.max)
+    calories = _format_calorie_delta(totals.calories_kcal.min, totals.calories_kcal.max)
     protein = _format_range(totals.protein_g.min, totals.protein_g.max)
     fat = _format_range(totals.fat_g.min, totals.fat_g.max)
     carbs = _format_range(totals.carbs_g.min, totals.carbs_g.max)
@@ -210,7 +210,10 @@ def _format_calorie_comparison(items, *, language: str, confidence: Confidence) 
         lines = ["🔥 Сравнение калорийности", ""]
         for name, grams_min, grams_max, item_totals, _ in rows:
             weight = _format_weight(grams_min, grams_max, "г")
-            calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
+            calories = _format_calorie_delta(
+                item_totals.calories_kcal.min,
+                item_totals.calories_kcal.max,
+            )
             lines.append(f"• {name} ({weight}): {calories} ккал")
         lines.append("")
         if len(winners) > 1:
@@ -223,7 +226,10 @@ def _format_calorie_comparison(items, *, language: str, confidence: Confidence) 
     lines = ["🔥 Calorie comparison", ""]
     for name, grams_min, grams_max, item_totals, _ in rows:
         weight = _format_weight(grams_min, grams_max, "g")
-        calories = _format_range(item_totals.calories_kcal.min, item_totals.calories_kcal.max)
+        calories = _format_calorie_delta(
+            item_totals.calories_kcal.min,
+            item_totals.calories_kcal.max,
+        )
         lines.append(f"• {name} ({weight}): {calories} kcal")
     lines.append("")
     if len(winners) > 1:
@@ -244,3 +250,11 @@ def _format_range(minimum: float, maximum: float) -> str:
     if minimum == maximum:
         return f"{minimum:.0f}"
     return f"{minimum:.0f}–{maximum:.0f}"
+
+
+def _format_calorie_delta(minimum: float, maximum: float) -> str:
+    if minimum == maximum:
+        return f"{minimum:.0f}"
+    midpoint = (minimum + maximum) / 2
+    half_width = (maximum - minimum) / 2
+    return f"{midpoint:.0f}±{half_width:.0f}"

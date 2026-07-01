@@ -15,7 +15,7 @@ def test_english_estimate_uses_compact_plain_text_layout() -> None:
 
     answer = synthesize_answer(state)["final_estimate"].text
 
-    assert answer.startswith("🔥 Calories: 300–510 kcal")
+    assert answer.startswith("🔥 Calories: 405±105 kcal")
     assert "Protein: 34–52 g\nFat: 4–6 g\nCarbs: 28–56 g" in answer
     assert "📋 Assumptions:\n• 100 g cooked rice.\n• 120 g chicken." in answer
     assert answer.endswith("🟡 Confidence: Medium")
@@ -26,7 +26,7 @@ def test_russian_estimate_uses_compact_plain_text_layout() -> None:
 
     answer = synthesize_answer(state)["final_estimate"].text
 
-    assert answer.startswith("🔥 Калории: 300–510 ккал")
+    assert answer.startswith("🔥 Калории: 405±105 ккал")
     assert "Белки: 34–52 г\nЖиры: 4–6 г\nУглеводы: 28–56 г" in answer
     assert "📋 Допущения:\n• 100 г риса.\n• 120 г курицы." in answer
     assert answer.endswith("🟡 Уверенность: средняя")

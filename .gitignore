@@ -27,6 +27,10 @@ reports/eval/*
 !reports/eval/milestones/**
 reports/eval/milestones/**/logs/
 reports/eval/milestones/**/logs/**
+!reports/eval/official/
+!reports/eval/official/**
+reports/eval/official/**/logs/
+reports/eval/official/**/logs/**
 !reports/eval/post_change/
 !reports/eval/post_change/**
 *.jpg

@@ -52,7 +52,7 @@ def test_deterministic_revision_restores_calculator_totals() -> None:
     revised_state.update(synthesize_answer(revised_state))
     second = critic_module.critic(revised_state)["critic_result"]
 
-    assert revised_state["final_estimate"].text.startswith("🔥 Calories: 100–120 kcal")
+    assert revised_state["final_estimate"].text.startswith("🔥 Calories: 110±10 kcal")
     assert "999" not in revised_state["final_estimate"].text
     assert second.action == "accept"
 
@@ -183,7 +183,7 @@ def _estimate_state(
         carbs_g=MacroRange(min=15, max=20),
     )
     answer = text or (
-        "🔥 Calories: 100–120 kcal\n\n"
+        "🔥 Calories: 110±10 kcal\n\n"
         "Protein: 10–12 g\n"
         "Fat: 3–4 g\n"
         "Carbs: 15–20 g\n\n"

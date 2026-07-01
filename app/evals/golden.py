@@ -107,7 +107,12 @@ def load_golden_examples(
     ]
 
 
-def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
+def evaluate_answer(
+    example: GoldenExample,
+    answer: str,
+    *,
+    parsed_nutrition_override: dict[str, dict[str, float]] | None = None,
+) -> dict[str, Any]:
     actual_behavior = classify_answer_behavior(answer)
     checks = example.output.checks
     contain_key = (
@@ -125,7 +130,7 @@ def evaluate_answer(example: GoldenExample, answer: str) -> dict[str, Any]:
     answer_folded = _normalize_text_match(answer)
     contained = [value for value in must_contain if _normalize_text_match(value) in answer_folded]
     forbidden = [value for value in must_not_contain if _normalize_text_match(value) in answer_folded]
-    parsed_nutrition = parse_nutrition_ranges(answer)
+    parsed_nutrition = parsed_nutrition_override or parse_nutrition_ranges(answer)
     numeric = _evaluate_numeric_ranges(example.output.acceptable_range, parsed_nutrition)
     numeric_metrics = evaluate_numeric_magnitude(example.output.nutrition, parsed_nutrition)
 
@@ -210,7 +215,11 @@ def parse_nutrition_ranges(answer: str) -> dict[str, dict[str, float]]:
     parsed: dict[str, dict[str, float]] = {}
     number_range = (
         r"(?P<minimum>\d+(?:[.,]\d+)?)"
-        r"(?:\s*[-–—]\s*(?P<maximum>\d+(?:[.,]\d+)?))?"
+        r"(?:"
+        r"\s*(?:±|\+/-|\+\/-)\s*(?P<delta>\d+(?:[.,]\d+)?)"
+        r"|"
+        r"\s*[-–—]\s*(?P<maximum>\d+(?:[.,]\d+)?)"
+        r")?"
     )
     for nutrient, nutrient_labels in labels.items():
         label_pattern = "|".join(re.escape(label) for label in nutrient_labels)
@@ -218,6 +227,11 @@ def parse_nutrition_ranges(answer: str) -> dict[str, dict[str, float]]:
         if match is None:
             continue
         minimum = float(match.group("minimum").replace(",", "."))
+        delta_group = match.group("delta")
+        if delta_group:
+            delta = float(delta_group.replace(",", "."))
+            parsed[nutrient] = {"min": max(0.0, minimum - delta), "max": minimum + delta}
+            continue
         maximum_group = match.group("maximum")
         maximum = float(maximum_group.replace(",", ".")) if maximum_group else minimum
         parsed[nutrient] = {"min": min(minimum, maximum), "max": max(minimum, maximum)}

@@ -68,6 +68,22 @@ and stderr logs stay ignored. The history file records one compact row per lane
 with pass rate, category/tag pass rates, calorie error metrics, confidence buckets,
 and LLM usage/cost diagnostics when available.
 
+Official live measurements should use the artifact wrapper so reports are durable:
+
+```bash
+uv run python -m app.evals.run_official_golden_eval \
+  --label round2_live_parser_1 \
+  --llm-mode live \
+  --allow-paid-api \
+  --commit \
+  --push
+```
+
+Add `--live-providers` for the production-like provider lane. The wrapper writes a
+Markdown summary, gzipped raw JSON, sanitized provenance, `COMMIT_SHA`,
+`MANIFEST.sha256`, and one metrics-history row under `reports/eval/official/`.
+Stdout/stderr logs remain ignored.
+
 To create committed smoke and full baseline reports:
 
 ```bash

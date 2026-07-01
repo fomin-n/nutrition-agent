@@ -151,12 +151,19 @@ def test_composite_retry_replaces_opaque_llm_parse(monkeypatch) -> None:
 
 
 def test_russian_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> None:
-    called = False
+    calls: list[tuple[bool, tuple[str, ...]]] = []
     monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
 
-    def parse_with_llm(*_args, **_kwargs):
-        nonlocal called
-        called = True
+    def parse_with_llm(*_args, force_decompose: bool = False, validation_feedback=(), **_kwargs):
+        calls.append((force_decompose, tuple(validation_feedback)))
+        if validation_feedback:
+            return MealUnderstanding(
+                dish_name="куриный суп",
+                ingredients=[
+                    IngredientEstimate(name="chicken breast cooked", grams_min=90, grams_max=130),
+                    IngredientEstimate(name="vegetable soup", grams_min=270, grams_max=310),
+                ],
+            )
         return MealUnderstanding(
             dish_name="куриный суп",
             ingredients=[
@@ -184,18 +191,30 @@ def test_russian_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> No
     )
 
     meal = result["meal"]
-    assert called is True
+    assert calls[0][0] is False
+    assert calls[1][0] is True
+    assert "composite_not_decomposed" in calls[1][1]
     assert not meal.needs_clarification
-    assert meal.ingredients[0].name == "vegetable soup"
+    assert [ingredient.name for ingredient in meal.ingredients] == [
+        "chicken breast cooked",
+        "vegetable soup",
+    ]
 
 
 def test_english_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> None:
-    called = False
+    calls: list[tuple[bool, tuple[str, ...]]] = []
     monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
 
-    def parse_with_llm(*_args, **_kwargs):
-        nonlocal called
-        called = True
+    def parse_with_llm(*_args, force_decompose: bool = False, validation_feedback=(), **_kwargs):
+        calls.append((force_decompose, tuple(validation_feedback)))
+        if validation_feedback:
+            return MealUnderstanding(
+                dish_name="chicken shawarma",
+                ingredients=[
+                    IngredientEstimate(name="chicken breast cooked", grams_min=110, grams_max=150),
+                    IngredientEstimate(name="bread", grams_min=60, grams_max=90),
+                ],
+            )
         return MealUnderstanding(
             dish_name="chicken shawarma",
             ingredients=[
@@ -223,9 +242,14 @@ def test_english_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> No
     )
 
     meal = result["meal"]
-    assert called is True
+    assert calls[0][0] is False
+    assert calls[1][0] is True
+    assert "composite_not_decomposed" in calls[1][1]
     assert not meal.needs_clarification
-    assert meal.ingredients[0].name == "chicken breast cooked"
+    assert [ingredient.name for ingredient in meal.ingredients] == [
+        "chicken breast cooked",
+        "bread",
+    ]
 
 
 def test_text_parser_logs_llm_fallback_with_request_id(monkeypatch, caplog) -> None:
@@ -281,3 +305,91 @@ def test_bare_generic_chicken_still_clarifies_without_llm_parser(monkeypatch) ->
     meal = result["meal"]
     assert meal.needs_clarification
     assert "часть курицы" in (meal.clarification_question or "")
+
+
+def test_llm_product_decomposition_is_rejected_for_local_product(monkeypatch) -> None:
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("local product parse should bypass invalid LLM decomposition")
+
+    monkeypatch.setattr(text_parser, "parse_text_with_llm", fail_if_called)
+
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="How many calories are in a Snickers bar?",
+                has_text=True,
+                has_image=False,
+                language="en",
+            ),
+            "use_llm": True,
+        }
+    )
+
+    meal = result["meal"]
+    assert [ingredient.name for ingredient in meal.ingredients] == ["Snickers"]
+
+
+def test_invalid_llm_composite_repair_falls_back_to_local_parser(monkeypatch) -> None:
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
+
+    def parse_with_llm(*_args, **_kwargs):
+        return MealUnderstanding(
+            dish_name="rice with chicken",
+            ingredients=[IngredientEstimate(name="rice with chicken", grams_min=400, grams_max=400)],
+        )
+
+    monkeypatch.setattr(text_parser, "parse_text_with_llm", parse_with_llm)
+
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="Calories in a 400 g portion of rice with chicken",
+                has_text=True,
+                has_image=False,
+                language="en",
+            ),
+            "use_llm": True,
+        }
+    )
+
+    meal = result["meal"]
+    assert [ingredient.name for ingredient in meal.ingredients] == [
+        "cooked white rice",
+        "chicken breast cooked",
+    ]
+
+
+def test_llm_composite_ranges_are_widened_after_validation(monkeypatch) -> None:
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
+
+    def parse_with_llm(*_args, **_kwargs):
+        return MealUnderstanding(
+            dish_name="rice with chicken",
+            ingredients=[
+                IngredientEstimate(name="cooked white rice", grams_min=200, grams_max=200),
+                IngredientEstimate(name="chicken breast cooked", grams_min=150, grams_max=150),
+            ],
+            assumptions=["Parsed composite."],
+            confidence="medium",
+        )
+
+    monkeypatch.setattr(text_parser, "parse_text_with_llm", parse_with_llm)
+
+    result = text_parser.parse_text_meal(
+        {
+            "normalized_input": NormalizedInput(
+                text="Calories in rice with chicken",
+                has_text=True,
+                has_image=False,
+                language="en",
+            ),
+            "use_llm": True,
+        }
+    )
+
+    meal = result["meal"]
+    assert (meal.ingredients[0].grams_min, meal.ingredients[0].grams_max) == (150.0, 250.0)
+    assert (meal.ingredients[1].grams_min, meal.ingredients[1].grams_max) == (112.5, 187.5)
+    assert any("widened" in assumption for assumption in meal.assumptions)

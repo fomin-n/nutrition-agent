@@ -1,3 +1,4 @@
+import gzip
 import json
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from app.evals.metrics_history import row_from_run, write_history_rows
 from app.evals.phoenix_datasets import upload_golden_dataset
 from app.evals.run_golden_eval import LLMUsageCollector, run_golden_eval, write_golden_results
 from app.evals.run_golden_gate import evaluate_golden_gate
+from app.evals.run_official_golden_eval import write_official_artifacts
 
 DATASET = Path("evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl")
 SINGLE_TURN_DATASET = Path("evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl")
@@ -64,7 +66,7 @@ def test_golden_loader_rejects_duplicate_ids(tmp_path) -> None:
 def test_golden_answer_evaluator_uses_behavior_text_and_range_overlap() -> None:
     example = load_golden_examples(DATASET)[0]
     answer = (
-        "Оценка калорий: 90-120 ккал\n"
+        "Оценка калорий: 105±15 ккал\n"
         "Белки: 1-2 г\n"
         "Жиры: 0-1 г\n"
         "Углеводы: 25-29 г"
@@ -80,6 +82,36 @@ def test_golden_answer_evaluator_uses_behavior_text_and_range_overlap() -> None:
     assert evaluation["numeric_metrics"]["calories_kcal"]["predicted_width"] == 30
     assert evaluation["numeric_metrics"]["calories_kcal"]["interval_score"] == 30
     assert parse_nutrition_ranges(answer)["carbs_g"] == {"min": 25.0, "max": 29.0}
+    assert parse_nutrition_ranges(answer)["calories_kcal"] == {"min": 90.0, "max": 120.0}
+
+
+def test_golden_answer_evaluator_prefers_structured_totals_override() -> None:
+    example = load_golden_examples(DATASET)[0]
+
+    evaluation = evaluate_answer(
+        example,
+        "Калории: указаны в структурированном результате.",
+        parsed_nutrition_override={
+            "calories_kcal": {"min": 90.0, "max": 120.0},
+            "protein_g": {"min": 1.0, "max": 2.0},
+            "fat_g": {"min": 0.0, "max": 1.0},
+            "carbs_g": {"min": 25.0, "max": 29.0},
+        },
+    )
+
+    assert evaluation["status"] == "pass"
+    assert evaluation["parsed_nutrition"]["calories_kcal"] == {"min": 90.0, "max": 120.0}
+
+
+def test_golden_parser_supports_plus_minus_calories() -> None:
+    parsed = parse_nutrition_ranges(
+        "🔥 Calories: 250±50 kcal\nProtein: 9–11 g\nFat: 7–9 g\nCarbs: 23–29 g"
+    )
+    parsed_ru = parse_nutrition_ranges("🔥 Калории: 250±50 ккал\nБелки: 9–11 г")
+
+    assert parsed["calories_kcal"] == {"min": 200.0, "max": 300.0}
+    assert parsed["protein_g"] == {"min": 9.0, "max": 11.0}
+    assert parsed_ru["calories_kcal"] == {"min": 200.0, "max": 300.0}
 
 
 def test_golden_numeric_magnitude_reports_tail_and_sharpness_inputs() -> None:
@@ -240,6 +272,39 @@ def test_metrics_history_extracts_stable_lane_row(tmp_path: Path) -> None:
     assert row["category_pass_rates"] == {"mixed_dish": 0.25}
     assert row["tag_pass_rates"] == {"safety": 1.0}
     assert row["calorie_metrics"]["mean_interval_score"] == 90.0
+    assert history_path.read_text(encoding="utf-8").count("\n") == 1
+
+
+def test_official_eval_artifacts_include_gzip_manifest_and_history(tmp_path: Path) -> None:
+    example = load_golden_examples(DATASET, split="smoke")[0]
+    run = run_golden_eval(
+        [example],
+        dataset_path=DATASET,
+        split="smoke",
+        llm_mode="off",
+        live_providers=False,
+    )
+    history_path = tmp_path / "metrics_history.jsonl"
+
+    artifacts = write_official_artifacts(
+        run,
+        label="unit official",
+        output_root=tmp_path / "official",
+        metrics_history_path=history_path,
+        cli_args={"label": "unit official"},
+    )
+
+    assert artifacts.markdown_path.exists()
+    assert artifacts.raw_json_gz_path.suffixes[-2:] == [".json", ".gz"]
+    with gzip.open(artifacts.raw_json_gz_path, "rt", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    assert raw["run_id"] == run["run_id"]
+    assert artifacts.commit_sha_path.read_text(encoding="utf-8").strip()
+    provenance = artifacts.provenance_path.read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY" not in provenance
+    assert "TELEGRAM_BOT_TOKEN" not in provenance
+    manifest = artifacts.manifest_path.read_text(encoding="utf-8")
+    assert artifacts.raw_json_gz_path.name in manifest
     assert history_path.read_text(encoding="utf-8").count("\n") == 1
 
 

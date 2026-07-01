@@ -29,8 +29,9 @@ def build_golden_llm_stub(
         language: LanguageCode = "unknown",
         memory_note: str = "",
         force_decompose: bool = False,
+        validation_feedback: Sequence[str] = (),
     ) -> MealUnderstanding:
-        del memory_note, force_decompose
+        del memory_note, force_decompose, validation_feedback
         key = normalize_food_query(text)
         if key in fixtures:
             return fixtures[key]

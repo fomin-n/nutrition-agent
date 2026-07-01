@@ -227,7 +227,11 @@ def _run_example(example: GoldenExample, *, use_llm: bool) -> dict[str, Any]:
         execution["llm_usage"] = usage.summary()
         execution["graph_invocations"] = [_graph_state_snapshot(state) for state in graph_states]
         execution["provider_events"] = provider_events
-        evaluation = evaluate_answer(example, answer)
+        evaluation = evaluate_answer(
+            example,
+            answer,
+            parsed_nutrition_override=_parsed_nutrition_from_graph_states(graph_states),
+        )
         memory_failures = _evaluate_conversation_expectations(example, execution)
         evaluation["failed_checks"].extend(memory_failures)
         status = (
@@ -507,6 +511,41 @@ def _graph_state_snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "errors",
     )
     return {key: _jsonable(state[key]) for key in keys if key in state}
+
+
+def _parsed_nutrition_from_graph_states(
+    graph_states: Sequence[dict[str, Any]],
+) -> dict[str, dict[str, float]] | None:
+    for state in reversed(graph_states):
+        final = state.get("final_estimate")
+        totals = getattr(final, "totals", None)
+        if totals is None and isinstance(final, dict):
+            totals = final.get("totals")
+        parsed = _ranges_from_totals(totals)
+        if parsed:
+            return parsed
+    return None
+
+
+def _ranges_from_totals(totals: Any) -> dict[str, dict[str, float]] | None:
+    if totals is None:
+        return None
+    if isinstance(totals, BaseModel):
+        totals = totals.model_dump(mode="json")
+    if not isinstance(totals, dict):
+        return None
+    parsed: dict[str, dict[str, float]] = {}
+    for nutrient in ("calories_kcal", "protein_g", "fat_g", "carbs_g"):
+        value = totals.get(nutrient)
+        if isinstance(value, BaseModel):
+            value = value.model_dump(mode="json")
+        if not isinstance(value, dict):
+            continue
+        minimum = value.get("min")
+        maximum = value.get("max")
+        if isinstance(minimum, int | float) and isinstance(maximum, int | float):
+            parsed[nutrient] = {"min": float(minimum), "max": float(maximum)}
+    return parsed or None
 
 
 def _jsonable(value: Any) -> Any:

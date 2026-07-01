@@ -257,7 +257,11 @@ def _contains_expected_range(
     label_pattern = "|".join(re.escape(label) for label in labels)
     range_pattern = (
         r"(?P<minimum>\d+(?:[.,]\d+)?)"
-        r"(?:\s*[-–—]\s*(?P<maximum>\d+(?:[.,]\d+)?))?"
+        r"(?:"
+        r"\s*(?:±|\+/-|\+\/-)\s*(?P<delta>\d+(?:[.,]\d+)?)"
+        r"|"
+        r"\s*[-–—]\s*(?P<maximum>\d+(?:[.,]\d+)?)"
+        r")?"
     )
     for match in re.finditer(
         rf"(?:{label_pattern})\s*:\s*{range_pattern}",
@@ -265,10 +269,17 @@ def _contains_expected_range(
         flags=re.IGNORECASE,
     ):
         parsed_minimum = round(float(match.group("minimum").replace(",", ".")))
-        maximum_group = match.group("maximum")
-        parsed_maximum = (
-            round(float(maximum_group.replace(",", "."))) if maximum_group else parsed_minimum
-        )
+        delta_group = match.group("delta")
+        if delta_group:
+            delta = float(delta_group.replace(",", "."))
+            midpoint = float(match.group("minimum").replace(",", "."))
+            parsed_minimum = round(max(0.0, midpoint - delta))
+            parsed_maximum = round(midpoint + delta)
+        else:
+            maximum_group = match.group("maximum")
+            parsed_maximum = (
+                round(float(maximum_group.replace(",", "."))) if maximum_group else parsed_minimum
+            )
         if {parsed_minimum, parsed_maximum} == {expected_minimum, expected_maximum}:
             return True
     return False
