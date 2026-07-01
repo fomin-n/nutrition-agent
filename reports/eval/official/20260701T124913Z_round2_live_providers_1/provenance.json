@@ -1,0 +1,61 @@
+{
+  "cli_args": {
+    "allow_paid_api": true,
+    "commit": true,
+    "dataset": "/Users/fomin/Projects/personal/nutrition-agent/evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl",
+    "label": "round2_live_providers_1",
+    "live_providers": true,
+    "llm_mode": "live",
+    "max_examples": null,
+    "metrics_history": "reports/eval/metrics_history.jsonl",
+    "output_root": "reports/eval/official",
+    "push": true,
+    "split": null,
+    "tag": []
+  },
+  "config": {
+    "critic_max_iterations": 2,
+    "live_providers": true,
+    "llm_mode": "live",
+    "llm_stub_version": null,
+    "macro_ranges_are_advisory": true,
+    "nutrition_cache_dir": ".cache/nutrition-agent",
+    "openai_critic_model": "gpt-4.1-mini",
+    "openai_moderation_enabled": true,
+    "openai_text_model": "gpt-4.1-mini",
+    "openai_vision_model": "gpt-4.1-mini",
+    "pricing": {
+      "gpt-4.1-mini": {
+        "cached_input": 0.1,
+        "checked_date": "2026-06-24",
+        "input": 0.4,
+        "output": 1.6,
+        "source": "https://developers.openai.com/api/docs/models/gpt-4.1-mini"
+      }
+    },
+    "provider_flags": {
+      "fatsecret": true,
+      "open_food_facts": true,
+      "usda": true
+    },
+    "temperature": 0.0,
+    "use_llm": true
+  },
+  "dataset_path": "/Users/fomin/Projects/personal/nutrition-agent/evals/datasets/nutrition_agent_phoenix_eval_datasets_v2.jsonl",
+  "filters": {
+    "split": null,
+    "tags": []
+  },
+  "git_commit": "90273c5d3fedecaa116c4e67187451742f82416a",
+  "git_status_short": "?? reports/eval/official/20260701T124913Z_round2_live_providers_1/",
+  "run_id": "golden_baseline_all_20260701T122451764554Z",
+  "summary": {
+    "duration_seconds": 1461.643,
+    "failed": 30,
+    "pass_rate": 0.7297297297297297,
+    "passed": 81,
+    "total": 111,
+    "unknown": 0
+  },
+  "timestamp_utc": "2026-07-01T12:24:51.764554+00:00"
+}
