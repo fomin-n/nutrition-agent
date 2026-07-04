@@ -1298,6 +1298,466 @@ foods:
     ru: котлета
   flags:
   - conventional_dish_prior
+- name: shrimp cooked
+  nutrition_per_100g:
+    calories_kcal: 99
+    protein_g: 24.0
+    fat_g: 0.3
+    carbs_g: 0.2
+  role: protein
+  aliases:
+  - shrimp
+  - cooked shrimp
+  - grilled shrimp
+  - prawns
+  - креветки
+  - креветками
+  - креветок
+  default_portion_g:
+  - 90
+  - 140
+  localized_names:
+    ru: креветки
+  russian_patterns:
+  - кревет\w*
+- name: muesli
+  nutrition_per_100g:
+    calories_kcal: 370
+    protein_g: 10.0
+    fat_g: 6.0
+    carbs_g: 68.0
+  role: starch
+  aliases:
+  - muesli
+  - musli
+  - granola
+  - мюсли
+  default_portion_g:
+  - 40
+  - 70
+  localized_names:
+    ru: мюсли
+- name: mixed berries
+  nutrition_per_100g:
+    calories_kcal: 50
+    protein_g: 1.0
+    fat_g: 0.3
+    carbs_g: 12.0
+  role: fruit
+  aliases:
+  - berries
+  - mixed berries
+  - ягоды
+  - ягодами
+  - ягод
+  default_portion_g:
+  - 50
+  - 100
+  localized_names:
+    ru: ягоды
+  russian_patterns:
+  - ягод\w*
+- name: tortilla
+  nutrition_per_100g:
+    calories_kcal: 310
+    protein_g: 8.0
+    fat_g: 7.0
+    carbs_g: 50.0
+  role: bread
+  aliases:
+  - tortilla
+  - flour tortilla
+  - wrap bread
+  - taco shell
+  - тортилья
+  - тортильи
+  - лаваш
+  - лаваше
+  default_portion_g:
+  - 45
+  - 70
+  localized_names:
+    ru: тортилья
+- name: french fries
+  nutrition_per_100g:
+    calories_kcal: 312
+    protein_g: 3.4
+    fat_g: 15.0
+    carbs_g: 41.0
+  role: starch
+  aliases:
+  - french fries
+  - fries
+  - картошка фри
+  - картошкой фри
+  - картофель фри
+  default_portion_g:
+  - 120
+  - 180
+  localized_names:
+    ru: картошка фри
+- name: cooked quinoa
+  nutrition_per_100g:
+    calories_kcal: 120
+    protein_g: 4.4
+    fat_g: 1.9
+    carbs_g: 21.3
+  role: starch
+  aliases:
+  - quinoa
+  - cooked quinoa
+  - киноа
+  default_portion_g:
+  - 130
+  - 200
+  localized_names:
+    ru: киноа
+- name: shakshuka
+  nutrition_per_100g:
+    calories_kcal: 120
+    protein_g: 6.0
+    fat_g: 7.3
+    carbs_g: 8.3
+  role: composite
+  aliases:
+  - shakshuka
+  - шакшука
+  - шакшуке
+  default_portion_g:
+  - 250
+  - 350
+  localized_names:
+    ru: шакшука
+  flags:
+  - conventional_dish_prior
+- name: lasagna
+  nutrition_per_100g:
+    calories_kcal: 186
+    protein_g: 10.0
+    fat_g: 9.1
+    carbs_g: 17.1
+  role: composite
+  aliases:
+  - lasagna
+  - lasagne
+  - лазанья
+  - лазанье
+  - лазаньи
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: лазанья
+  flags:
+  - conventional_dish_prior
+- name: blini with sour cream
+  nutrition_per_100g:
+    calories_kcal: 215
+    protein_g: 6.0
+    fat_g: 10.0
+    carbs_g: 25.0
+  role: composite
+  aliases:
+  - blini with sour cream
+  - pancakes with sour cream
+  - блины со сметаной
+  - блинах со сметаной
+  - блинов со сметаной
+  default_portion_g:
+  - 90
+  - 120
+  localized_names:
+    ru: блины со сметаной
+  flags:
+  - conventional_dish_prior
+- name: syrniki
+  nutrition_per_100g:
+    calories_kcal: 260
+    protein_g: 13.0
+    fat_g: 12.0
+    carbs_g: 25.0
+  role: composite
+  aliases:
+  - syrniki
+  - syrnyky
+  - cottage cheese pancakes
+  - сырники
+  - сырников
+  - сырнике
+  default_portion_g:
+  - 180
+  - 240
+  localized_names:
+    ru: сырники
+  flags:
+  - conventional_dish_prior
+- name: chicken shawarma
+  nutrition_per_100g:
+    calories_kcal: 200
+    protein_g: 10.9
+    fat_g: 8.0
+    carbs_g: 20.0
+  role: composite
+  aliases:
+  - chicken shawarma
+  - shawarma with chicken
+  - chicken doner wrap
+  - шаурма с курицей
+  - шаурме с курицей
+  - шаверма с курицей
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: шаурма с курицей
+  flags:
+  - conventional_dish_prior
+- name: sushi set
+  nutrition_per_100g:
+    calories_kcal: 167
+    protein_g: 8.3
+    fat_g: 2.7
+    carbs_g: 28.3
+  role: composite
+  aliases:
+  - sushi set
+  - sushi
+  - 12 piece sushi set
+  - суши сет
+  - суши
+  default_portion_g:
+  - 22
+  - 28
+  localized_names:
+    ru: суши сет
+  flags:
+  - conventional_dish_prior
+- name: falafel wrap
+  nutrition_per_100g:
+    calories_kcal: 186
+    protein_g: 5.7
+    fat_g: 8.0
+    carbs_g: 22.9
+  role: composite
+  aliases:
+  - falafel wrap
+  - falafel sandwich
+  - фалафель в лаваше
+  - ролл с фалафелем
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: фалафель в лаваше
+  flags:
+  - conventional_dish_prior
+- name: chicken burrito
+  nutrition_per_100g:
+    calories_kcal: 188
+    protein_g: 11.3
+    fat_g: 6.3
+    carbs_g: 21.3
+  role: composite
+  aliases:
+  - chicken burrito
+  - burrito with chicken
+  - буррито с курицей
+  default_portion_g:
+  - 350
+  - 450
+  localized_names:
+    ru: буррито с курицей
+  flags:
+  - conventional_dish_prior
+- name: beef tacos
+  nutrition_per_100g:
+    calories_kcal: 173
+    protein_g: 9.3
+    fat_g: 8.3
+    carbs_g: 16.0
+  role: composite
+  aliases:
+  - beef tacos
+  - beef taco
+  - tacos with beef
+  - тако с говядиной
+  default_portion_g:
+  - 90
+  - 110
+  localized_names:
+    ru: тако с говядиной
+  flags:
+  - conventional_dish_prior
+- name: quinoa veggie bowl
+  nutrition_per_100g:
+    calories_kcal: 130
+    protein_g: 4.5
+    fat_g: 5.0
+    carbs_g: 16.3
+  role: composite
+  aliases:
+  - quinoa veggie bowl
+  - quinoa vegetable bowl
+  - quinoa bowl
+  - киноа с овощами
+  default_portion_g:
+  - 350
+  - 450
+  localized_names:
+    ru: киноа с овощами
+  flags:
+  - conventional_dish_prior
+- name: chicken nuggets
+  nutrition_per_100g:
+    calories_kcal: 280
+    protein_g: 14.0
+    fat_g: 18.0
+    carbs_g: 16.0
+  role: composite
+  aliases:
+  - chicken nuggets
+  - chicken nugget
+  - nuggets
+  - наггетсы
+  - наггетсов
+  default_portion_g:
+  - 16
+  - 18
+  localized_names:
+    ru: куриные наггетсы
+  flags:
+  - conventional_dish_prior
+- name: pancakes with syrup
+  nutrition_per_100g:
+    calories_kcal: 217
+    protein_g: 4.7
+    fat_g: 6.0
+    carbs_g: 35.0
+  role: composite
+  aliases:
+  - pancakes with syrup
+  - pancake with syrup
+  default_portion_g:
+  - 90
+  - 110
+  localized_names:
+    ru: панкейки с сиропом
+  flags:
+  - conventional_dish_prior
+- name: steak with fries
+  nutrition_per_100g:
+    calories_kcal: 180
+    protein_g: 11.0
+    fat_g: 9.0
+    carbs_g: 14.0
+  role: composite
+  aliases:
+  - steak with fries
+  - steak and fries
+  - стейк с картошкой фри
+  - стейке с картошкой фри
+  default_portion_g:
+  - 400
+  - 550
+  localized_names:
+    ru: стейк с картошкой фри
+  flags:
+  - conventional_dish_prior
+- name: chicken curry with rice
+  nutrition_per_100g:
+    calories_kcal: 160
+    protein_g: 7.8
+    fat_g: 6.2
+    carbs_g: 18.9
+  role: composite
+  aliases:
+  - chicken curry with rice
+  - куриное карри с рисом
+  - курином карри с рисом
+  default_portion_g:
+  - 400
+  - 500
+  localized_names:
+    ru: куриное карри с рисом
+  flags:
+  - conventional_dish_prior
+- name: beef udon noodles
+  nutrition_per_100g:
+    calories_kcal: 152
+    protein_g: 7.0
+    fat_g: 5.0
+    carbs_g: 19.0
+  role: composite
+  aliases:
+  - beef udon noodles
+  - beef udon
+  - udon noodles with beef
+  default_portion_g:
+  - 450
+  - 550
+  localized_names:
+    ru: удон с говядиной
+  flags:
+  - conventional_dish_prior
+- name: muesli with yogurt and berries
+  nutrition_per_100g:
+    calories_kcal: 137
+    protein_g: 6.3
+    fat_g: 3.4
+    carbs_g: 21.4
+  role: composite
+  aliases:
+  - muesli with yogurt and berries
+  - musli with yogurt and berries
+  - muesli yogurt berries
+  - мюсли с йогуртом и ягодами
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: мюсли с йогуртом и ягодами
+  flags:
+  - conventional_dish_prior
+- name: tomato mozzarella salad
+  nutrition_per_100g:
+    calories_kcal: 140
+    protein_g: 8.0
+    fat_g: 10.7
+    carbs_g: 4.0
+  role: composite
+  aliases:
+  - tomato mozzarella salad
+  - tomato and mozzarella salad
+  - caprese salad
+  - салат с помидорами и моцареллой
+  - салате с помидорами и моцареллой
+  default_portion_g:
+  - 250
+  - 350
+  localized_names:
+    ru: салат с помидорами и моцареллой
+  flags:
+  - conventional_dish_prior
+- name: grilled shrimp salad
+  nutrition_per_100g:
+    calories_kcal: 100
+    protein_g: 10.0
+    fat_g: 5.1
+    carbs_g: 5.7
+  role: composite
+  aliases:
+  - grilled shrimp salad
+  - shrimp salad
+  - salad with grilled shrimp
+  - салат с креветками гриль
+  - салате с креветками гриль
+  default_portion_g:
+  - 300
+  - 400
+  localized_names:
+    ru: салат с креветками гриль
+  flags:
+  - conventional_dish_prior
 products:
 - canonical_product: Coca-Cola Zero Sugar
   brand: Coca-Cola
@@ -1466,31 +1926,76 @@ phrase_translations:
   replacement: sour cream
 - phrase: скыр
   replacement: skyr
+- phrase: картошка фри
+  replacement: french fries
+  preparation: fried
+- phrase: картошкой фри
+  replacement: french fries
+  preparation: fried
 standard_prepared_dishes:
 - big mac
+- beef tacos
+- beef udon
+- beef udon noodles
+- blini with sour cream
 - borsch
 - borscht
 - burger
 - caesar salad
 - carbonara
+- chicken burrito
+- chicken curry with rice
+- chicken nuggets
+- chicken shawarma
+- falafel wrap
 - hamburger
+- lasagna
 - mashed potatoes
 - meat cutlet
 - meat dumpling
+- muesli with yogurt and berries
 - omelet
 - omelette
+- pancakes with syrup
 - pasta carbonara
 - pelmeni
 - pizza
+- quinoa veggie bowl
 - salad
+- shakshuka
+- steak with fries
+- sushi set
 - soup
+- syrniki
+- tomato mozzarella salad
+- grilled shrimp salad
+- burrito
+- falafel
+- sushi
+- taco
+- wrap
 - борщ
+- блины со сметаной
+- буррито
+- буррито с курицей
 - карбонара
+- куриное карри с рисом
+- лазанья
+- мюсли с йогуртом и ягодами
+- наггетсы
 - омлет
 - паста карбонара
 - пицца
 - салат
+- салат с креветками гриль
+- салат с помидорами и моцареллой
 - суп
+- сырники
+- суши
+- фалафель
+- шакшука
+- шаурма
+- шаурма с курицей
 scope:
   additional_food_terms:
   - ate
@@ -1501,24 +2006,31 @@ scope:
   - carbs
   - dinner
   - eaten
+  - falafel
   - fat
   - fish
   - fruit
   - kcal
+  - lasagna
   - lunch
   - macros
   - meal
   - meat
+  - muesli
+  - nuggets
   - plate
   - portion
   - protein
+  - quinoa
   - sandwich
   - serving
+  - shakshuka
   - snack
   - sushi
   - taco
   - vegetables
   - wrap
+  - burrito
   - белка
   - белки
   - белок
@@ -1529,6 +2041,8 @@ scope:
   - жиров
   - жиры
   - завтрак
+  - киноа
+  - креветки
   - калории
   - калорий
   - калорийность
@@ -1537,6 +2051,8 @@ scope:
   - кбжу
   - ккал
   - макросы
+  - мюсли
+  - наггетсы
   - нутриенты
   - обед
   - перекус
@@ -1547,6 +2063,11 @@ scope:
   - углеводов
   - углеводы
   - ужин
+  - фалафель
+  - шакшука
+  - шаурма
+  - суши
+  - тако
   generic_intent_terms:
   - ate
   - bowl

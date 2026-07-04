@@ -7,6 +7,7 @@ from app.schemas.nutrition import (
     MealUnderstanding,
     NutritionPer100g,
     NutritionTotals,
+    RetrievalFailure,
 )
 
 
@@ -50,6 +51,37 @@ def test_low_confidence_note_is_localized() -> None:
 
     assert "🔴 Уверенность: низкая" in answer
     assert "💡 Для более точной оценки" in answer
+
+
+def test_partial_estimate_is_kept_even_when_failures_outnumber_items() -> None:
+    state = _estimate_state(language="en", assumptions=["One component was resolved."])
+    state["ingredient_nutrition"] = [
+        IngredientNutrition(
+            ingredient_name="rice",
+            matched_food_name="cooked white rice",
+            grams_min=100,
+            grams_max=100,
+            per_100g=NutritionPer100g(
+                food_name="cooked white rice",
+                calories_kcal=130,
+                protein_g=2.7,
+                fat_g=0.3,
+                carbs_g=28.2,
+                source="fallback",
+            ),
+            source="fallback",
+        )
+    ]
+    state["retrieval_failures"] = [
+        RetrievalFailure(ingredient_name="sauce", canonical_query="sauce", reason="no match"),
+        RetrievalFailure(ingredient_name="topping", canonical_query="topping", reason="no match"),
+    ]
+
+    final = synthesize_answer(state)["final_estimate"]
+
+    assert final.is_clarification is False
+    assert final.confidence == "low"
+    assert "Partial estimate" in final.text
 
 
 def test_calorie_comparison_uses_refreshed_layout() -> None:

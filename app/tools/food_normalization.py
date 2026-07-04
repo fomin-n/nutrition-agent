@@ -301,7 +301,7 @@ def estimate_portion(
 ) -> PortionEstimate:
     normalized = normalize_food_query(text)
     quantities = extract_quantity_mentions(normalized)
-    quantity = _quantity_for_mention(mention, mentions, quantities)
+    quantity = _quantity_for_mention(normalized, mention, mentions, quantities)
     if quantity:
         converted = _quantity_to_grams(quantity, mention.canonical_name)
         if converted:
@@ -450,13 +450,26 @@ def _parse_number(value: str) -> float:
 
 
 def _quantity_for_mention(
+    normalized: str,
     mention: FoodMention,
     mentions: tuple[FoodMention, ...],
     quantities: tuple[QuantityMention, ...],
 ) -> QuantityMention | None:
     if not quantities:
         return None
+    if (
+        len(quantities) == 1
+        and len(mentions) >= 2
+        and _quantity_looks_like_total_portion(normalized, quantities[0], mentions)
+    ):
+        return None
     if len(mentions) == 1:
+        if _single_mention_quantity_looks_like_unmatched_composite_total(
+            normalized,
+            quantities[0],
+            mention,
+        ):
+            return None
         return quantities[0]
     nearest = min(quantities, key=lambda item: _span_distance(mention, item))
     owner = min(mentions, key=lambda item: _span_distance(item, nearest))
@@ -514,7 +527,15 @@ def _nearby_count(normalized: str, mention: FoodMention) -> float | None:
         rf"\b(?P<count>{_number_pattern()})\b(?:\s+[\w]+){{0,3}}\s*$",
         prefix,
     )
-    return _parse_number(match.group("count")) if match else None
+    if not match:
+        return None
+    unit_pattern = "|".join(
+        re.escape(unit)
+        for unit in sorted((*UNIT_GRAMS, *VOLUME_ML), key=len, reverse=True)
+    )
+    if re.search(rf"\b{re.escape(match.group('count'))}\s*(?:{unit_pattern})\b", match.group(0)):
+        return None
+    return _parse_number(match.group("count"))
 
 
 def _quantity_looks_like_total_portion(
@@ -534,8 +555,53 @@ def _quantity_looks_like_total_portion(
     )
     if any(marker in window for marker in total_markers):
         return True
+    if (
+        len(mentions) >= 2
+        and quantity.start >= max(mention.end for mention in mentions)
+        and _has_composite_signal(normalized, mentions)
+    ):
+        return True
     nearest = min(mentions, key=lambda item: _span_distance(item, quantity))
     return quantity.start > max(mention.end for mention in mentions) and _span_distance(nearest, quantity) > 18
+
+
+def _single_mention_quantity_looks_like_unmatched_composite_total(
+    normalized: str,
+    quantity: QuantityMention,
+    mention: FoodMention,
+) -> bool:
+    if mention.canonical_name in CONVENTIONAL_DISH_PRIORS:
+        return False
+    if quantity.start < mention.end:
+        return False
+    if _food_role(mention.canonical_name) == "fat":
+        return False
+    return bool(re.search(r"\b(?:with|and|с|и)\b", normalized))
+
+
+def _has_composite_signal(normalized: str, mentions: tuple[FoodMention, ...]) -> bool:
+    if len(mentions) < 2:
+        return False
+    first = min(mention.start for mention in mentions)
+    last = max(mention.end for mention in mentions)
+    between = normalized[first:last]
+    if re.search(r"\b(?:with|and|с|и)\b", between):
+        return True
+    dish_terms = (
+        "salad",
+        "bowl",
+        "plate",
+        "portion",
+        "serving",
+        "noodles",
+        "pasta",
+        "салат",
+        "тарел",
+        "порци",
+        "лапш",
+        "паста",
+    )
+    return any(term in normalized for term in dish_terms)
 
 
 def _food_role(canonical_name: str) -> str:

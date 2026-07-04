@@ -47,3 +47,44 @@ def test_calculator_range_aggregation() -> None:
     assert totals.carbs_g.min == 28
     assert totals.carbs_g.max == 56
 
+
+def test_calculator_flags_implausible_mixed_dish_macro_density() -> None:
+    protein_powder = NutritionPer100g(
+        food_name="protein component",
+        calories_kcal=380,
+        protein_g=85,
+        fat_g=2,
+        carbs_g=4,
+        source="fallback",
+    )
+    oil = NutritionPer100g(
+        food_name="fat component",
+        calories_kcal=884,
+        protein_g=0,
+        fat_g=100,
+        carbs_g=0,
+        source="fallback",
+    )
+
+    totals = calculate_totals(
+        [
+            IngredientNutrition(
+                ingredient_name="protein component",
+                matched_food_name="protein component",
+                grams_min=160,
+                grams_max=160,
+                per_100g=protein_powder,
+                source="fallback",
+            ),
+            IngredientNutrition(
+                ingredient_name="fat component",
+                matched_food_name="fat component",
+                grams_min=40,
+                grams_max=40,
+                per_100g=oil,
+                source="fallback",
+            ),
+        ]
+    )
+
+    assert "Macro density is unusually high for a mixed dish; verify portions." in totals.warnings

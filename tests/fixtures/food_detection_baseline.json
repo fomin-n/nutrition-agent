@@ -1029,7 +1029,15 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_047",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "blini with sour cream",
+        "end": 37,
+        "matched_text": "блинах со сметаной",
+        "product": null,
+        "start": 19
+      }
+    ],
     "scope": {
       "confidence": "medium",
       "is_food_related": true,
@@ -1043,9 +1051,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_048",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "syrniki",
+        "end": 35,
+        "matched_text": "syrniki",
+        "product": null,
+        "start": 28
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"
@@ -1115,9 +1131,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_051",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "shakshuka",
+        "end": 25,
+        "matched_text": "шакшуке",
+        "product": null,
+        "start": 18
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"
@@ -1231,11 +1255,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "chicken breast cooked",
+        "canonical_name": "chicken burrito",
         "end": 31,
-        "matched_text": "курицей",
+        "matched_text": "буррито с курицей",
         "product": null,
-        "start": 24
+        "start": 14
       }
     ],
     "scope": {
@@ -1253,9 +1277,9 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "beef cooked",
-        "end": 20,
-        "matched_text": "beef",
+        "canonical_name": "beef tacos",
+        "end": 26,
+        "matched_text": "beef tacos",
         "product": null,
         "start": 16
       }
@@ -1275,11 +1299,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "cooked white rice",
+        "canonical_name": "chicken curry with rice",
         "end": 39,
-        "matched_text": "рисом",
+        "matched_text": "курином карри с рисом",
         "product": null,
-        "start": 34
+        "start": 18
       }
     ],
     "scope": {
@@ -1317,9 +1341,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_061",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "lasagna",
+        "end": 25,
+        "matched_text": "лазанье",
+        "product": null,
+        "start": 18
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"
@@ -1375,7 +1407,15 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_064",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "sushi set",
+        "end": 43,
+        "matched_text": "12 piece sushi set",
+        "product": null,
+        "start": 25
+      }
+    ],
     "scope": {
       "confidence": "medium",
       "is_food_related": true,
@@ -1497,7 +1537,15 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_070",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "falafel wrap",
+        "end": 25,
+        "matched_text": "falafel wrap",
+        "product": null,
+        "start": 13
+      }
+    ],
     "scope": {
       "confidence": "medium",
       "is_food_related": true,
@@ -1513,11 +1561,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "chicken breast cooked",
+        "canonical_name": "chicken shawarma",
         "end": 30,
-        "matched_text": "курицей",
+        "matched_text": "шаурме с курицей",
         "product": null,
-        "start": 23
+        "start": 14
       }
     ],
     "scope": {
@@ -1577,9 +1625,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_074",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "quinoa veggie bowl",
+        "end": 43,
+        "matched_text": "quinoa veggie bowl",
+        "product": null,
+        "start": 25
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"
@@ -1629,11 +1685,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "potato boiled",
-        "end": 36,
-        "matched_text": "картошкой",
+        "canonical_name": "steak with fries",
+        "end": 40,
+        "matched_text": "стейке с картошкой фри",
         "product": null,
-        "start": 27
+        "start": 18
       }
     ],
     "scope": {
@@ -1651,9 +1707,9 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "chicken breast cooked",
-        "end": 21,
-        "matched_text": "chicken",
+        "canonical_name": "chicken nuggets",
+        "end": 29,
+        "matched_text": "chicken nuggets",
         "product": null,
         "start": 14
       }
@@ -1758,9 +1814,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_082",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "pancakes with syrup",
+        "end": 33,
+        "matched_text": "pancakes with syrup",
+        "product": null,
+        "start": 14
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"
@@ -1774,11 +1838,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "yogurt plain",
-        "end": 30,
-        "matched_text": "йогуртом",
+        "canonical_name": "muesli with yogurt and berries",
+        "end": 40,
+        "matched_text": "мюсли с йогуртом и ягодами",
         "product": null,
-        "start": 22
+        "start": 14
       }
     ],
     "scope": {
@@ -1840,18 +1904,11 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "beef cooked",
-        "end": 14,
-        "matched_text": "beef",
+        "canonical_name": "beef udon noodles",
+        "end": 27,
+        "matched_text": "beef udon noodles",
         "product": null,
         "start": 10
-      },
-      {
-        "canonical_name": "cooked pasta",
-        "end": 27,
-        "matched_text": "noodles",
-        "product": null,
-        "start": 20
       }
     ],
     "scope": {
@@ -1869,25 +1926,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "mixed salad vegetables",
-        "end": 24,
-        "matched_text": "салате",
+        "canonical_name": "tomato mozzarella salad",
+        "end": 50,
+        "matched_text": "салате с помидорами и моцареллой",
         "product": null,
         "start": 18
-      },
-      {
-        "canonical_name": "tomato",
-        "end": 37,
-        "matched_text": "помидорами",
-        "product": null,
-        "start": 27
-      },
-      {
-        "canonical_name": "mozzarella",
-        "end": 50,
-        "matched_text": "моцареллой",
-        "product": null,
-        "start": 40
       }
     ],
     "scope": {
@@ -1934,9 +1977,9 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "mixed salad vegetables",
-        "end": 20,
-        "matched_text": "салате",
+        "canonical_name": "grilled shrimp salad",
+        "end": 39,
+        "matched_text": "салате с креветками гриль",
         "product": null,
         "start": 14
       }

@@ -67,6 +67,48 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
         return {"meal": local_meal}
     if _uses_conventional_dish_prior(local_meal):
         return {"meal": local_meal}
+    local_failures = _validate_llm_meal(text, local_meal, local_meal=local_meal)
+    if local_meal.ingredients and local_failures:
+        LOGGER.warning(
+            "Local text parser validation flagged meal request_id=%s reasons=%s",
+            state.get("request_id"),
+            ",".join(local_failures),
+        )
+        if state.get("use_llm", True) and has_openai_key():
+            repaired_meal = _try_parse_text_with_llm(
+                text,
+                language=language,
+                memory_note=memory_note,
+                request_id=state.get("request_id"),
+                branch="local_parse_repair",
+                force_decompose=True,
+                validation_feedback=local_failures,
+            )
+            repaired_failures = (
+                _validate_llm_meal(text, repaired_meal, local_meal=local_meal)
+                if repaired_meal is not None
+                else local_failures
+            )
+            if repaired_meal is not None and not repaired_failures:
+                return {
+                    "meal": _calibrate_llm_meal_ranges(
+                        text,
+                        repaired_meal,
+                        language=language,
+                    )
+                }
+            LOGGER.warning(
+                "Local text parser repair rejected request_id=%s reasons=%s",
+                state.get("request_id"),
+                ",".join(repaired_failures),
+            )
+        return {
+            "meal": _downgrade_meal_for_validation_failures(
+                local_meal,
+                local_failures,
+                language=language,
+            )
+        }
     if state.get("use_llm", True) and has_openai_key():
         llm_meal = _try_parse_text_with_llm(
             text,
@@ -329,6 +371,28 @@ def _calibrate_llm_meal_ranges(
     if uncertainty_note not in assumptions:
         assumptions.append(uncertainty_note)
     return meal.model_copy(update={"ingredients": widened, "assumptions": assumptions})
+
+
+def _downgrade_meal_for_validation_failures(
+    meal: MealUnderstanding,
+    failures: Sequence[str],
+    *,
+    language: LanguageCode,
+) -> MealUnderstanding:
+    assumptions = list(meal.assumptions)
+    note = (
+        "Состав блюда распознан не полностью; оценка дана с пониженной уверенностью."
+        if response_language(language) == "ru"
+        else "Dish composition was only partially recognized; confidence was reduced."
+    )
+    if note not in assumptions:
+        assumptions.append(note)
+    return meal.model_copy(
+        update={
+            "assumptions": assumptions,
+            "confidence": "low",
+        }
+    )
 
 
 def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> MealUnderstanding:

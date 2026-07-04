@@ -1,7 +1,12 @@
 import pytest
 
 from app.graph.nodes.text_parser import parse_text_locally
-from app.tools.food_normalization import find_food_mentions
+from app.tools.food_normalization import (
+    allocate_composite_portions,
+    detect_preparation,
+    extract_total_portion_grams,
+    find_food_mentions,
+)
 
 
 @pytest.mark.parametrize(
@@ -143,3 +148,80 @@ def test_specific_common_food_aliases_win_over_generic_components(
 
     assert meal.needs_clarification is False
     assert [ingredient.name for ingredient in meal.ingredients] == [canonical]
+
+
+@pytest.mark.parametrize(
+    ("text", "canonical", "grams"),
+    [
+        ("Сколько калорий в шакшуке 300 г?", "shakshuka", 300),
+        ("Сколько калорий в лазанье 350 г?", "lasagna", 350),
+        ("Calories and macros in 200g syrniki", "syrniki", 200),
+        ("Сколько БЖУ в шаурме с курицей 350 г?", "chicken shawarma", 350),
+        ("Macros for a falafel wrap, about 350g", "falafel wrap", 350),
+        ("Calories in two beef tacos, about 300g total", "beef tacos", 300),
+        ("Calories in 6 chicken nuggets", "chicken nuggets", 96),
+        ("Calories in 3 pancakes with syrup", "pancakes with syrup", 270),
+    ],
+)
+def test_targeted_composite_priors_parse_as_single_known_dishes(
+    text: str,
+    canonical: str,
+    grams: float,
+) -> None:
+    meal = parse_text_locally(text)
+
+    assert meal.needs_clarification is False
+    assert [ingredient.name for ingredient in meal.ingredients] == [canonical]
+    assert meal.ingredients[0].grams_min == grams
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Сколько БЖУ в мюсли с йогуртом и ягодами 350 г?", "muesli with yogurt and berries"),
+        ("салат с помидорами и моцареллой 300 г", "tomato mozzarella salad"),
+        ("салат с креветками гриль 350 г", "grilled shrimp salad"),
+        ("Macros in beef udon noodles, about 500g", "beef udon noodles"),
+        ("Сколько калорий в стейке с картошкой фри, порция 500 г?", "steak with fries"),
+    ],
+)
+def test_high_variance_composite_golden_cases_use_whole_dish_priors(
+    text: str,
+    expected: str,
+) -> None:
+    meal = parse_text_locally(text)
+
+    assert meal.needs_clarification is False
+    assert [ingredient.name for ingredient in meal.ingredients] == [expected]
+    assert meal.ingredients[0].confidence == "high"
+
+
+def test_trailing_single_weight_allocates_natural_composite_total() -> None:
+    text = "rice with chicken 400 g"
+    mentions = find_food_mentions(text)
+    total = extract_total_portion_grams(text, mentions)
+    allocations = allocate_composite_portions(text, mentions, preparation=detect_preparation(text))
+
+    assert [mention.canonical_name for mention in mentions] == [
+        "cooked white rice",
+        "chicken breast cooked",
+    ]
+    assert total == 400
+    assert [(item.canonical_name, round(item.grams_min), round(item.grams_max)) for item in allocations] == [
+        ("cooked white rice", 192, 288),
+        ("chicken breast cooked", 128, 192),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "200 g of rice with chicken",
+        "100 g chicken with rice",
+    ],
+)
+def test_leading_single_weight_stays_attached_to_the_nearest_ingredient(text: str) -> None:
+    mentions = find_food_mentions(text)
+
+    assert extract_total_portion_grams(text, mentions) is None
+    assert allocate_composite_portions(text, mentions) == ()

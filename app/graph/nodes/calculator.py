@@ -36,6 +36,21 @@ def calculate_totals(items: list[IngredientNutrition]) -> NutritionTotals:
         upper_ratio = abs(calories_max - macro_kcal_max) / max(calories_max, macro_kcal_max, 1)
         if lower_ratio > 0.25 or upper_ratio > 0.25:
             warnings.append("Calories differ materially from macro-derived energy; verify source data.")
+    total_grams_midpoint = sum((item.grams_min + item.grams_max) / 2 for item in items)
+    if len(items) >= 2 and total_grams_midpoint >= 180:
+        protein_midpoint = (protein_min + protein_max) / 2
+        fat_midpoint = (fat_min + fat_max) / 2
+        carbs_midpoint = (carbs_min + carbs_max) / 2
+        protein_density = protein_midpoint / total_grams_midpoint * 100
+        fat_density = fat_midpoint / total_grams_midpoint * 100
+        carbs_density = carbs_midpoint / total_grams_midpoint * 100
+        if (
+            protein_density > 32
+            or fat_density > 55
+            or carbs_density > 90
+            or protein_density + fat_density + carbs_density > 95
+        ):
+            warnings.append("Macro density is unusually high for a mixed dish; verify portions.")
 
     return NutritionTotals(
         calories_kcal=MacroRange(min=_round_calories(calories_min), max=_round_calories(calories_max)),

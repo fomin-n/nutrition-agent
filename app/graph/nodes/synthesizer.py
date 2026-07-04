@@ -174,7 +174,7 @@ def _combined_confidence(
 
 
 def _has_usable_partial_estimate(items: list, failures: list) -> bool:
-    return bool(items and len(items) >= len(failures))
+    return bool(items)
 
 
 def _optional_refinement_note(language: str) -> str:
