@@ -1,4 +1,5 @@
 import argparse
+import gzip
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -118,6 +119,9 @@ def _case_row(example_id: str, fallback: dict[str, Any], llm: dict[str, Any]) ->
 
 
 def _load(path: Path) -> dict[str, Any]:
+    if path.suffix == ".gz":
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            return json.load(handle)
     return json.loads(path.read_text(encoding="utf-8"))
 
 

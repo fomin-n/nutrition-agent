@@ -117,7 +117,7 @@ def normalize_food_description(
 ) -> NormalizedFoodQuery:
     original = text.strip()
     detected_language = language or detect_language(original)
-    normalized = normalize_food_query(original)
+    normalized = _clean_component_query(normalize_food_query(original))
     quantity, unit = _extract_quantity(normalized)
     product = _find_product(normalized)
     fallback_profile = lookup_fallback_profile(normalized)
@@ -187,6 +187,36 @@ def _canonical_query(normalized: str) -> tuple[str, str | None]:
         return fallback_profile.name, None
 
     return normalized, None
+
+
+def _clean_component_query(normalized: str) -> str:
+    """Remove LLM ingredient qualifiers that should not become lookup identity."""
+    if not normalized:
+        return normalized
+    cleaned = re.sub(r"\([^)]*\)", " ", normalized)
+    cleaned = re.sub(
+        r"\b(?:or\s+(?:similar|mixed|other)|или\s+(?:похож\w*|смешан\w*|друг\w*))\b",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(
+        r"\b(?:for|для)\s+(?:wrap|roll|ролл\w*)\b.*$",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(r"\b(?:sliced|shredded|grated|терт\w*|нарезан\w*)\b", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    for separator in (" or ", " или "):
+        if separator not in f" {cleaned} ":
+            continue
+        parts = [part.strip() for part in cleaned.split(separator) if part.strip()]
+        if not parts:
+            continue
+        for part in parts:
+            if _find_product(part) or lookup_fallback_profile(part):
+                return part
+        return parts[0]
+    return cleaned
 
 
 def _classify_query_kind(

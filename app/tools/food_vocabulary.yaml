@@ -1758,6 +1758,300 @@ foods:
     ru: салат с креветками гриль
   flags:
   - conventional_dish_prior
+- name: turkey cooked
+  nutrition_per_100g:
+    calories_kcal: 135
+    protein_g: 29.0
+    fat_g: 1.5
+    carbs_g: 0.0
+  role: protein
+  aliases:
+  - turkey
+  - turkey breast
+  - turkey fillet
+  - cooked turkey
+  - индейка
+  - индейки
+  - индейкой
+  - индейку
+  - филе индейки
+  - индейка филе
+  default_portion_g:
+  - 100
+  - 150
+  localized_names:
+    ru: индейка
+  russian_patterns:
+  - индейк\w*
+- name: pork cooked
+  nutrition_per_100g:
+    calories_kcal: 242
+    protein_g: 27.0
+    fat_g: 14.0
+    carbs_g: 0.0
+  role: protein
+  aliases:
+  - pork
+  - cooked pork
+  - pork chashu
+  - chashu pork
+  - chashu
+  - свинина
+  - свинины
+  - свининой
+  default_portion_g:
+  - 80
+  - 140
+  localized_names:
+    ru: свинина
+  russian_patterns:
+  - свинин\w*
+- name: broth
+  nutrition_per_100g:
+    calories_kcal: 15
+    protein_g: 1.5
+    fat_g: 0.5
+    carbs_g: 1.0
+  role: broth
+  aliases:
+  - broth
+  - pork broth
+  - chicken broth
+  - beef broth
+  - soup broth
+  - бульон
+  - бульона
+  - бульоном
+  default_portion_g:
+  - 200
+  - 350
+  localized_names:
+    ru: бульон
+  russian_patterns:
+  - бульон\w*
+- name: pita bread
+  nutrition_per_100g:
+    calories_kcal: 275
+    protein_g: 9.0
+    fat_g: 1.2
+    carbs_g: 56.0
+  role: bread
+  aliases:
+  - pita
+  - pita bread
+  - pita flatbread
+  - пита
+  - питой
+  - пите
+  - питу
+  default_portion_g:
+  - 60
+  - 100
+  localized_names:
+    ru: пита
+- name: honey
+  nutrition_per_100g:
+    calories_kcal: 304
+    protein_g: 0.0
+    fat_g: 0.0
+    carbs_g: 82.0
+  role: sweetener
+  aliases:
+  - honey
+  - мед
+  - мёд
+  - медом
+  - мёдом
+  - меда
+  - мёда
+  default_portion_g:
+  - 15
+  - 25
+  localized_names:
+    ru: мед
+  russian_patterns:
+  - м[её]д\w*
+- name: pork ramen
+  nutrition_per_100g:
+    calories_kcal: 133
+    protein_g: 5.8
+    fat_g: 5.8
+    carbs_g: 14.2
+  role: composite
+  aliases:
+  - pork ramen
+  - ramen bowl
+  - ramen
+  - рамен
+  - рамэн
+  default_portion_g:
+  - 500
+  - 700
+  localized_names:
+    ru: рамен со свининой
+  flags:
+  - conventional_dish_prior
+- name: beef pho
+  nutrition_per_100g:
+    calories_kcal: 92
+    protein_g: 5.8
+    fat_g: 2.0
+    carbs_g: 12.5
+  role: composite
+  aliases:
+  - beef pho
+  - pho bo
+  - pho bò
+  - pho
+  - фо бо
+  - фо-бо
+  default_portion_g:
+  - 500
+  - 700
+  localized_names:
+    ru: фо бо
+  flags:
+  - conventional_dish_prior
+- name: chicken pad thai
+  nutrition_per_100g:
+    calories_kcal: 178
+    protein_g: 7.8
+    fat_g: 6.7
+    carbs_g: 21.1
+  role: composite
+  aliases:
+  - chicken pad thai
+  - pad thai with chicken
+  - pad thai
+  - пад тай с курицей
+  - пад-тай с курицей
+  default_portion_g:
+  - 400
+  - 500
+  localized_names:
+    ru: пад тай с курицей
+  flags:
+  - conventional_dish_prior
+- name: kebab plate with rice
+  nutrition_per_100g:
+    calories_kcal: 170
+    protein_g: 9.0
+    fat_g: 7.0
+    carbs_g: 18.0
+  role: composite
+  aliases:
+  - kebab plate with rice
+  - kebab plate
+  - kebab rice plate
+  - кебаб с рисом
+  - кебаб тарелка
+  default_portion_g:
+  - 450
+  - 550
+  localized_names:
+    ru: кебаб с рисом
+  flags:
+  - conventional_dish_prior
+- name: club sandwich
+  nutrition_per_100g:
+    calories_kcal: 217
+    protein_g: 11.7
+    fat_g: 10.7
+    carbs_g: 18.3
+  role: composite
+  aliases:
+  - club sandwich
+  - клаб-сэндвич
+  - клаб-сэндвиче
+  - клаб сэндвич
+  - клаб сэндвиче
+  - клубный сэндвич
+  default_portion_g:
+  - 250
+  - 350
+  localized_names:
+    ru: клаб-сэндвич
+  flags:
+  - conventional_dish_prior
+- name: caesar chicken wrap
+  nutrition_per_100g:
+    calories_kcal: 200
+    protein_g: 12.0
+    fat_g: 9.0
+    carbs_g: 18.0
+  role: composite
+  aliases:
+  - caesar chicken wrap
+  - chicken caesar wrap
+  - caesar wrap with chicken
+  - цезарь-ролл с курицей
+  - цезарь-ролле с курицей
+  - цезарь ролл с курицей
+  - цезарь ролле с курицей
+  - ролл цезарь с курицей
+  default_portion_g:
+  - 280
+  - 350
+  localized_names:
+    ru: цезарь-ролл с курицей
+  flags:
+  - conventional_dish_prior
+- name: potato vareniki
+  nutrition_per_100g:
+    calories_kcal: 172
+    protein_g: 4.8
+    fat_g: 4.0
+    carbs_g: 31.2
+  role: composite
+  aliases:
+  - potato vareniki
+  - vareniki with potato
+  - potato pierogi
+  - вареники с картошкой
+  - вареники с картофелем
+  - картофельные вареники
+  default_portion_g:
+  - 220
+  - 300
+  localized_names:
+    ru: вареники с картошкой
+  flags:
+  - conventional_dish_prior
+- name: caesar dressing
+  nutrition_per_100g:
+    calories_kcal: 540
+    protein_g: 2.0
+    fat_g: 57.0
+    carbs_g: 6.0
+  role: fat
+  aliases:
+  - caesar dressing
+  - caesar sauce
+  - соус цезарь
+  - соуса цезарь
+  default_portion_g:
+  - 20
+  - 40
+  localized_names:
+    ru: соус цезарь
+- name: parmesan cheese
+  nutrition_per_100g:
+    calories_kcal: 431
+    protein_g: 38.0
+    fat_g: 29.0
+    carbs_g: 4.0
+  role: dairy
+  aliases:
+  - parmesan
+  - parmesan cheese
+  - grated parmesan
+  - пармезан
+  - пармезана
+  default_portion_g:
+  - 10
+  - 20
+  localized_names:
+    ru: пармезан
 products:
 - canonical_product: Coca-Cola Zero Sugar
   brand: Coca-Cola
@@ -1935,6 +2229,7 @@ phrase_translations:
 standard_prepared_dishes:
 - big mac
 - beef tacos
+- beef pho
 - beef udon
 - beef udon noodles
 - blini with sour cream
@@ -1942,13 +2237,18 @@ standard_prepared_dishes:
 - borscht
 - burger
 - caesar salad
+- caesar chicken wrap
 - carbonara
 - chicken burrito
 - chicken curry with rice
 - chicken nuggets
+- chicken pad thai
 - chicken shawarma
+- club sandwich
 - falafel wrap
 - hamburger
+- kebab plate
+- kebab plate with rice
 - lasagna
 - mashed potatoes
 - meat cutlet
@@ -1959,8 +2259,12 @@ standard_prepared_dishes:
 - pancakes with syrup
 - pasta carbonara
 - pelmeni
+- pho bo
 - pizza
+- pork ramen
+- potato vareniki
 - quinoa veggie bowl
+- ramen
 - salad
 - shakshuka
 - steak with fries
@@ -1978,7 +2282,10 @@ standard_prepared_dishes:
 - блины со сметаной
 - буррито
 - буррито с курицей
+- вареники с картошкой
 - карбонара
+- кебаб с рисом
+- клаб-сэндвич
 - куриное карри с рисом
 - лазанья
 - мюсли с йогуртом и ягодами
@@ -1986,6 +2293,7 @@ standard_prepared_dishes:
 - омлет
 - паста карбонара
 - пицца
+- рамен
 - салат
 - салат с креветками гриль
 - салат с помидорами и моцареллой
@@ -1993,6 +2301,8 @@ standard_prepared_dishes:
 - сырники
 - суши
 - фалафель
+- фо бо
+- цезарь-ролл с курицей
 - шакшука
 - шаурма
 - шаурма с курицей

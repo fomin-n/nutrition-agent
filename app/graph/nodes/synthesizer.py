@@ -87,10 +87,10 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
             *assumptions,
             (
                 f"Частичная оценка: надежные данные не найдены для {foods}; "
-                "их вклад не включен в итог."
+                "нужно уточнить продукт или состав."
                 if language == "ru"
                 else f"Partial estimate: reliable data was unavailable for {foods}; "
-                "their contribution is not included."
+                "the product or composition needs clarification."
             ),
         ]
     text = _format_estimate(totals, assumptions, confidence, language=language)
@@ -174,7 +174,7 @@ def _combined_confidence(
 
 
 def _has_usable_partial_estimate(items: list, failures: list) -> bool:
-    return bool(items)
+    return False
 
 
 def _optional_refinement_note(language: str) -> str:

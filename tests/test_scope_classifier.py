@@ -44,6 +44,17 @@ def test_scope_classifier_accepts_russian_apple_question_with_typo() -> None:
     assert decision.language == "ru"
 
 
+def test_scope_classifier_keeps_text_only_known_product_out_of_packaging_route() -> None:
+    decision = classify_scope_locally(
+        "Сколько калорий в банке Coca-Cola Zero 330 мл?",
+        has_image=False,
+        has_text=True,
+    )
+
+    assert decision.route == "text_meal"
+    assert decision.is_food_related
+
+
 @pytest.mark.parametrize(
     "text",
     [

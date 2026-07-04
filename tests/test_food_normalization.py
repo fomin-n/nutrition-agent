@@ -161,6 +161,12 @@ def test_specific_common_food_aliases_win_over_generic_components(
         ("Calories in two beef tacos, about 300g total", "beef tacos", 300),
         ("Calories in 6 chicken nuggets", "chicken nuggets", 96),
         ("Calories in 3 pancakes with syrup", "pancakes with syrup", 270),
+        ("Calories in 250g potato vareniki", "potato vareniki", 250),
+        ("Сколько калорий в клаб-сэндвиче 300 г?", "club sandwich", 300),
+        ("Сколько БЖУ в фо бо 600 г?", "beef pho", 600),
+        ("Calories in chicken pad thai, 450g", "chicken pad thai", 450),
+        ("Calories in a kebab plate with rice, about 500g", "kebab plate with rice", 500),
+        ("Сколько калорий в цезарь-ролле с курицей 300 г?", "caesar chicken wrap", 300),
     ],
 )
 def test_targeted_composite_priors_parse_as_single_known_dishes(
@@ -210,6 +216,37 @@ def test_trailing_single_weight_allocates_natural_composite_total() -> None:
     assert [(item.canonical_name, round(item.grams_min), round(item.grams_max)) for item in allocations] == [
         ("cooked white rice", 192, 288),
         ("chicken breast cooked", 128, 192),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Calories and macros in 400g lentil soup",
+        "Calories and macros in lentil soup, 400 g",
+    ],
+)
+def test_single_weight_on_lentil_soup_is_total_not_additive(text: str) -> None:
+    mentions = find_food_mentions(text)
+    total = extract_total_portion_grams(text, mentions)
+    allocations = allocate_composite_portions(text, mentions, preparation=detect_preparation(text))
+
+    assert [mention.canonical_name for mention in mentions] == [
+        "lentils cooked",
+        "vegetable soup",
+    ]
+    assert total == 400
+    assert sum((item.grams_min + item.grams_max) / 2 for item in allocations) == 400
+
+
+def test_leading_single_weight_on_chicken_salad_can_be_total() -> None:
+    text = "300g chicken salad"
+    mentions = find_food_mentions(text)
+
+    assert extract_total_portion_grams(text, mentions) == 300
+    assert [(item.canonical_name, round(item.grams_min), round(item.grams_max)) for item in allocate_composite_portions(text, mentions)] == [
+        ("chicken breast cooked", 96, 144),
+        ("mixed salad vegetables", 144, 216),
     ]
 
 

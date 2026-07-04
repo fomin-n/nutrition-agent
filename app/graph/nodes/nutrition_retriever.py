@@ -118,6 +118,7 @@ class NutritionRetriever:
             food_category=query.food_category,
             product_variant=query.product_variant,
             product_type=query.product_type,
+            component_origin=ingredient.origin,
             amount_min_g=ingredient.grams_min,
             amount_max_g=ingredient.grams_max,
             provider_queries=provider_search_queries(query),
@@ -152,6 +153,9 @@ class NutritionRetriever:
                 ingredient_name=ingredient.name,
                 canonical_query=query.canonical_query,
                 reason="no_semantically_valid_candidate",
+                grams_min=ingredient.grams_min,
+                grams_max=ingredient.grams_max,
+                component_origin=ingredient.origin,
             )
             LOGGER.warning(
                 "Nutrition retrieval failed request_id=%s canonical=%r reason=%s",
@@ -167,6 +171,9 @@ class NutritionRetriever:
                 ingredient_name=ingredient.name,
                 canonical_query=query.canonical_query,
                 reason="selected_candidate_missing_per_100g_values",
+                grams_min=ingredient.grams_min,
+                grams_max=ingredient.grams_max,
+                component_origin=ingredient.origin,
             )
             return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
 

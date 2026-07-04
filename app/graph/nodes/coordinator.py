@@ -137,7 +137,9 @@ def classify_scope_locally(
             language=language,
         )
 
-    if any(word in normalized_text for word in PACKAGED_WORDS):
+    food_mentions = find_food_mentions(normalized_text)
+    has_known_text_product = not has_image and any(mention.product for mention in food_mentions)
+    if any(word in normalized_text for word in PACKAGED_WORDS) and not has_known_text_product:
         return ScopeDecision(
             route="packaged_food",
             is_food_related=True,

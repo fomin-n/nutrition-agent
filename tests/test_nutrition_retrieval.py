@@ -1,3 +1,5 @@
+import pytest
+
 from app.graph.nodes.nutrition_retriever import NutritionRetriever
 from app.schemas.nutrition import IngredientEstimate, NutritionCandidate, NutritionValues
 from app.tools.food_query import normalize_food_description
@@ -28,6 +30,24 @@ def test_brand_and_region_query_normalization() -> None:
     assert big_mac.restaurant == "McDonald's"
     assert big_mac.region == "FR"
     assert big_mac.query_kind == "restaurant_menu_item"
+
+
+@pytest.mark.parametrize(
+    ("text", "canonical"),
+    [
+        ("индейка (филе)", "turkey cooked"),
+        ("Pork (chashu or similar)", "pork cooked"),
+        ("Broth (pork or mixed)", "broth"),
+        ("Лаваш или тонкий блин для ролла", "tortilla"),
+    ],
+)
+def test_decorated_component_names_canonicalize_before_lookup(
+    text: str,
+    canonical: str,
+) -> None:
+    query = normalize_food_description(text)
+
+    assert query.canonical_query == canonical
 
 
 def test_candidate_ranking_prefers_brand_match_and_complete_macros() -> None:
@@ -257,6 +277,25 @@ def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))
 
     assert item is None
+
+
+def test_retrieval_failure_records_unresolved_component_mass() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(
+            name="unknown meal",
+            grams_min=80,
+            grams_max=120,
+            origin="llm_component",
+        )
+    )
+
+    assert outcome.item is None
+    assert outcome.failure is not None
+    assert outcome.failure.grams_min == 80
+    assert outcome.failure.grams_max == 120
+    assert outcome.failure.component_origin == "llm_component"
+    assert outcome.diagnostic.component_origin == "llm_component"
 
 
 def test_open_food_facts_uses_bounded_query_expansions_for_branded_products() -> None:

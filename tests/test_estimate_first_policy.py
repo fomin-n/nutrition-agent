@@ -119,7 +119,7 @@ def test_known_dish_prior_wins_over_llm_recipe_decomposition(
     assert (meal.ingredients[0].grams_min, meal.ingredients[0].grams_max) == (350, 450)
 
 
-def test_partial_retrieval_returns_low_confidence_estimate(
+def test_partial_retrieval_with_unresolved_component_clarifies(
     offline_router: None,
 ) -> None:
     state = {
@@ -145,11 +145,11 @@ def test_partial_retrieval_returns_low_confidence_estimate(
     final = state["final_estimate"]
     assert len(state["ingredient_nutrition"]) == 1
     assert len(state["retrieval_failures"]) == 1
-    assert final.totals is not None
-    assert final.is_clarification is False
+    assert final.totals is None
+    assert final.is_clarification is True
     assert final.confidence == "low"
-    assert "Частичная оценка" in final.text
-    assert "не включен" in final.text
+    assert "Не удалось найти надежные данные" in final.text
+    assert "не включен" not in final.text
 
 
 def test_unrecognizable_food_still_requires_clarification(offline_router: None) -> None:

@@ -335,6 +335,7 @@ def _calibrate_llm_meal_ranges(
     *,
     language: LanguageCode,
 ) -> MealUnderstanding:
+    meal = _mark_missing_ingredient_origin(meal, "llm_component")
     if (
         meal.needs_clarification
         or len(meal.ingredients) < 2
@@ -371,6 +372,20 @@ def _calibrate_llm_meal_ranges(
     if uncertainty_note not in assumptions:
         assumptions.append(uncertainty_note)
     return meal.model_copy(update={"ingredients": widened, "assumptions": assumptions})
+
+
+def _mark_missing_ingredient_origin(meal: MealUnderstanding, origin: str) -> MealUnderstanding:
+    changed = any(ingredient.origin is None for ingredient in meal.ingredients)
+    if not changed:
+        return meal
+    return meal.model_copy(
+        update={
+            "ingredients": [
+                ingredient.model_copy(update={"origin": ingredient.origin or origin})
+                for ingredient in meal.ingredients
+            ]
+        }
+    )
 
 
 def _downgrade_meal_for_validation_failures(
@@ -456,6 +471,7 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
                     grams_max=allocation.grams_max,
                     preparation=preparation,
                     notes=allocation.note,
+                    origin="composite_allocation",
                     confidence="medium",
                 )
             )
@@ -487,6 +503,11 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
                 grams_max=portion.grams_max,
                 preparation=preparation,
                 notes=portion.note,
+                origin=(
+                    "conventional_dish_prior"
+                    if mention.canonical_name in CONVENTIONAL_DISH_PRIORS
+                    else "local_mention"
+                ),
                 confidence=ingredient_confidence,
             )
         )
@@ -655,6 +676,8 @@ def _localize_note(note: str, language: LanguageCode | None) -> str:
         return "принята стандартная упаковка и плотность напитка 1 г/мл"
     if note == "volume converted at assumed beverage density of 1 g/ml":
         return "объем пересчитан при принятой плотности напитка 1 г/мл"
+    if note == "allocated from total composite portion":
+        return "распределено из общего веса порции"
     return note
 
 

@@ -1009,18 +1009,18 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "potato boiled",
-        "end": 23,
-        "matched_text": "potato",
-        "product": null,
-        "start": 17
+        "canonical_name": "potato vareniki",
+        "matched_text": "potato vareniki",
+        "start": 17,
+        "end": 32,
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Calories in 250g potato vareniki",
     "turn_index": null
@@ -1189,12 +1189,20 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_053",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "turkey cooked",
+        "matched_text": "индейкой",
+        "start": 25,
+        "end": 33,
+        "product": null
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Сколько БЖУ в сэндвиче с индейкой 220 г?",
     "turn_index": null
@@ -1217,12 +1225,20 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_055",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "club sandwich",
+        "matched_text": "клаб сэндвиче",
+        "start": 18,
+        "end": 31,
+        "product": null
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Сколько калорий в клаб-сэндвиче 300 г?",
     "turn_index": null
@@ -1451,12 +1467,20 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_066",
     "language": "en",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "pork ramen",
+        "matched_text": "pork ramen",
+        "start": 23,
+        "end": 33,
+        "product": null
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "How many calories in a pork ramen bowl, about 600g?",
     "turn_index": null
@@ -1465,12 +1489,20 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_067",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "beef pho",
+        "matched_text": "фо бо",
+        "start": 14,
+        "end": 19,
+        "product": null
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Сколько БЖУ в фо бо 600 г?",
     "turn_index": null
@@ -1481,18 +1513,18 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "chicken breast cooked",
-        "end": 19,
-        "matched_text": "chicken",
-        "product": null,
-        "start": 12
+        "canonical_name": "chicken pad thai",
+        "matched_text": "chicken pad thai",
+        "start": 12,
+        "end": 28,
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Calories in chicken pad thai, 450g",
     "turn_index": null
@@ -1583,18 +1615,18 @@
     "language": "en",
     "mentions": [
       {
-        "canonical_name": "cooked white rice",
+        "canonical_name": "kebab plate with rice",
+        "matched_text": "kebab plate with rice",
+        "start": 14,
         "end": 35,
-        "matched_text": "rice",
-        "product": null,
-        "start": 31
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Calories in a kebab plate with rice, about 500g",
     "turn_index": null
@@ -1606,17 +1638,24 @@
     "mentions": [
       {
         "canonical_name": "hummus",
-        "end": 32,
         "matched_text": "хумуса",
-        "product": null,
-        "start": 26
+        "start": 26,
+        "end": 32,
+        "product": null
+      },
+      {
+        "canonical_name": "pita bread",
+        "matched_text": "питой",
+        "start": 35,
+        "end": 40,
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Сколько калорий в тарелке хумуса с питой, примерно 300 г?",
     "turn_index": null
@@ -1882,18 +1921,18 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "chicken breast cooked",
+        "canonical_name": "caesar chicken wrap",
+        "matched_text": "цезарь ролле с курицей",
+        "start": 18,
         "end": 40,
-        "matched_text": "курицей",
-        "product": null,
-        "start": 33
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Сколько калорий в цезарь-ролле с курицей 300 г?",
     "turn_index": null
@@ -2000,17 +2039,24 @@
     "mentions": [
       {
         "canonical_name": "cottage cheese",
-        "end": 31,
         "matched_text": "cottage cheese",
-        "product": null,
-        "start": 17
+        "start": 17,
+        "end": 31,
+        "product": null
+      },
+      {
+        "canonical_name": "honey",
+        "matched_text": "honey",
+        "start": 37,
+        "end": 42,
+        "product": null
       }
     ],
     "scope": {
-      "confidence": "medium",
+      "route": "text_meal",
       "is_food_related": true,
       "needs_clarification": false,
-      "route": "text_meal"
+      "confidence": "medium"
     },
     "text": "Calories in 250g cottage cheese with honey",
     "turn_index": null

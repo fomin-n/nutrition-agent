@@ -557,6 +557,12 @@ def _quantity_looks_like_total_portion(
         return True
     if (
         len(mentions) >= 2
+        and quantity.end <= min(mention.start for mention in mentions)
+        and _has_leading_total_dish_signal(normalized, quantity, mentions)
+    ):
+        return True
+    if (
+        len(mentions) >= 2
         and quantity.start >= max(mention.end for mention in mentions)
         and _has_composite_signal(normalized, mentions)
     ):
@@ -595,13 +601,39 @@ def _has_composite_signal(normalized: str, mentions: tuple[FoodMention, ...]) ->
         "serving",
         "noodles",
         "pasta",
+        "soup",
         "салат",
         "тарел",
         "порци",
         "лапш",
         "паста",
+        "суп",
     )
     return any(term in normalized for term in dish_terms)
+
+
+def _has_leading_total_dish_signal(
+    normalized: str,
+    quantity: QuantityMention,
+    mentions: tuple[FoodMention, ...],
+) -> bool:
+    first_start = min(mention.start for mention in mentions)
+    between = normalized[quantity.end:first_start]
+    if re.search(r"\bof\s*$", between):
+        return False
+    if not _has_composite_signal(normalized, mentions):
+        return False
+    return _has_total_dish_term(normalized)
+
+
+def _has_total_dish_term(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:soup|salad|bowl|plate|sandwich|wrap|ramen|pho|pad thai|kebab|vareniki|"
+            r"суп\w*|салат\w*|тарел\w*|ролл\w*|рамен\w*|фо|кебаб\w*|вареник\w*)\b",
+            normalized,
+        )
+    )
 
 
 def _food_role(canonical_name: str) -> str:

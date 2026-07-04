@@ -7,6 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
+from app.evals.compare_golden_lanes import _load as load_lane_run
 from app.evals.compare_golden_lanes import build_lane_comparison
 from app.evals.compare_golden_lanes import render_markdown as render_lane_markdown
 from app.evals.compare_golden_runs import build_comparison, render_comparison_markdown
@@ -415,6 +416,20 @@ def test_golden_lane_comparison_reports_per_case_flips() -> None:
     assert [case["id"] for case in comparison["fail_to_pass"]] == ["a"]
     assert [case["id"] for case in comparison["pass_to_fail"]] == ["b"]
     assert "| `a` | `fail` | `pass` |" in markdown
+
+
+def test_golden_lane_comparison_loads_compressed_official_json(tmp_path) -> None:
+    payload = {
+        "run_id": "compressed",
+        "config": {},
+        "summary": {"pass_rate": 1.0},
+        "examples": [],
+    }
+    path = tmp_path / "run.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+    assert load_lane_run(path) == payload
 
 
 def test_phoenix_upload_preserves_structured_rows_and_stable_ids() -> None:

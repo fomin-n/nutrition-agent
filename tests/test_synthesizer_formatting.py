@@ -53,7 +53,7 @@ def test_low_confidence_note_is_localized() -> None:
     assert "💡 Для более точной оценки" in answer
 
 
-def test_partial_estimate_is_kept_even_when_failures_outnumber_items() -> None:
+def test_partial_estimate_with_unresolved_components_becomes_clarification() -> None:
     state = _estimate_state(language="en", assumptions=["One component was resolved."])
     state["ingredient_nutrition"] = [
         IngredientNutrition(
@@ -79,9 +79,9 @@ def test_partial_estimate_is_kept_even_when_failures_outnumber_items() -> None:
 
     final = synthesize_answer(state)["final_estimate"]
 
-    assert final.is_clarification is False
+    assert final.is_clarification is True
     assert final.confidence == "low"
-    assert "Partial estimate" in final.text
+    assert "couldn't find reliable nutrition data" in final.text
 
 
 def test_calorie_comparison_uses_refreshed_layout() -> None:

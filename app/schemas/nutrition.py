@@ -15,6 +15,7 @@ class IngredientEstimate(BaseModel):
     grams_max: float = Field(..., ge=0)
     preparation: str | None = None
     notes: str | None = None
+    origin: str | None = None
     confidence: Confidence = "medium"
 
     @model_validator(mode="after")
@@ -144,6 +145,9 @@ class RetrievalFailure(BaseModel):
     ingredient_name: str
     canonical_query: str
     reason: str
+    grams_min: float | None = None
+    grams_max: float | None = None
+    component_origin: str | None = None
 
 
 class RetrievalDiagnostic(BaseModel):
@@ -154,6 +158,7 @@ class RetrievalDiagnostic(BaseModel):
     food_category: str
     product_variant: str
     product_type: str | None = None
+    component_origin: str | None = None
     amount_min_g: float
     amount_max_g: float
     provider_queries: list[str] = Field(default_factory=list)
