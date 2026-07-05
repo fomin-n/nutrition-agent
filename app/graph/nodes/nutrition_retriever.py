@@ -228,6 +228,9 @@ class NutritionRetriever:
                 language=language,
             )
             fallback_path = fallback_path or "component_class_prior_backfill"
+        elif _should_widen_provider_prepared_dish(selected.source, query.query_kind, grams_min, grams_max):
+            grams_min, grams_max = _widen_provider_prepared_dish_grams(grams_min, grams_max)
+            warning = warning or _provider_prepared_dish_warning(ingredient.name, language=language)
         item = IngredientNutrition(
             ingredient_name=ingredient.name,
             matched_food_name=per_100g.food_name,
@@ -300,6 +303,32 @@ def _component_class_prior_warning(
     return (
         f"{ingredient_name}: used a broad \"{prior_name}\" class prior; "
         "confidence reduced."
+    )
+
+
+def _should_widen_provider_prepared_dish(
+    source: str,
+    query_kind: str,
+    grams_min: float,
+    grams_max: float,
+) -> bool:
+    return source != "fallback" and query_kind == "standard_prepared_dish" and grams_min == grams_max
+
+
+def _widen_provider_prepared_dish_grams(minimum: float, maximum: float) -> tuple[float, float]:
+    midpoint = (minimum + maximum) / 2
+    half_width = max((maximum - minimum) / 2, midpoint * 0.12)
+    return round(max(1.0, midpoint - half_width), 1), round(midpoint + half_width, 1)
+
+
+def _provider_prepared_dish_warning(ingredient_name: str, *, language: str | None) -> str:
+    if language == "ru":
+        return (
+            f"{ingredient_name}: диапазон расширен для готового блюда, "
+            "так как найден один справочный ряд."
+        )
+    return (
+        f"{ingredient_name}: widened range for prepared dish because one provider row was used."
     )
 
 

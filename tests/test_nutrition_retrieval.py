@@ -337,6 +337,158 @@ def test_retriever_diagnostic_includes_arbitration_and_scores() -> None:
     assert outcome.diagnostic.candidates[0].score_components == {"name": 0.26}
 
 
+def test_arbitration_prefers_pizza_prior_over_implausible_provider() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    dessert_pizza = _candidate(
+        source="usda",
+        source_id="dessert-pizza",
+        name="Dessert pizza",
+        calories=204,
+        protein=1.8,
+        fat=7.5,
+        carbs=32.4,
+        match_score=0.92,
+    )
+    pizza = _candidate(
+        source="fallback",
+        source_id="pizza",
+        name="pizza",
+        calories=266,
+        protein=11,
+        fat=10,
+        carbs=33,
+        match_score=0.66,
+    )
+    router.retrieve_candidates = lambda query: [dessert_pizza, pizza]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("Margherita pizza"))
+
+    assert selection.selected is not None
+    assert selection.selected.source == "fallback"
+    assert "pizza_provider_protein_below_floor" in selection.arbitration_reasons
+    assert "pizza_provider_variant_mismatch" in selection.arbitration_reasons
+
+
+def test_arbitration_prefers_firm_tofu_prior_over_soft_provider() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    soft_tofu = _candidate(
+        source="usda",
+        source_id="soft-tofu",
+        name="Firm tofu",
+        calories=85,
+        protein=10.9,
+        fat=4.2,
+        carbs=1,
+        match_score=0.89,
+    )
+    firm_tofu = _candidate(
+        source="fallback",
+        source_id="tofu firm",
+        name="tofu firm",
+        calories=120,
+        protein=14,
+        fat=7,
+        carbs=2.5,
+        match_score=0.82,
+    )
+    router.retrieve_candidates = lambda query: [soft_tofu, firm_tofu]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("150 g firm tofu"))
+
+    assert selection.selected is not None
+    assert selection.selected.source_id == "tofu firm"
+    assert "firm_tofu_provider_too_lean" in selection.arbitration_reasons
+
+
+def test_arbitration_prefers_local_prior_for_five_percent_cottage_cheese() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    vegetable_cottage = _candidate(
+        source="usda",
+        source_id="veg-cottage",
+        name="Cheese, cottage, with vegetables",
+        calories=95,
+        protein=10.9,
+        fat=4.2,
+        carbs=3,
+        match_score=0.89,
+    )
+    cottage = _candidate(
+        source="fallback",
+        source_id="cottage cheese",
+        name="cottage cheese",
+        calories=121,
+        protein=17,
+        fat=5,
+        carbs=3,
+        match_score=0.82,
+    )
+    router.retrieve_candidates = lambda query: [vegetable_cottage, cottage]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("200g 5% cottage cheese"))
+
+    assert selection.selected is not None
+    assert selection.selected.source_id == "cottage cheese"
+    assert "cottage_cheese_variant_mismatch" in selection.arbitration_reasons
+    assert "cottage_cheese_5_percent_provider_out_of_range" in selection.arbitration_reasons
+
+
+def test_arbitration_prefers_prepared_dish_prior_when_provider_disagrees() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    low_curry = _candidate(
+        source="usda",
+        source_id="low-curry",
+        name="Chicken curry with rice",
+        calories=116,
+        protein=5,
+        fat=4,
+        carbs=15,
+        match_score=1.0,
+    )
+    curry = _candidate(
+        source="fallback",
+        source_id="chicken curry with rice",
+        name="chicken curry with rice",
+        calories=160,
+        protein=7.8,
+        fat=6.2,
+        carbs=18.9,
+        match_score=0.66,
+    )
+    router.retrieve_candidates = lambda query: [low_curry, curry]  # type: ignore[method-assign]
+
+    selection = router.select_candidate(normalize_food_description("chicken curry with rice"))
+
+    assert selection.selected is not None
+    assert selection.selected.source_id == "chicken curry with rice"
+    assert "prepared_dish_provider_disagrees_with_local_prior" in selection.arbitration_reasons
+
+
+def test_retriever_widens_exact_provider_prepared_dish_row() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+    lasagna = _candidate(
+        source="usda",
+        source_id="lasagna-provider",
+        name="Lasagna with meat",
+        calories=186,
+        protein=10,
+        fat=9,
+        carbs=17,
+        match_score=0.92,
+    )
+    router.retrieve_candidates = lambda query: [lasagna]  # type: ignore[method-assign]
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(name="lasagna", grams_min=350, grams_max=350),
+        language="en",
+    )
+
+    assert outcome.item is not None
+    assert outcome.item.grams_min == 308
+    assert outcome.item.grams_max == 392
+    assert outcome.item.warning is not None
+    assert "widened range for prepared dish" in outcome.item.warning
+
+
 def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))
@@ -398,6 +550,35 @@ def test_secret_redaction() -> None:
     assert "hiddenvalue" not in redacted
     assert "abcvalue" not in redacted
     assert "[REDACTED]" in redacted
+
+
+def _candidate(
+    *,
+    source: str,
+    source_id: str,
+    name: str,
+    calories: float,
+    protein: float,
+    fat: float,
+    carbs: float,
+    match_score: float,
+) -> NutritionCandidate:
+    return NutritionCandidate(
+        source=source,
+        source_id=source_id,
+        name=name,
+        food_type="prepared" if "pizza" in name.lower() or "lasagna" in name.lower() else "generic",
+        metric_serving_amount=100,
+        metric_serving_unit="g",
+        match_score=match_score,
+        score_components={"name": 0.34, "source": 0.3},
+        values_per_100g=NutritionValues(
+            calories_kcal=calories,
+            protein_g=protein,
+            fat_g=fat,
+            carbohydrate_g=carbs,
+        ),
+    )
 
 
 class _FakeOpenFoodFactsClient:

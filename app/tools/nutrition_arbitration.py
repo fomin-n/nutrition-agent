@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from app.schemas.nutrition import CandidateValidationResult, NutritionCandidate
+from app.tools.fallback_nutrition import normalize_food_query
 from app.tools.food_query import NormalizedFoodQuery
 
 
@@ -70,9 +71,71 @@ def _weak_provider_reasons(
         reasons.append("provider_type_mismatch")
     if _source_is_soft_for_query(provider, query) and score < 0.9:
         reasons.append("provider_source_soft_for_query_kind")
+    reasons.extend(_dish_class_plausibility_reasons(provider, fallback, query))
+    reasons.extend(_generic_variant_reasons(provider, query))
     if name_score < 0.34 and _large_nutrition_disagreement(provider, fallback):
         reasons.append("provider_disagrees_with_grounded_fallback")
     return reasons
+
+
+def _dish_class_plausibility_reasons(
+    provider: NutritionCandidate,
+    fallback: NutritionCandidate,
+    query: NormalizedFoodQuery,
+) -> list[str]:
+    if query.query_kind != "standard_prepared_dish":
+        return []
+    provider_values = provider.values_per_100g
+    fallback_values = fallback.values_per_100g
+    if provider_values is None or fallback_values is None:
+        return []
+    canonical = normalize_food_query(query.canonical_query)
+    haystack = _candidate_haystack(provider)
+    reasons: list[str] = []
+    protein = float(provider_values.protein_g or 0)
+    if "pizza" in canonical:
+        if protein < 6:
+            reasons.append("pizza_provider_protein_below_floor")
+        if any(term in haystack for term in ("dessert pizza", "pizza rolls")):
+            reasons.append("pizza_provider_variant_mismatch")
+    provider_calories = float(provider_values.calories_kcal or 0)
+    fallback_calories = float(fallback_values.calories_kcal or 0)
+    if fallback_calories and abs(provider_calories - fallback_calories) / fallback_calories > 0.20:
+        reasons.append("prepared_dish_provider_disagrees_with_local_prior")
+    return reasons
+
+
+def _generic_variant_reasons(
+    provider: NutritionCandidate,
+    query: NormalizedFoodQuery,
+) -> list[str]:
+    canonical = normalize_food_query(query.canonical_query)
+    haystack = _candidate_haystack(provider)
+    values = provider.values_per_100g
+    if values is None:
+        return []
+    calories = float(values.calories_kcal or 0)
+    protein = float(values.protein_g or 0)
+    fat = float(values.fat_g or 0)
+    reasons: list[str] = []
+    if canonical == "tofu firm" and (calories < 100 or protein < 12 or fat < 5):
+        reasons.append("firm_tofu_provider_too_lean")
+    if canonical == "cottage cheese" and "5" in normalize_food_query(query.original):
+        if any(term in haystack for term in ("with vegetables", "with fruit")):
+            reasons.append("cottage_cheese_variant_mismatch")
+        if not 105 <= calories <= 140 or not 4.5 <= fat <= 7.0:
+            reasons.append("cottage_cheese_5_percent_provider_out_of_range")
+    return reasons
+
+
+def _candidate_haystack(candidate: NutritionCandidate) -> str:
+    return normalize_food_query(
+        " ".join(
+            part
+            for part in (candidate.name, candidate.brand, candidate.description)
+            if part
+        )
+    )
 
 
 def _source_is_soft_for_query(candidate: NutritionCandidate, query: NormalizedFoodQuery) -> bool:
