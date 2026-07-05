@@ -136,7 +136,7 @@ def test_zero_sugar_product_variant_is_preserved() -> None:
         ("Estimate a 70 g croissant", "butter croissant"),
         ("КБЖУ 25 г картофельных чипсов", "potato chips"),
         ("Белок в 120 г хумуса", "hummus"),
-        ("Calories in a 125g mozzarella ball", "mozzarella"),
+        ("Calories in a 125g mozzarella ball", "fresh mozzarella"),
         ("Estimate one Big Mac", "McDonald's Big Mac"),
     ],
 )

@@ -976,16 +976,33 @@ foods:
   default_portion_g:
   - 20
   - 35
+- name: fresh mozzarella
+  nutrition_per_100g:
+    calories_kcal: 250
+    protein_g: 17.9
+    fat_g: 17.9
+    carbs_g: 3.6
+  role: dairy
+  aliases:
+  - fresh mozzarella
+  - mozzarella ball
+  - mozzarella balls
+  - fresh mozzarella ball
+  - fresh mozzarella balls
+  - моцарелла шарик
+  - шарик моцареллы
+  default_portion_g:
+  - 100
+  - 125
 - name: mozzarella
   nutrition_per_100g:
-    calories_kcal: 280
-    protein_g: 28.0
-    fat_g: 17.0
-    carbs_g: 3.1
+    calories_kcal: 299
+    protein_g: 22.2
+    fat_g: 22.1
+    carbs_g: 2.4
   role: dairy
   aliases:
   - mozzarella
-  - mozzarella ball
   - моцарелла
   - моцареллы
   - моцареллой
@@ -994,10 +1011,10 @@ foods:
   - 125
 - name: hummus
   nutrition_per_100g:
-    calories_kcal: 166
-    protein_g: 7.9
-    fat_g: 9.6
-    carbs_g: 14.3
+    calories_kcal: 229
+    protein_g: 7.4
+    fat_g: 17.1
+    carbs_g: 14.9
   role: protein
   aliases:
   - hummus
