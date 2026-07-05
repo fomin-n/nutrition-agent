@@ -79,9 +79,14 @@ foods:
   aliases:
   - chicken
   - chicken breast
+  - chicken meat
+  - cooked chicken meat
   - курица
   - курицы
   - курицей
+  - куриное мясо
+  - куриного мяса
+  - куриным мясом
   - куриная грудка
   default_portion_g:
   - 120
@@ -1205,6 +1210,30 @@ foods:
   - high_variance
   russian_patterns:
   - суп\w*
+- name: chicken soup
+  nutrition_per_100g:
+    calories_kcal: 53
+    protein_g: 3.8
+    fat_g: 1.4
+    carbs_g: 6.2
+  role: unknown
+  aliases:
+  - chicken soup
+  - chicken noodle soup
+  - soup with chicken
+  - куриный суп
+  - куриного супа
+  - курином супе
+  - куриным супом
+  - суп с курицей
+  default_portion_g:
+  - 300
+  - 450
+  localized_names:
+    ru: куриный суп
+  flags:
+  - conventional_dish_prior
+  - high_variance
 - name: French fries
   nutrition_per_100g:
     calories_kcal: 312

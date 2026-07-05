@@ -23,6 +23,7 @@ from app.tools.fallback_nutrition import (
     lookup_component_class_prior,
 )
 from app.tools.food_query import normalize_food_description
+from app.tools.food_vocabulary import load_food_vocabulary
 from app.tools.nutrition_tools import (
     NutritionSourceRouter,
     candidate_from_per_100g,
@@ -34,6 +35,10 @@ from app.tools.nutrition_validation import validate_candidate
 from app.tools.provider_utils import redacted_text
 
 LOGGER = logging.getLogger(__name__)
+_LOCALIZED_FOOD_NAMES = {
+    language: dict(names)
+    for language, names in load_food_vocabulary().localized_food_names.items()
+}
 
 
 @dataclass(frozen=True)
@@ -343,9 +348,10 @@ def _widen_high_variance_fallback_grams(minimum: float, maximum: float) -> tuple
 
 
 def _high_variance_fallback_warning(ingredient_name: str, *, language: str | None) -> str:
+    display_name = _LOCALIZED_FOOD_NAMES.get(language or "", {}).get(ingredient_name, ingredient_name)
     if language == "ru":
-        return f"{ingredient_name}: диапазон расширен для вариативного готового блюда."
-    return f"{ingredient_name}: widened range for high-variance prepared dish."
+        return f"{display_name}: диапазон расширен для вариативного готового блюда."
+    return f"{display_name}: widened range for high-variance prepared dish."
 
 
 def _widen_provider_prepared_dish_grams(minimum: float, maximum: float) -> tuple[float, float]:

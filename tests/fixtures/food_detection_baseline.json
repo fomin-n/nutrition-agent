@@ -943,11 +943,11 @@
     "language": "ru",
     "mentions": [
       {
-        "canonical_name": "vegetable soup",
+        "canonical_name": "chicken soup",
         "end": 35,
-        "matched_text": "супа",
+        "matched_text": "куриного супа",
         "product": null,
-        "start": 31
+        "start": 22
       }
     ],
     "scope": {

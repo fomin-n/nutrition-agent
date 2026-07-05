@@ -18,6 +18,13 @@ def test_russian_food_query_normalization() -> None:
     assert query.unit == "г"
 
 
+def test_russian_chicken_meat_component_canonicalizes() -> None:
+    query = normalize_food_description("Куриное мясо")
+
+    assert query.language == "ru"
+    assert query.canonical_query == "chicken breast cooked"
+
+
 def test_brand_and_region_query_normalization() -> None:
     query = normalize_food_description("Danone Skyr 850 г")
 
@@ -144,6 +151,18 @@ def test_retriever_uses_ranked_candidate() -> None:
     assert item.source == "usda"
     assert item.per_100g.calories_kcal == 89
     assert item.candidate is not None
+
+
+def test_retriever_resolves_russian_chicken_meat_component() -> None:
+    item = NutritionRetriever(router=NutritionSourceRouter()).lookup(
+        IngredientEstimate(name="Куриное мясо", grams_min=50, grams_max=90)
+    )
+
+    assert item.matched_food_name == "chicken breast cooked"
+    assert item.source == "fallback"
+    assert item.per_100g.calories_kcal == 165
+    assert item.grams_min == 50
+    assert item.grams_max == 90
 
 
 def test_retriever_diagnostic_includes_query_kind() -> None:
@@ -498,10 +517,12 @@ def test_retriever_widens_high_variance_soup_fallback() -> None:
     )
 
     assert outcome.item is not None
-    assert outcome.item.matched_food_name == "vegetable soup"
+    assert outcome.item.matched_food_name == "chicken soup"
+    assert outcome.item.per_100g.calories_kcal == 53
     assert outcome.item.grams_min == 260
     assert outcome.item.grams_max == 540
     assert outcome.item.warning is not None
+    assert "куриный суп" in outcome.item.warning.lower()
     assert "диапазон расширен" in outcome.item.warning
 
 

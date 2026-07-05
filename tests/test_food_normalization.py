@@ -156,6 +156,15 @@ def test_negated_component_mentions_are_not_selected() -> None:
     ]
 
 
+def test_russian_chicken_soup_uses_whole_dish_prior() -> None:
+    meal = parse_text_locally("Сколько БЖУ в тарелке куриного супа 400 г?", language="ru")
+
+    assert meal.needs_clarification is False
+    assert [ingredient.name for ingredient in meal.ingredients] == ["chicken soup"]
+    assert meal.ingredients[0].grams_min == 400
+    assert meal.ingredients[0].grams_max == 400
+
+
 @pytest.mark.parametrize(
     ("text", "canonical", "grams"),
     [

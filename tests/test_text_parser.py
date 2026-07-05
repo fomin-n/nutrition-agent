@@ -150,7 +150,7 @@ def test_composite_retry_replaces_opaque_llm_parse(monkeypatch) -> None:
     ]
 
 
-def test_russian_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> None:
+def test_russian_chicken_soup_prefers_whole_dish_prior_over_llm(monkeypatch) -> None:
     calls: list[tuple[bool, tuple[str, ...]]] = []
     monkeypatch.setattr(text_parser, "has_openai_key", lambda: True)
 
@@ -191,14 +191,11 @@ def test_russian_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> No
     )
 
     meal = result["meal"]
-    assert calls[0][0] is False
-    assert calls[1][0] is True
-    assert "composite_not_decomposed" in calls[1][1]
+    assert calls == []
     assert not meal.needs_clarification
-    assert [ingredient.name for ingredient in meal.ingredients] == [
-        "chicken breast cooked",
-        "vegetable soup",
-    ]
+    assert [ingredient.name for ingredient in meal.ingredients] == ["chicken soup"]
+    assert meal.ingredients[0].grams_min == 400
+    assert meal.ingredients[0].grams_max == 400
 
 
 def test_english_compound_chicken_dish_gets_llm_parser_chance(monkeypatch) -> None:

@@ -415,6 +415,9 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     normalized = normalize_food_query(text)
     unresolved_task = derive_unresolved_task(text)
     guard_mentions = find_food_mentions(normalized)
+    has_conventional_dish_mention = any(
+        mention.canonical_name in CONVENTIONAL_DISH_PRIORS for mention in guard_mentions
+    )
     has_total_composite_allocation = bool(
         allocate_composite_portions(
             normalized,
@@ -428,6 +431,7 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
         and _requires_explicit_details(unresolved_task)
         and _is_single_food_request(normalized, unresolved_task)
         and not has_total_composite_allocation
+        and not has_conventional_dish_mention
     ):
         return MealUnderstanding(
             ingredients=[],
