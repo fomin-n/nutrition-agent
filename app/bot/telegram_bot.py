@@ -12,6 +12,7 @@ from app.bot.handlers import (
     help_command,
     login,
     logout,
+    privacy,
     start,
     whoami,
 )
@@ -35,6 +36,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("health", health))
+    application.add_handler(CommandHandler("privacy", privacy))
     application.add_handler(CommandHandler("login", login))
     application.add_handler(CommandHandler("logout", logout))
     application.add_handler(CommandHandler("whoami", whoami))

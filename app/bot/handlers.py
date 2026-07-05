@@ -40,57 +40,51 @@ def get_rate_limit_service() -> UsageLimitService:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_private_chat(update):
-        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        await _reply(update, _private_chat_only_message(update))
         return
     if _is_banned(update):
-        await _reply(update, BANNED_MESSAGE)
+        await _reply(update, _banned_message(update))
         return
     if not _is_authorized(update):
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
-    await _reply(
-        update,
-        (
-            "Send a meal description or one food photo and I’ll estimate calories plus "
-            "protein, fat, and carbs. I don’t provide medical advice, unsafe diet plans, "
-            "or help with unrelated topics."
-        ),
-    )
+    await _reply(update, _start_message(update))
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_private_chat(update):
-        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        await _reply(update, _private_chat_only_message(update))
         return
     if _is_banned(update):
-        await _reply(update, BANNED_MESSAGE)
+        await _reply(update, _banned_message(update))
         return
     if not _is_authorized(update):
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
-    await _reply(
-        update,
-        (
-            "Examples:\n"
-            "• 150g cooked rice, 120g chicken breast, salad, 1 tbsp olive oil\n"
-            "• Photo of a plate with caption: chicken, potatoes, cucumber salad\n"
-            "• Packaged yogurt label, 180g serving\n\n"
-            "For best results include portion sizes."
-        ),
-    )
+    await _reply(update, _help_message(update))
 
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_private_chat(update):
-        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        await _reply(update, _private_chat_only_message(update))
         return
     if _is_banned(update):
-        await _reply(update, BANNED_MESSAGE)
+        await _reply(update, _banned_message(update))
         return
     if not _is_authorized(update):
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
     await _reply(update, "ok")
+
+
+async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, _private_chat_only_message(update))
+        return
+    if _is_banned(update):
+        await _reply(update, _banned_message(update))
+        return
+    await _reply(update, _privacy_message(update))
 
 
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -114,7 +108,9 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     text = getattr(message, "text", None) or getattr(message, "caption", None)
     has_image = bool(getattr(message, "photo", None))
     try:
-        await message.reply_text(_temporary_error_message(text=text, has_image=has_image))
+        await message.reply_text(
+            _temporary_error_message_for_update(update, text=text, has_image=has_image)
+        )
     except Exception as reply_error:
         LOGGER.warning(
             (
@@ -135,25 +131,25 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     try:
         if not _is_private_chat(update):
-            await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+            await _reply(update, _private_chat_only_message(update))
             return
         if user is None:
-            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            await _reply(update, _access_required_message(update))
             return
         if _is_banned(update):
-            await _reply(update, BANNED_MESSAGE)
+            await _reply(update, _banned_message(update))
             return
         if _access_mode() == "open":
-            await _reply(update, ACCESS_OPEN_MESSAGE)
+            await _reply(update, _access_open_message(update))
             return
 
         if not args:
-            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            await _reply(update, _access_required_message(update))
             return
 
         access_key = args[0].strip()
         if not access_key:
-            await _reply(update, ACCESS_REQUIRED_MESSAGE)
+            await _reply(update, _access_required_message(update))
             return
 
         try:
@@ -165,16 +161,13 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
         except AuthConfigurationError:
             LOGGER.exception("Bot auth is not configured")
-            await _reply(
-                update,
-                "Access control is not configured. Ask the administrator to set BOT_AUTH_SECRET.",
-            )
+            await _reply(update, _auth_not_configured_message(update))
             return
 
         if result.ok:
-            await _reply(update, "Access granted.")
+            await _reply(update, _access_granted_message(update))
         else:
-            await _reply(update, "Invalid or expired access key.")
+            await _reply(update, _invalid_access_key_message(update))
     finally:
         if should_delete_key_message:
             await _delete_login_message(update)
@@ -182,40 +175,40 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_private_chat(update):
-        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        await _reply(update, _private_chat_only_message(update))
         return
     user = update.effective_user
     if user is None:
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
     if _access_mode() == "open":
-        await _reply(update, OPEN_LOGOUT_MESSAGE)
+        await _reply(update, _open_logout_message(update))
         return
     try:
         get_auth_service(require_secret=True).revoke_user(user.id)
     except AuthConfigurationError:
         LOGGER.exception("Bot auth is not configured")
-    await _reply(update, "Logged out.")
+    await _reply(update, _logged_out_message(update))
 
 
 async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_private_chat(update):
-        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        await _reply(update, _private_chat_only_message(update))
         return
     user = update.effective_user
     if user is None:
-        await _reply(update, "Not authorized.")
+        await _reply(update, _not_authorized_message(update))
         return
     if _is_banned(update):
-        await _reply(update, f"Telegram user ID: {user.id}\nAccess mode: {_access_mode()}\nStatus: banned")
+        await _reply(update, _whoami_message(update, user_id=user.id, status="banned"))
         return
     if _access_mode() == "open":
-        await _reply(update, f"Telegram user ID: {user.id}\nAccess mode: open\nStatus: allowed")
+        await _reply(update, _whoami_message(update, user_id=user.id, status="allowed"))
         return
     if _is_authorized(update):
-        await _reply(update, f"Authorized Telegram user ID: {user.id}\nAccess mode: invite")
+        await _reply(update, _whoami_message(update, user_id=user.id, status="authorized"))
     else:
-        await _reply(update, "Not authorized. Send /login <access_key>.")
+        await _reply(update, _not_authorized_message(update))
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -225,10 +218,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not _is_private_chat(update):
         return
     if _is_banned(update):
-        await _reply(update, BANNED_MESSAGE)
+        await _reply(update, _banned_message(update))
         return
     if not _is_authorized(update):
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
     if not await _consume_usage_or_reply(context, update, text=message.text, has_image=False):
         return
@@ -243,13 +236,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not _is_private_chat(update):
         return
     if _is_banned(update):
-        await _reply(update, BANNED_MESSAGE)
+        await _reply(update, _banned_message(update))
         return
     if not _is_authorized(update):
-        await _reply(update, ACCESS_REQUIRED_MESSAGE)
+        await _reply(update, _access_required_message(update))
         return
     if _is_album_message(message):
-        await _reply(update, _album_rejected_message(text=message.caption))
+        await _reply(update, _album_rejected_message(update, text=message.caption))
         return
     if not await _consume_usage_or_reply(context, update, text=message.caption, has_image=True):
         return
@@ -282,7 +275,7 @@ async def _process_and_reply(update: Update, *, text: str | None, image_path: st
             request_context.chat_id,
             request_context.message_id,
         )
-        answer = "I couldn’t process that safely. Please try again with a clear meal description or food photo."
+        answer = _processing_error_message(update, text=text, has_image=image_path is not None)
     await _reply(update, answer)
 
 
@@ -336,17 +329,23 @@ async def _consume_usage_or_reply(
             user.id,
             getattr(update.effective_chat, "id", None),
         )
-        await _reply(update, _rate_limit_unavailable_message(text=text, has_image=has_image))
+        await _reply(update, _rate_limit_unavailable_message_for_update(update, text=text, has_image=has_image))
         return False
     await _send_usage_admin_alert(context, result)
     if result.allowed:
         return True
-    await _reply(update, _rate_limit_message(result.reason, text=text, has_image=has_image))
+    await _reply(update, _rate_limit_message(update, result.reason, text=text, has_image=has_image))
     return False
 
 
-def _rate_limit_message(reason: str, *, text: str | None, has_image: bool) -> str:
-    language = response_language(detect_language(text, has_image=has_image))
+def _rate_limit_message(
+    update: Update,
+    reason: str,
+    *,
+    text: str | None,
+    has_image: bool,
+) -> str:
+    language = _handler_language(update, text=text, has_image=has_image)
     if language == "ru":
         if reason == "user_minute_limit":
             return "Слишком много запросов подряд. Попробуйте снова примерно через минуту."
@@ -365,6 +364,154 @@ def _rate_limit_message(reason: str, *, text: str | None, has_image: bool) -> st
     if reason == "global_daily_limit":
         return "The bot is at capacity today. Please come back tomorrow."
     return "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
+
+
+def _handler_language(
+    update: Update,
+    *,
+    text: str | None = None,
+    has_image: bool = False,
+) -> str:
+    language_code = getattr(update.effective_user, "language_code", None)
+    if isinstance(language_code, str) and language_code.lower().startswith("ru"):
+        return "ru"
+    return response_language(detect_language(text, has_image=has_image))
+
+
+def _start_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return (
+            "Опишите блюдо текстом или отправьте одно фото еды, и я оценю калории, "
+            "белки, жиры и углеводы с явными допущениями.\n\n"
+            "Пример: 150 г риса, 120 г куриной грудки, салат, 1 ст. л. оливкового масла.\n\n"
+            "Я не даю медицинских советов и небезопасных диет-планов. "
+            "/privacy покажет, что хранится, а /forget удалит сохранённую память."
+        )
+    return (
+        "Send a meal description or one food photo and I’ll estimate calories, protein, "
+        "fat, and carbs with explicit assumptions.\n\n"
+        "Example: 150g cooked rice, 120g chicken breast, salad, 1 tbsp olive oil.\n\n"
+        "I don’t provide medical advice or unsafe diet plans. Use /privacy to see what "
+        "is stored and /forget to delete saved memory."
+    )
+
+
+def _help_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return (
+            "Примеры:\n"
+            "• 150 г риса, 120 г куриной грудки, салат, 1 ст. л. оливкового масла\n"
+            "• Фото тарелки с подписью: курица, картофель, салат из огурцов\n"
+            "• Этикетка йогурта, порция 180 г\n\n"
+            "Лучше всего указывать размеры порций."
+        )
+    return (
+        "Examples:\n"
+        "• 150g cooked rice, 120g chicken breast, salad, 1 tbsp olive oil\n"
+        "• Photo of a plate with caption: chicken, potatoes, cucumber salad\n"
+        "• Packaged yogurt label, 180g serving\n\n"
+        "For best results include portion sizes."
+    )
+
+
+def _privacy_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return (
+            "Я сохраняю недавние сообщения, краткую историю диалога и устойчивые "
+            "пищевые предпочтения, чтобы лучше отвечать на уточнения. Счётчики "
+            "использования хранятся отдельно для защиты от злоупотреблений. "
+            "Команда /forget удаляет сохранённую память диалога."
+        )
+    return (
+        "I store recent messages, a compact conversation summary, and stable nutrition "
+        "preferences so follow-up questions work better. Usage counters are kept "
+        "separately for abuse and cost control. Use /forget to delete saved conversation "
+        "memory."
+    )
+
+
+def _access_required_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Нужен доступ. Отправьте /login <access_key>."
+    return ACCESS_REQUIRED_MESSAGE
+
+
+def _banned_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Этот Telegram-аккаунт не может пользоваться ботом."
+    return BANNED_MESSAGE
+
+
+def _access_open_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Доступ открыт. Ключ не нужен."
+    return ACCESS_OPEN_MESSAGE
+
+
+def _open_logout_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Доступ открыт, поэтому выход не нужен. Используйте /forget, чтобы удалить память."
+    return OPEN_LOGOUT_MESSAGE
+
+
+def _private_chat_only_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Пожалуйста, напишите мне в личный чат. Групповые чаты пока не поддерживаются."
+    return PRIVATE_CHAT_ONLY_MESSAGE
+
+
+def _auth_not_configured_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Контроль доступа не настроен. Попросите администратора задать BOT_AUTH_SECRET."
+    return "Access control is not configured. Ask the administrator to set BOT_AUTH_SECRET."
+
+
+def _access_granted_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Доступ разрешён."
+    return "Access granted."
+
+
+def _invalid_access_key_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Ключ доступа неверный или истёк."
+    return "Invalid or expired access key."
+
+
+def _logged_out_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Вы вышли."
+    return "Logged out."
+
+
+def _not_authorized_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Нет доступа. Отправьте /login <access_key>."
+    return "Not authorized. Send /login <access_key>."
+
+
+def _whoami_message(update: Update, *, user_id: int, status: str) -> str:
+    mode = _access_mode()
+    if _handler_language(update) == "ru":
+        labels = {
+            "allowed": "разрешён",
+            "authorized": "авторизован",
+            "banned": "заблокирован",
+        }
+        return (
+            f"Telegram user ID: {user_id}\n"
+            f"Режим доступа: {mode}\n"
+            f"Статус: {labels.get(status, status)}"
+        )
+    if status == "authorized":
+        return f"Authorized Telegram user ID: {user_id}\nAccess mode: {mode}"
+    return f"Telegram user ID: {user_id}\nAccess mode: {mode}\nStatus: {status}"
+
+
+def _processing_error_message(update: Update, *, text: str | None, has_image: bool) -> str:
+    if _handler_language(update, text=text, has_image=has_image) == "ru":
+        return "Я не смог безопасно обработать запрос. Пришлите понятное описание блюда или фото еды."
+    return "I couldn’t process that safely. Please try again with a clear meal description or food photo."
 
 
 async def _send_usage_admin_alert(
@@ -399,13 +546,35 @@ def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str
     return "I couldn’t safely verify the request limit. Please try again later."
 
 
+def _rate_limit_unavailable_message_for_update(
+    update: Update,
+    *,
+    text: str | None,
+    has_image: bool,
+) -> str:
+    language = _handler_language(update, text=text, has_image=has_image)
+    if language == "ru":
+        return "Не удалось безопасно проверить лимит запросов. Попробуйте позже."
+    return "I couldn’t safely verify the request limit. Please try again later."
+
+
 def _temporary_error_message(*, text: str | None, has_image: bool) -> str:
     language = response_language(detect_language(text, has_image=has_image))
     return TEMPORARY_ERROR_MESSAGE_RU if language == "ru" else TEMPORARY_ERROR_MESSAGE
 
 
-def _album_rejected_message(*, text: str | None) -> str:
-    language = response_language(detect_language(text, has_image=True))
+def _temporary_error_message_for_update(
+    update: Update,
+    *,
+    text: str | None,
+    has_image: bool,
+) -> str:
+    language = _handler_language(update, text=text, has_image=has_image)
+    return TEMPORARY_ERROR_MESSAGE_RU if language == "ru" else TEMPORARY_ERROR_MESSAGE
+
+
+def _album_rejected_message(update: Update, *, text: str | None) -> str:
+    language = _handler_language(update, text=text, has_image=True)
     if language == "ru":
         return "Пожалуйста, отправьте одну отдельную фотографию еды, а не альбом."
     return ALBUM_REJECTED_MESSAGE

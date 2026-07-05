@@ -126,7 +126,12 @@ class DownloadablePhoto:
 def make_update(message: FakeMessage):
     return SimpleNamespace(
         effective_message=message,
-        effective_user=SimpleNamespace(id=1001, username="demo_user", full_name="Demo User"),
+        effective_user=SimpleNamespace(
+            id=1001,
+            username="demo_user",
+            full_name="Demo User",
+            language_code="en",
+        ),
         effective_chat=SimpleNamespace(id=2001, type="private"),
     )
 
@@ -239,6 +244,64 @@ def test_open_mode_logout_is_noop(monkeypatch) -> None:
 
     assert auth.revoked_users == []
     assert message.replies == [handlers.OPEN_LOGOUT_MESSAGE]
+
+
+def test_russian_start_message_in_open_mode(monkeypatch) -> None:
+    message = FakeMessage(text="/start")
+    update = make_update(message)
+    update.effective_user.language_code = "ru"
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
+
+    asyncio.run(handlers.start(update, context))
+
+    assert "Опишите блюдо" in message.replies[0]
+    assert "/privacy" in message.replies[0]
+    assert "/forget" in message.replies[0]
+
+
+def test_privacy_message_is_available_without_invite_auth(monkeypatch) -> None:
+    message = FakeMessage(text="/privacy")
+    update = make_update(message)
+    update.effective_user.language_code = "ru"
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
+
+    asyncio.run(handlers.privacy(update, context))
+
+    assert "недавние сообщения" in message.replies[0]
+    assert "/forget" in message.replies[0]
+
+
+def test_open_mode_login_replies_no_key_needed_and_deletes_message(monkeypatch) -> None:
+    message = FakeMessage(text="/login raw-secret-key", message_id=3001)
+    update = make_update(message)
+    update.effective_user.language_code = "ru"
+    context = SimpleNamespace(bot=FakeBot(), args=["raw-secret-key"])
+    auth = FakeAuthService(False)
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
+
+    asyncio.run(handlers.login(update, context))
+
+    assert auth.login_keys == []
+    assert message.replies == ["Доступ открыт. Ключ не нужен."]
+    assert message.deleted
+
+
+def test_open_mode_whoami_is_localized(monkeypatch) -> None:
+    message = FakeMessage(text="/whoami")
+    update = make_update(message)
+    update.effective_user.language_code = "ru"
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
+
+    asyncio.run(handlers.whoami(update, context))
+
+    assert "Режим доступа: open" in message.replies[0]
+    assert "Статус: разрешён" in message.replies[0]
 
 
 def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) -> None:
