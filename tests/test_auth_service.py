@@ -1,6 +1,8 @@
 import sqlite3
 
-from app.auth.service import AuthService
+import pytest
+
+from app.auth.service import AuthConfigurationError, AuthService
 
 
 def test_key_generation_stores_digest_not_raw_key(tmp_path) -> None:
@@ -77,3 +79,32 @@ def test_logout_revokes_access(tmp_path) -> None:
 
     assert service.revoke_user(1001)
     assert not service.is_authorized(1001)
+
+
+def test_ban_unban_and_list_users_persist_without_auth_secret(tmp_path) -> None:
+    db_path = tmp_path / "auth.sqlite3"
+    service = AuthService(db_path)
+
+    service.ban_user(1001, username="demo", display_name="Demo User", reason="abuse")
+
+    reloaded = AuthService(db_path)
+    assert reloaded.is_banned(1001)
+    rows = reloaded.list_banned_users()
+    assert len(rows) == 1
+    assert rows[0]["telegram_user_id"] == 1001
+    assert rows[0]["username"] == "demo"
+    assert rows[0]["display_name"] == "Demo User"
+    assert rows[0]["reason"] == "abuse"
+
+    assert reloaded.unban_user(1001)
+    assert not reloaded.is_banned(1001)
+
+
+def test_access_key_operations_require_secret(tmp_path) -> None:
+    service = AuthService(tmp_path / "auth.sqlite3")
+
+    with pytest.raises(AuthConfigurationError):
+        service.create_key(label="demo")
+
+    with pytest.raises(AuthConfigurationError):
+        service.login(raw_key="key", telegram_user_id=1001)

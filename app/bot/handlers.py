@@ -17,13 +17,18 @@ from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
 ACCESS_REQUIRED_MESSAGE = "Access required. Send /login <access_key>."
+BANNED_MESSAGE = "This Telegram account cannot use the bot."
+ACCESS_OPEN_MESSAGE = "Access is open. No access key is needed."
+OPEN_LOGOUT_MESSAGE = (
+    "Access is open, so there is no login session to end. Use /forget to delete saved memory."
+)
 TEMPORARY_ERROR_MESSAGE = "Something went wrong while handling that update. Please try again."
 TEMPORARY_ERROR_MESSAGE_RU = "При обработке сообщения произошла ошибка. Попробуйте еще раз."
 
 
-@lru_cache(maxsize=1)
-def get_auth_service() -> AuthService:
-    return AuthService.from_settings()
+@lru_cache(maxsize=2)
+def get_auth_service(*, require_secret: bool = True) -> AuthService:
+    return AuthService.from_settings(require_secret=require_secret)
 
 
 @lru_cache(maxsize=1)
@@ -32,6 +37,9 @@ def get_rate_limit_service() -> UsageLimitService:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if _is_banned(update):
+        await _reply(update, BANNED_MESSAGE)
+        return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
@@ -46,6 +54,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if _is_banned(update):
+        await _reply(update, BANNED_MESSAGE)
+        return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
@@ -62,6 +73,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if _is_banned(update):
+        await _reply(update, BANNED_MESSAGE)
+        return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
@@ -112,6 +126,12 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if user is None:
             await _reply(update, ACCESS_REQUIRED_MESSAGE)
             return
+        if _is_banned(update):
+            await _reply(update, BANNED_MESSAGE)
+            return
+        if _access_mode() == "open":
+            await _reply(update, ACCESS_OPEN_MESSAGE)
+            return
 
         if not args:
             await _reply(update, ACCESS_REQUIRED_MESSAGE)
@@ -123,7 +143,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         try:
-            result = get_auth_service().login(
+            result = get_auth_service(require_secret=True).login(
                 raw_key=access_key,
                 telegram_user_id=user.id,
                 username=user.username,
@@ -151,8 +171,11 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if user is None:
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
+    if _access_mode() == "open":
+        await _reply(update, OPEN_LOGOUT_MESSAGE)
+        return
     try:
-        get_auth_service().revoke_user(user.id)
+        get_auth_service(require_secret=True).revoke_user(user.id)
     except AuthConfigurationError:
         LOGGER.exception("Bot auth is not configured")
     await _reply(update, "Logged out.")
@@ -163,8 +186,14 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if user is None:
         await _reply(update, "Not authorized.")
         return
+    if _is_banned(update):
+        await _reply(update, f"Telegram user ID: {user.id}\nAccess mode: {_access_mode()}\nStatus: banned")
+        return
+    if _access_mode() == "open":
+        await _reply(update, f"Telegram user ID: {user.id}\nAccess mode: open\nStatus: allowed")
+        return
     if _is_authorized(update):
-        await _reply(update, f"Authorized Telegram user ID: {user.id}")
+        await _reply(update, f"Authorized Telegram user ID: {user.id}\nAccess mode: invite")
     else:
         await _reply(update, "Not authorized. Send /login <access_key>.")
 
@@ -172,6 +201,9 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message is None:
+        return
+    if _is_banned(update):
+        await _reply(update, BANNED_MESSAGE)
         return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
@@ -185,6 +217,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message is None or not message.photo:
+        return
+    if _is_banned(update):
+        await _reply(update, BANNED_MESSAGE)
         return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
@@ -306,12 +341,35 @@ async def _send_typing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
 
 
-def _is_authorized(update: Update) -> bool:
+def _access_mode() -> str:
+    return getattr(get_settings(), "bot_access_mode", "invite")
+
+
+def _auth_service_for_access() -> AuthService:
+    return get_auth_service(require_secret=_access_mode() == "invite")
+
+
+def _is_banned(update: Update) -> bool:
     user = update.effective_user
     if user is None:
         return False
     try:
-        return get_auth_service().is_authorized(user.id)
+        return get_auth_service(require_secret=False).is_banned(user.id)
+    except AuthConfigurationError:
+        LOGGER.exception("Bot ban list is not configured")
+        return True
+
+
+def _is_authorized(update: Update) -> bool:
+    user = update.effective_user
+    if user is None:
+        return False
+    if _is_banned(update):
+        return False
+    if _access_mode() == "open":
+        return True
+    try:
+        return _auth_service_for_access().is_authorized(user.id)
     except AuthConfigurationError:
         LOGGER.exception("Bot auth is not configured")
         return False

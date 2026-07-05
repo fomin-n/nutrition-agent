@@ -10,14 +10,18 @@ from app.bot.rate_limit import UsageLimitResult
 
 
 class FakeAuthService:
-    def __init__(self, authorized: bool, *, login_ok: bool = True) -> None:
+    def __init__(self, authorized: bool, *, login_ok: bool = True, banned: bool = False) -> None:
         self.authorized = authorized
         self.login_ok = login_ok
+        self.banned = banned
         self.revoked_users: list[int] = []
         self.login_keys: list[str] = []
 
     def is_authorized(self, telegram_user_id: int) -> bool:
         return self.authorized
+
+    def is_banned(self, telegram_user_id: int) -> bool:
+        return self.banned
 
     def login(
         self,
@@ -129,7 +133,7 @@ def test_unauthorized_text_does_not_call_agent_graph(monkeypatch) -> None:
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
 
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(False))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
     monkeypatch.setattr(
         handlers,
         "process_request",
@@ -147,7 +151,7 @@ def test_unauthorized_photo_does_not_download_or_call_graph(monkeypatch) -> None
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
 
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(False))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
     monkeypatch.setattr(
         handlers,
         "process_request",
@@ -160,17 +164,73 @@ def test_unauthorized_photo_does_not_download_or_call_graph(monkeypatch) -> None
     assert context.bot.actions == []
 
 
+def test_open_mode_text_allows_user_without_access_key(monkeypatch) -> None:
+    message = FakeMessage(text="100 g chicken", message_id=3001)
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
+
+    def fake_process_request(**kwargs):
+        captured.update(kwargs)
+        return "Estimated."
+
+    monkeypatch.setattr(handlers, "process_request", fake_process_request)
+
+    asyncio.run(handlers.handle_text(update, context))
+
+    assert message.replies == ["Estimated."]
+    assert captured["text"] == "100 g chicken"
+
+
+def test_banned_user_is_refused_before_quota_or_graph(monkeypatch) -> None:
+    message = FakeMessage(text="100 g chicken")
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    limiter = FakeRateLimitService()
+
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True, banned=True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+    monkeypatch.setattr(
+        handlers,
+        "process_request",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("graph should not run")),
+    )
+
+    asyncio.run(handlers.handle_text(update, context))
+
+    assert message.replies == [handlers.BANNED_MESSAGE]
+    assert limiter.user_ids == []
+    assert context.bot.actions == []
+
+
 def test_logout_revokes_current_user(monkeypatch) -> None:
     message = FakeMessage()
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
     auth = FakeAuthService(True)
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: auth)
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
 
     asyncio.run(handlers.logout(update, context))
 
     assert auth.revoked_users == [1001]
     assert message.replies == ["Logged out."]
+
+
+def test_open_mode_logout_is_noop(monkeypatch) -> None:
+    message = FakeMessage()
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    auth = FakeAuthService(False)
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
+
+    asyncio.run(handlers.logout(update, context))
+
+    assert auth.revoked_users == []
+    assert message.replies == [handlers.OPEN_LOGOUT_MESSAGE]
 
 
 def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) -> None:
@@ -206,7 +266,7 @@ def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) 
         captured.update(kwargs)
         return "Estimated."
 
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(handlers, "process_request", fake_process_request)
 
     asyncio.run(handlers.handle_text(update, context))
@@ -240,7 +300,7 @@ def test_login_deletes_access_key_message_after_success(monkeypatch) -> None:
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot(), args=["raw-secret-key"])
     auth = FakeAuthService(False, login_ok=True)
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: auth)
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
 
     asyncio.run(handlers.login(update, context))
 
@@ -254,7 +314,7 @@ def test_login_deletes_access_key_message_after_failure(monkeypatch) -> None:
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot(), args=["raw-secret-key"])
     auth = FakeAuthService(False, login_ok=False)
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: auth)
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
 
     asyncio.run(handlers.login(update, context))
 
@@ -266,7 +326,7 @@ def test_login_delete_failure_does_not_break_login(monkeypatch, caplog) -> None:
     message = FakeMessage(text="/login raw-secret-key", message_id=3001, delete_raises=True)
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot(), args=["raw-secret-key"])
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(False, login_ok=True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False, login_ok=True))
 
     asyncio.run(handlers.login(update, context))
 
@@ -282,7 +342,7 @@ def test_authorized_text_rate_limited_before_graph(monkeypatch) -> None:
     limiter = FakeRateLimitService(
         UsageLimitResult(allowed=False, reason="user_daily_limit", limit=1)
     )
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
     monkeypatch.setattr(
         handlers,
@@ -303,7 +363,7 @@ def test_russian_rate_limit_message_is_localized(monkeypatch) -> None:
     message = FakeMessage(text="Сколько калорий в яблоке?")
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(
         handlers,
         "get_rate_limit_service",
@@ -325,7 +385,7 @@ def test_rate_limited_photo_does_not_download_or_call_graph(monkeypatch) -> None
     message = FakeMessage(photo=[ExplodingPhoto()])
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(
         handlers,
         "get_rate_limit_service",
@@ -360,7 +420,7 @@ def test_authorized_photo_uses_configured_temp_image_dir(monkeypatch, tmp_path) 
         captured.update(kwargs)
         return "Estimated."
 
-    monkeypatch.setattr(handlers, "get_auth_service", lambda: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(temp_image_dir=str(configured_base)))
     monkeypatch.setattr(handlers, "process_request", fake_process_request)
 

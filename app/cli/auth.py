@@ -24,9 +24,21 @@ def main(argv: list[str] | None = None) -> int:
     revoke_user = subparsers.add_parser("revoke-user", help="Revoke an authorized Telegram user.")
     revoke_user.add_argument("telegram_user_id", type=int)
 
+    ban_user = subparsers.add_parser("ban-user", help="Ban a Telegram user from using the bot.")
+    ban_user.add_argument("telegram_user_id", type=int)
+    ban_user.add_argument("--username", help="Optional Telegram username for operator context.")
+    ban_user.add_argument("--display-name", help="Optional Telegram display name for operator context.")
+    ban_user.add_argument("--reason", help="Optional reason stored for operator context.")
+
+    unban_user = subparsers.add_parser("unban-user", help="Remove a Telegram user ban.")
+    unban_user.add_argument("telegram_user_id", type=int)
+
+    subparsers.add_parser("list-banned", help="List banned Telegram users.")
+
     args = parser.parse_args(argv)
+    secret_required = args.command == "create-key"
     try:
-        service = AuthService.from_settings()
+        service = AuthService.from_settings(require_secret=secret_required)
     except AuthConfigurationError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -65,6 +77,29 @@ def main(argv: list[str] | None = None) -> int:
         ok = service.revoke_user(args.telegram_user_id)
         print("revoked" if ok else "not_found")
         return 0 if ok else 1
+
+    if args.command == "ban-user":
+        service.ban_user(
+            args.telegram_user_id,
+            username=args.username,
+            display_name=args.display_name,
+            reason=args.reason,
+        )
+        print("banned")
+        return 0
+
+    if args.command == "unban-user":
+        ok = service.unban_user(args.telegram_user_id)
+        print("unbanned" if ok else "not_found")
+        return 0 if ok else 1
+
+    if args.command == "list-banned":
+        rows = service.list_banned_users()
+        _print_table(
+            ["telegram_user_id", "username", "display_name", "reason", "banned_at"],
+            rows,
+        )
+        return 0
 
     parser.print_help()
     return 2

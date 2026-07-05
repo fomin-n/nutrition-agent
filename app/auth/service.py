@@ -32,20 +32,18 @@ class LoginResult:
 
 
 class AuthService:
-    def __init__(self, db_path: str | Path, secret: str) -> None:
-        if not secret:
-            raise AuthConfigurationError("BOT_AUTH_SECRET is required for bot access control")
+    def __init__(self, db_path: str | Path, secret: str | None = None) -> None:
         self.db_path = Path(db_path)
-        self.secret = secret.encode("utf-8")
+        self.secret = secret.encode("utf-8") if secret else None
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
         self._harden_permissions()
 
     @classmethod
-    def from_settings(cls) -> "AuthService":
+    def from_settings(cls, *, require_secret: bool = True) -> "AuthService":
         settings = get_settings()
         secret = reveal_secret(settings.bot_auth_secret)
-        if not secret:
+        if require_secret and not secret:
             raise AuthConfigurationError(
                 "BOT_AUTH_SECRET is missing. Set it in .env or the service environment."
             )
@@ -55,13 +53,14 @@ class AuthService:
         raw_key = secrets.token_urlsafe(32)
         key_id = uuid4().hex
         now = _now()
+        digest = self.digest_key(raw_key)
         with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO access_keys (id, label, key_digest, created_at, expires_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (key_id, label, self.digest_key(raw_key), now, expires_at),
+                (key_id, label, digest, now, expires_at),
             )
         return CreatedAccessKey(key_id=key_id, raw_key=raw_key, label=label, expires_at=expires_at)
 
@@ -174,7 +173,61 @@ class AuthService:
                 )
             )
 
+    def ban_user(
+        self,
+        telegram_user_id: int,
+        *,
+        username: str | None = None,
+        display_name: str | None = None,
+        reason: str | None = None,
+    ) -> None:
+        now = _now()
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO banned_users
+                    (telegram_user_id, username, display_name, reason, banned_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(telegram_user_id) DO UPDATE SET
+                    username = excluded.username,
+                    display_name = excluded.display_name,
+                    reason = excluded.reason,
+                    banned_at = excluded.banned_at
+                """,
+                (telegram_user_id, username, display_name, reason, now),
+            )
+
+    def unban_user(self, telegram_user_id: int) -> bool:
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM banned_users WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            )
+            return cursor.rowcount > 0
+
+    def is_banned(self, telegram_user_id: int) -> bool:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM banned_users WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            ).fetchone()
+            return row is not None
+
+    def list_banned_users(self) -> list[sqlite3.Row]:
+        with self._connection() as conn:
+            return list(
+                conn.execute(
+                    """
+                    SELECT telegram_user_id, username, display_name, reason, banned_at
+                    FROM banned_users
+                    ORDER BY banned_at DESC
+                    """
+                )
+            )
+
     def digest_key(self, raw_key: str) -> str:
+        if self.secret is None:
+            raise AuthConfigurationError("BOT_AUTH_SECRET is required for access-key operations")
         return hmac.new(self.secret, raw_key.encode("utf-8"), sha256).hexdigest()
 
     def _connect(self) -> sqlite3.Connection:
@@ -214,6 +267,14 @@ class AuthService:
                     display_name TEXT,
                     authorized_at TEXT NOT NULL,
                     revoked_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS banned_users (
+                    telegram_user_id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    display_name TEXT,
+                    reason TEXT,
+                    banned_at TEXT NOT NULL
                 );
                 """
             )

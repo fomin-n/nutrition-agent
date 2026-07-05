@@ -29,7 +29,7 @@ def build_application() -> Application:
         raise RuntimeError(
             "TELEGRAM_BOT_TOKEN is missing. Export it or put it into .env before running the bot."
         )
-    AuthService.from_settings()
+    AuthService.from_settings(require_secret=settings.bot_access_mode == "invite")
 
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
