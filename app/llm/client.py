@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     usage_db_path: str | None = None
     bot_daily_user_request_limit: int = Field(default=100, ge=0)
     bot_daily_global_request_limit: int = Field(default=1000, ge=0)
+    bot_user_burst_request_limit_per_minute: int = Field(default=6, ge=0)
+    bot_daily_user_photo_limit: int = Field(default=25, ge=0)
+    bot_global_usage_warning_ratio: float = Field(default=0.8, ge=0.0, le=1.0)
+    bot_admin_chat_id: str | None = None
     memory_db_path: str | None = None
     memory_recent_messages: int = 10
     memory_summarize_after_messages: int = 16

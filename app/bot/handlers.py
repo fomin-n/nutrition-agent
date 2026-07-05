@@ -9,7 +9,7 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from app.auth.service import AuthConfigurationError, AuthService
-from app.bot.rate_limit import UsageLimitService, get_usage_limit_service
+from app.bot.rate_limit import UsageLimitResult, UsageLimitService, get_usage_limit_service
 from app.graph.graph import process_request
 from app.i18n import detect_language, response_language
 from app.llm.client import get_settings
@@ -22,6 +22,8 @@ ACCESS_OPEN_MESSAGE = "Access is open. No access key is needed."
 OPEN_LOGOUT_MESSAGE = (
     "Access is open, so there is no login session to end. Use /forget to delete saved memory."
 )
+PRIVATE_CHAT_ONLY_MESSAGE = "Please message me in a private chat. Group chats are not supported yet."
+ALBUM_REJECTED_MESSAGE = "Please send one standalone food photo instead of a photo album."
 TEMPORARY_ERROR_MESSAGE = "Something went wrong while handling that update. Please try again."
 TEMPORARY_ERROR_MESSAGE_RU = "При обработке сообщения произошла ошибка. Попробуйте еще раз."
 
@@ -37,6 +39,9 @@ def get_rate_limit_service() -> UsageLimitService:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        return
     if _is_banned(update):
         await _reply(update, BANNED_MESSAGE)
         return
@@ -54,6 +59,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        return
     if _is_banned(update):
         await _reply(update, BANNED_MESSAGE)
         return
@@ -73,6 +81,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        return
     if _is_banned(update):
         await _reply(update, BANNED_MESSAGE)
         return
@@ -123,6 +134,9 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     should_delete_key_message = bool(args and args[0].strip())
     user = update.effective_user
     try:
+        if not _is_private_chat(update):
+            await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+            return
         if user is None:
             await _reply(update, ACCESS_REQUIRED_MESSAGE)
             return
@@ -167,6 +181,9 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        return
     user = update.effective_user
     if user is None:
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
@@ -182,6 +199,9 @@ async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, PRIVATE_CHAT_ONLY_MESSAGE)
+        return
     user = update.effective_user
     if user is None:
         await _reply(update, "Not authorized.")
@@ -202,13 +222,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     message = update.effective_message
     if message is None:
         return
+    if not _is_private_chat(update):
+        return
     if _is_banned(update):
         await _reply(update, BANNED_MESSAGE)
         return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
-    if not await _consume_usage_or_reply(update, text=message.text, has_image=False):
+    if not await _consume_usage_or_reply(context, update, text=message.text, has_image=False):
         return
     await _send_typing(update, context)
     await _process_and_reply(update, text=message.text)
@@ -218,13 +240,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if message is None or not message.photo:
         return
+    if not _is_private_chat(update):
+        return
     if _is_banned(update):
         await _reply(update, BANNED_MESSAGE)
         return
     if not _is_authorized(update):
         await _reply(update, ACCESS_REQUIRED_MESSAGE)
         return
-    if not await _consume_usage_or_reply(update, text=message.caption, has_image=True):
+    if _is_album_message(message):
+        await _reply(update, _album_rejected_message(text=message.caption))
+        return
+    if not await _consume_usage_or_reply(context, update, text=message.caption, has_image=True):
         return
 
     await _send_typing(update, context)
@@ -287,12 +314,22 @@ async def _delete_login_message(update: Update) -> None:
         )
 
 
-async def _consume_usage_or_reply(update: Update, *, text: str | None, has_image: bool) -> bool:
+async def _consume_usage_or_reply(
+    context: ContextTypes.DEFAULT_TYPE,
+    update: Update,
+    *,
+    text: str | None,
+    has_image: bool,
+) -> bool:
     user = update.effective_user
     if user is None:
         return False
     try:
-        result = await asyncio.to_thread(get_rate_limit_service().check_and_increment, user.id)
+        result = await asyncio.to_thread(
+            get_rate_limit_service().check_and_increment,
+            user.id,
+            has_image=has_image,
+        )
     except Exception:
         LOGGER.exception(
             "Failed to verify request limits user_id=%s chat_id=%s",
@@ -301,20 +338,58 @@ async def _consume_usage_or_reply(update: Update, *, text: str | None, has_image
         )
         await _reply(update, _rate_limit_unavailable_message(text=text, has_image=has_image))
         return False
+    await _send_usage_admin_alert(context, result)
     if result.allowed:
         return True
-    await _reply(update, _rate_limit_message(text=text, has_image=has_image))
+    await _reply(update, _rate_limit_message(result.reason, text=text, has_image=has_image))
     return False
 
 
-def _rate_limit_message(*, text: str | None, has_image: bool) -> str:
+def _rate_limit_message(reason: str, *, text: str | None, has_image: bool) -> str:
     language = response_language(detect_language(text, has_image=has_image))
     if language == "ru":
+        if reason == "user_minute_limit":
+            return "Слишком много запросов подряд. Попробуйте снова примерно через минуту."
+        if reason == "user_daily_photo_limit":
+            return "Дневной лимит фото исчерпан. Можно отправить описание блюда текстом или попробовать фото завтра."
+        if reason == "global_daily_limit":
+            return "Сегодня бот уже на пределе нагрузки. Пожалуйста, попробуйте завтра."
         return (
             "Дневной лимит запросов исчерпан. Попробуйте завтра или попросите "
             "администратора увеличить лимит."
         )
+    if reason == "user_minute_limit":
+        return "Too many requests at once. Please slow down and try again in about a minute."
+    if reason == "user_daily_photo_limit":
+        return "Daily photo limit reached. You can still send text meal descriptions or try photos tomorrow."
+    if reason == "global_daily_limit":
+        return "The bot is at capacity today. Please come back tomorrow."
     return "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
+
+
+async def _send_usage_admin_alert(
+    context: ContextTypes.DEFAULT_TYPE,
+    result: UsageLimitResult,
+) -> None:
+    if result.admin_alert is None:
+        return
+    LOGGER.warning(
+        "Telegram usage alert event=%s global_count=%s limit=%s",
+        result.admin_alert,
+        result.global_count,
+        result.limit,
+    )
+    chat_id = getattr(get_settings(), "bot_admin_chat_id", None)
+    if not chat_id:
+        return
+    message = (
+        f"nutrition-agent usage alert: {result.admin_alert}; "
+        f"global_count={result.global_count}; limit={result.limit}"
+    )
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=message)
+    except Exception:
+        LOGGER.warning("Failed to send Telegram usage admin alert event=%s", result.admin_alert)
 
 
 def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str:
@@ -327,6 +402,13 @@ def _rate_limit_unavailable_message(*, text: str | None, has_image: bool) -> str
 def _temporary_error_message(*, text: str | None, has_image: bool) -> str:
     language = response_language(detect_language(text, has_image=has_image))
     return TEMPORARY_ERROR_MESSAGE_RU if language == "ru" else TEMPORARY_ERROR_MESSAGE
+
+
+def _album_rejected_message(*, text: str | None) -> str:
+    language = response_language(detect_language(text, has_image=True))
+    if language == "ru":
+        return "Пожалуйста, отправьте одну отдельную фотографию еды, а не альбом."
+    return ALBUM_REJECTED_MESSAGE
 
 
 def _temp_image_base_dir() -> str:
@@ -347,6 +429,15 @@ def _access_mode() -> str:
 
 def _auth_service_for_access() -> AuthService:
     return get_auth_service(require_secret=_access_mode() == "invite")
+
+
+def _is_private_chat(update: Update) -> bool:
+    chat = update.effective_chat
+    return getattr(chat, "type", "private") == "private"
+
+
+def _is_album_message(message: object) -> bool:
+    return bool(getattr(message, "media_group_id", None))
 
 
 def _is_banned(update: Update) -> bool:

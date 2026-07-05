@@ -38,8 +38,10 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("login", login))
     application.add_handler(CommandHandler("logout", logout))
     application.add_handler(CommandHandler("whoami", whoami))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(MessageHandler(filters.ChatType.PRIVATE & filters.PHOTO, handle_photo))
+    application.add_handler(
+        MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_text)
+    )
     application.add_error_handler(handle_error)
     return application
 

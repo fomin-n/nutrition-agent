@@ -45,9 +45,11 @@ class FakeRateLimitService:
     def __init__(self, result: UsageLimitResult | None = None) -> None:
         self.result = result or UsageLimitResult(allowed=True, reason="ok")
         self.user_ids: list[int] = []
+        self.has_image_values: list[bool] = []
 
-    def check_and_increment(self, telegram_user_id: int) -> UsageLimitResult:
+    def check_and_increment(self, telegram_user_id: int, *, has_image: bool = False) -> UsageLimitResult:
         self.user_ids.append(telegram_user_id)
+        self.has_image_values.append(has_image)
         return self.result
 
 
@@ -59,11 +61,13 @@ class FakeMessage:
         message_id: int | None = None,
         delete_raises: bool = False,
         reply_raises: bool = False,
+        media_group_id: str | None = None,
     ) -> None:
         self.text = text
         self.caption = None
         self.photo = photo or []
         self.message_id = message_id
+        self.media_group_id = media_group_id
         self.delete_raises = delete_raises
         self.reply_raises = reply_raises
         self.deleted = False
@@ -83,9 +87,13 @@ class FakeMessage:
 class FakeBot:
     def __init__(self) -> None:
         self.actions: list[tuple[int, str]] = []
+        self.messages: list[tuple[int | str, str]] = []
 
     async def send_chat_action(self, chat_id: int, action: str) -> None:
         self.actions.append((chat_id, action))
+
+    async def send_message(self, *, chat_id: int | str, text: str) -> None:
+        self.messages.append((chat_id, text))
 
 
 class ExplodingPhoto:
@@ -119,7 +127,7 @@ def make_update(message: FakeMessage):
     return SimpleNamespace(
         effective_message=message,
         effective_user=SimpleNamespace(id=1001, username="demo_user", full_name="Demo User"),
-        effective_chat=SimpleNamespace(id=2001),
+        effective_chat=SimpleNamespace(id=2001, type="private"),
     )
 
 
@@ -235,10 +243,10 @@ def test_open_mode_logout_is_noop(monkeypatch) -> None:
 
 def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) -> None:
     message = FakeMessage(text="100 g chicken", message_id=3001)
-    message.message_thread_id = 77
+    message.message_thread_id = None
     message.date = datetime(2026, 6, 24, 12, 30, tzinfo=UTC)
     message.media_group_id = None
-    message.is_topic_message = True
+    message.is_topic_message = False
     update = SimpleNamespace(
         update_id=4001,
         effective_message=message,
@@ -253,10 +261,10 @@ def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) 
         ),
         effective_chat=SimpleNamespace(
             id=2001,
-            type="supergroup",
-            title="Nutrition QA",
+            type="private",
+            title=None,
             username=None,
-            is_forum=True,
+            is_forum=False,
         ),
     )
     context = SimpleNamespace(bot=FakeBot())
@@ -284,14 +292,12 @@ def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) 
         "telegram.user.language_code": "en",
         "telegram.user.is_bot": False,
         "telegram.chat.id": 2001,
-        "telegram.chat.type": "supergroup",
-        "telegram.chat.title": "Nutrition QA",
-        "telegram.chat.is_forum": True,
+        "telegram.chat.type": "private",
+        "telegram.chat.is_forum": False,
         "telegram.conversation.id": 2001,
         "telegram.message.id": 3001,
-        "telegram.message.thread_id": 77,
         "telegram.message.date": "2026-06-24T12:30:00+00:00",
-        "telegram.message.is_topic_message": True,
+        "telegram.message.is_topic_message": False,
     }
 
 
@@ -401,10 +407,107 @@ def test_rate_limited_photo_does_not_download_or_call_graph(monkeypatch) -> None
 
     asyncio.run(handlers.handle_photo(update, context))
 
+    assert message.replies == ["The bot is at capacity today. Please come back tomorrow."]
+    assert context.bot.actions == []
+
+
+def test_photo_limit_message_does_not_download(monkeypatch) -> None:
+    message = FakeMessage(photo=[ExplodingPhoto()])
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(
+        handlers,
+        "get_rate_limit_service",
+        lambda: FakeRateLimitService(
+            UsageLimitResult(allowed=False, reason="user_daily_photo_limit", limit=1)
+        ),
+    )
+
+    asyncio.run(handlers.handle_photo(update, context))
+
     assert message.replies == [
-        "Daily request limit reached. Please try again tomorrow or ask the administrator to raise it."
+        "Daily photo limit reached. You can still send text meal descriptions or try photos tomorrow."
     ]
     assert context.bot.actions == []
+
+
+def test_album_photo_is_rejected_before_quota_or_download(monkeypatch) -> None:
+    message = FakeMessage(photo=[ExplodingPhoto()], media_group_id="album-1")
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    limiter = FakeRateLimitService()
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+
+    asyncio.run(handlers.handle_photo(update, context))
+
+    assert message.replies == [handlers.ALBUM_REJECTED_MESSAGE]
+    assert limiter.user_ids == []
+    assert context.bot.actions == []
+
+
+def test_group_text_message_is_ignored_before_quota_or_graph(monkeypatch) -> None:
+    message = FakeMessage(text="100 g chicken")
+    update = make_update(message)
+    update.effective_chat.type = "group"
+    context = SimpleNamespace(bot=FakeBot())
+    limiter = FakeRateLimitService()
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+    monkeypatch.setattr(
+        handlers,
+        "process_request",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("graph should not run")),
+    )
+
+    asyncio.run(handlers.handle_text(update, context))
+
+    assert message.replies == []
+    assert limiter.user_ids == []
+    assert context.bot.actions == []
+
+
+def test_group_command_gets_private_chat_restriction(monkeypatch) -> None:
+    message = FakeMessage(text="/start")
+    update = make_update(message)
+    update.effective_chat.type = "supergroup"
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+
+    asyncio.run(handlers.start(update, context))
+
+    assert message.replies == [handlers.PRIVATE_CHAT_ONLY_MESSAGE]
+
+
+def test_global_usage_alert_sends_admin_message(monkeypatch, caplog) -> None:
+    message = FakeMessage(text="100 g chicken")
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(
+        handlers,
+        "get_rate_limit_service",
+        lambda: FakeRateLimitService(
+            UsageLimitResult(
+                allowed=True,
+                reason="ok",
+                global_count=8,
+                limit=10,
+                admin_alert="global_warning",
+            )
+        ),
+    )
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_admin_chat_id="999"))
+    monkeypatch.setattr(handlers, "process_request", lambda **kwargs: "Estimated.")
+
+    asyncio.run(handlers.handle_text(update, context))
+
+    assert message.replies == ["Estimated."]
+    assert context.bot.messages == [
+        ("999", "nutrition-agent usage alert: global_warning; global_count=8; limit=10")
+    ]
+    assert "Telegram usage alert event=global_warning" in caplog.text
 
 
 def test_authorized_photo_uses_configured_temp_image_dir(monkeypatch, tmp_path) -> None:
