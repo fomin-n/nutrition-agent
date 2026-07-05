@@ -10,6 +10,7 @@ from app.i18n import (
 )
 from app.llm.client import get_settings, has_openai_key, local_moderate_text
 from app.llm.structured import invoke_structured_text, read_prompt
+from app.schemas.inputs import NormalizedInput
 from app.schemas.safety import ModerationDecision, RouteName, ScopeDecision
 from app.tools.fallback_nutrition import fallback_names, normalize_food_query
 from app.tools.food_normalization import find_food_mentions
@@ -80,6 +81,8 @@ def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:
             )
             if llm_decision.language == "unknown":
                 llm_decision.language = normalized.language
+            if _should_keep_local_text_product_route(normalized, local_decision, llm_decision):
+                return {"scope_decision": local_decision}
             if local_decision.route in {"text_meal", "dish_photo", "image_with_text", "packaged_food"} and (
                 llm_decision.route in {"off_topic", "needs_clarification"}
             ):
@@ -209,6 +212,21 @@ def route_from_scope(state: NutritionGraphState) -> RouteName:
 
 def route(state: NutritionGraphState) -> NutritionGraphState:
     return {}
+
+
+def _should_keep_local_text_product_route(
+    normalized: NormalizedInput,
+    local_decision: ScopeDecision,
+    llm_decision: ScopeDecision,
+) -> bool:
+    if normalized.has_image or not normalized.has_text:
+        return False
+    if local_decision.route != "text_meal" or llm_decision.route != "packaged_food":
+        return False
+    return any(
+        mention.product
+        for mention in find_food_mentions(normalize_food_query(normalized.text or ""))
+    )
 
 
 def _contains_food_signal(normalized_text: str) -> bool:

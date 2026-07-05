@@ -146,6 +146,38 @@ def test_scope_classifier_keeps_local_food_route_when_llm_requests_clarification
     assert decision.is_food_related
 
 
+def test_scope_classifier_keeps_text_product_route_when_llm_marks_packaged(monkeypatch) -> None:
+    monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
+    monkeypatch.setattr(
+        coordinator,
+        "invoke_structured_text",
+        lambda **_: ScopeDecision(
+            route="packaged_food",
+            is_food_related=True,
+            reason="mock packaged route",
+            confidence="high",
+            language="ru",
+        ),
+    )
+
+    result = scope_classifier(
+        {
+            "normalized_input": NormalizedInput(
+                text="Сколько калорий в банке Coca-Cola Zero 330 мл?",
+                has_text=True,
+                has_image=False,
+                language="ru",
+            ),
+            "input_moderation": ModerationDecision(),
+            "use_llm": True,
+        }
+    )
+
+    decision = result["scope_decision"]
+    assert decision.route == "text_meal"
+    assert decision.is_food_related
+
+
 def test_scope_classifier_logs_llm_fallback_with_request_id(monkeypatch, caplog) -> None:
     monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
     monkeypatch.setattr(

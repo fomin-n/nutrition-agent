@@ -3,11 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.graph.graph import process_request
-from app.graph.nodes import nutrition_retriever
+from app.graph.nodes import coordinator, nutrition_retriever, text_parser
 from app.graph.nodes.calculator import calculate_totals
 from app.graph.nodes.nutrition_retriever import NutritionRetriever
 from app.graph.nodes.text_parser import parse_text_locally
 from app.schemas.nutrition import IngredientEstimate, NutritionCandidate, NutritionValues
+from app.schemas.safety import ScopeDecision
 from app.tools.cache import JsonFileCache
 from app.tools.food_query import normalize_food_description
 from app.tools.nutrition_tools import NutritionSourceRouter
@@ -80,6 +81,40 @@ def test_zero_sugar_cola_zero_total_is_not_rejected_by_critic(monkeypatch) -> No
 
     assert "🔥 Калории: 0 ккал" in answer
     assert "Нужно еще" not in answer
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Сколько калорий в банке Coca-Cola Zero 330 мл?", "🔥 Калории: 0 ккал"),
+        ("Сколько калорий в Сникерс 50 г?", "🔥 Калории: 250 ккал"),
+    ],
+)
+def test_text_only_known_products_ignore_llm_packaged_route(
+    monkeypatch,
+    text: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(nutrition_retriever, "get_default_router", _offline_router)
+    monkeypatch.setattr(coordinator, "has_openai_key", lambda: True)
+    monkeypatch.setattr(text_parser, "has_openai_key", lambda: False)
+    monkeypatch.setattr(
+        coordinator,
+        "invoke_structured_text",
+        lambda **_: ScopeDecision(
+            route="packaged_food",
+            is_food_related=True,
+            reason="mock packaged route",
+            confidence="high",
+            language="ru",
+        ),
+    )
+
+    answer = process_request(text=text, source="test", use_llm=True)
+
+    assert expected in answer
+    assert "Нужно еще" not in answer
+    assert "порция упакованного продукта" not in answer
 
 
 def test_invalid_soft_drink_candidate_is_rejected_for_valid_fallback() -> None:
