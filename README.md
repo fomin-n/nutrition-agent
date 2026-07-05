@@ -2,7 +2,7 @@
 
 ![NutritionAgent cover](docs/assets/nutrition-agent-cover.png)
 
-`nutrition-agent` is an experimental Telegram bot that estimates approximate calories and macronutrients from a meal description or one food photo. It is an allow-list-only, single-maintainer MVP with no packaged releases yet.
+`nutrition-agent` is an experimental Telegram bot that estimates approximate calories and macronutrients from a meal description or one food photo. It is an open-access, single-maintainer MVP with no packaged releases yet.
 
 The main design point is control: language and vision models help classify and structure uncertain food input, while calorie and macro arithmetic, answer formatting, and safety gates stay in deterministic Python.
 
@@ -17,13 +17,11 @@ uv sync --extra dev
 cp .env.example .env
 # edit .env and set:
 TELEGRAM_BOT_TOKEN=replace-me
-BOT_AUTH_SECRET=replace-me
 OPENAI_API_KEY=replace-me
-uv run python -m app.cli.auth create-key --label "demo-user"
 uv run python -m app.bot.telegram_bot
 ```
 
-Send `/login <access_key>` to the bot, then send a meal description or food photo.
+Send `/start` to the bot, then send a meal description or one food photo. For an invite-only rollback, set `BOT_ACCESS_MODE=invite`, set `BOT_AUTH_SECRET`, restart, create an access key with `uv run python -m app.cli.auth create-key --label "demo-user"`, and send `/login <access_key>`.
 
 Meal logging is often slow because users must search foods, estimate portions, and enter each ingredient manually. This project explores a controlled agent workflow that turns natural meal descriptions or photos into practical estimates with explicit assumptions.
 
@@ -46,9 +44,11 @@ English and Russian text requests are supported. Image-only requests default to 
 
 ```mermaid
 flowchart TD
-    U["Telegram input<br/>(text / one photo)"] --> AUTH{"Access-key<br/>authorization"}
-    AUTH -->|unauthorized| LOGIN["Minimal login prompt"]
-    AUTH -->|authorized| LIMIT{"Daily request<br/>limit"}
+    U["Private Telegram input<br/>(text / one photo)"] --> ACCESS{"Access mode<br/>open / invite"}
+    ACCESS -->|group chat| GROUP["Private-chat-only reply"]
+    ACCESS -->|banned| BAN["Ban refusal"]
+    ACCESS -->|invite only unauthorized| LOGIN["Minimal login prompt"]
+    ACCESS -->|allowed| LIMIT{"Burst / photo / daily<br/>request limits"}
     LIMIT -->|limit hit| RATE["Localized limit message"]
     LIMIT -->|allowed| MEM[("Memory load<br/>recent messages / facts / pending task")]
     MEM --> MOD1["Input moderation"]
@@ -91,7 +91,7 @@ sequenceDiagram
     participant M as MemoryService (SQLite)
     participant P as Nutrition providers
     U->>H: text / photo
-    Note over H: authorize and rate-limit before expensive work
+    Note over H: private chat / ban / invite-mode / rate-limit gates before expensive work
     H->>G: process_request(text, image, user_id, chat_id)
     G->>M: load_context(user_id, conversation_id)
     M-->>G: recent messages / facts / pending task
@@ -117,7 +117,7 @@ The bounded `critic -> synthesize -> critic` loop can only revisit answer format
 
 ## Memory
 
-The SQLite memory layer is scoped by `(user_id, conversation_id)` and stores recent messages, a compact older summary, one unresolved nutrition task, and stable nutrition context such as allergies or measurement preferences. This lets follow-ups like “100 g, fried” resolve against an earlier chicken question without mixing users or chats. Previous assistant estimates are retained for history but excluded from parser evidence; contributor-level details live in [AGENTS.md](AGENTS.md).
+The SQLite memory layer is scoped by `(user_id, conversation_id)` and stores recent messages, a compact older summary, one unresolved nutrition task, and stable nutrition context such as allergies or measurement preferences. This lets follow-ups like “100 g, fried” resolve against an earlier chicken question without mixing users or chats. Users can run `/privacy` to see the short data note and `/forget` to delete saved conversation memory. Previous assistant estimates are retained for history but excluded from parser evidence; contributor-level details live in [AGENTS.md](AGENTS.md).
 
 ## Safety Design
 
@@ -125,8 +125,8 @@ The SQLite memory layer is scoped by `(user_id, conversation_id)` and stores rec
 - Model outputs that affect routing or calculation inputs are parsed through Pydantic schemas.
 - User text, OCR-like text, image observations, and provider data are treated as untrusted data.
 - Off-topic, hacking, prompt-extraction, unsafe diet, and medical-treatment requests are refused in English or Russian where possible.
-- Unauthorized users cannot trigger expensive work; one-time access keys are stored only as HMAC-SHA256 digests.
-- Telegram request limits provide a simple daily spend/abuse guard for authorized users.
+- Public Telegram access is protected by private-chat-only handling, persistent bans, per-minute burst caps, daily photo caps, per-user daily caps, and a global daily capacity limit.
+- Invite-only rollback is one environment change: set `BOT_ACCESS_MODE=invite`, provide `BOT_AUTH_SECRET`, restart, and issue one-time access keys. Keys are stored only as HMAC-SHA256 digests.
 
 ## Data Sources
 
@@ -177,14 +177,18 @@ Live provider checks are available with `uv run python -m app.evals.run_retrieva
 | Variable | Required? | Default | Purpose |
 | --- | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Yes | none | Telegram polling bot token. |
-| `BOT_AUTH_SECRET` | Yes | none | HMAC secret for one-time access keys. |
+| `BOT_ACCESS_MODE` | Optional | `open` | `open` allows all private-chat users except bans; `invite` requires one-time keys. |
+| `BOT_AUTH_SECRET` | Invite mode only | none | HMAC secret for one-time access keys. |
 | `OPENAI_API_KEY` | Yes for normal LLM operation | none | Structured text, vision, critic, and optional moderation calls. |
 | `OPENAI_VISION_ESCALATION_MODEL` | Optional | `gpt-5.4-mini` | One bounded retry for low-confidence food-photo understanding; empty or same as `OPENAI_VISION_MODEL` disables it. |
 | `USDA_API_KEY` | Optional | empty | Enables USDA FoodData Central lookup. |
 | `FATSECRET_CLIENT_ID` / `FATSECRET_CLIENT_SECRET` | Optional | empty | Enables FatSecret lookup. |
 | `ENABLE_PHOENIX_TRACING` | Optional | `false` | Enables OpenTelemetry/Phoenix tracing. |
 | `AUTH_DB_PATH`, `MEMORY_DB_PATH`, `USAGE_DB_PATH` | Optional | `data/*.sqlite3` | SQLite locations for auth, memory, and request limits. |
-| `BOT_DAILY_USER_REQUEST_LIMIT`, `BOT_DAILY_GLOBAL_REQUEST_LIMIT` | Optional | `100`, `1000` | Telegram request caps; `0` disables each cap. |
+| `BOT_DAILY_USER_REQUEST_LIMIT`, `BOT_DAILY_GLOBAL_REQUEST_LIMIT` | Optional | `100`, `1000` | Daily Telegram request caps; `0` disables each cap. |
+| `BOT_USER_BURST_REQUEST_LIMIT_PER_MINUTE`, `BOT_DAILY_USER_PHOTO_LIMIT` | Optional | `6`, `25` | Public traffic caps for bursts and expensive vision requests. |
+| `BOT_ADMIN_CHAT_ID`, `BOT_GLOBAL_USAGE_WARNING_RATIO` | Optional | empty, `0.8` | Optional Telegram admin alert when global capacity is near/exhausted. |
+| `MEMORY_RETENTION_DAYS` | Optional | `0` | Best-effort memory pruning; `0` keeps memory until `/forget`. |
 
 See [.env.example](.env.example) for the full configuration surface.
 

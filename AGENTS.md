@@ -105,13 +105,16 @@ Host-based deployment should use `PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:60
 
 Telegram access control is implemented in `app/auth/service.py`.
 
-- `BOT_AUTH_SECRET` is required.
+- `BOT_ACCESS_MODE` controls the Telegram surface: `open` allows public private-chat use except banned users; `invite` requires one-time access keys.
+- `BOT_AUTH_SECRET` is required only in invite mode or when creating access keys.
 - Access keys are generated with `secrets.token_urlsafe(32)`.
 - Raw access keys are printed once by the CLI and are never stored.
 - SQLite stores only an HMAC-SHA256 digest of each key.
 - Keys are one-time by default and are marked used on successful login.
 - Authorized Telegram users are stored in SQLite.
-- Unauthorized users must not trigger graph execution, OpenAI calls, image download, image processing, or nutrition lookup.
+- Banned Telegram users are stored in SQLite and must be refused before usage-limit increments, image download, graph execution, OpenAI calls, image processing, or nutrition lookup.
+- In invite mode, unauthorized users must not trigger graph execution, OpenAI calls, image download, image processing, or nutrition lookup.
+- The production public surface is private Telegram chats only; group-chat messages must not trigger graph execution or quota consumption.
 
 CLI commands:
 
@@ -121,7 +124,28 @@ python -m app.cli.auth list-keys
 python -m app.cli.auth revoke-key <key_id>
 python -m app.cli.auth list-users
 python -m app.cli.auth revoke-user <telegram_user_id>
+python -m app.cli.auth ban-user <telegram_user_id> --reason "abuse"
+python -m app.cli.auth list-banned
+python -m app.cli.auth unban-user <telegram_user_id>
 ```
+
+Rollback from open access is intentionally simple: set `BOT_ACCESS_MODE=invite`, provide `BOT_AUTH_SECRET`, restart, and issue new access keys.
+
+## Public Traffic Controls
+
+Telegram request limits live in `app/bot/rate_limit.py`.
+
+- Per-user daily, global daily, per-user minute burst, and per-user daily photo limits are stored in SQLite and checked before expensive work.
+- `0` disables an individual numeric limit.
+- Albums are rejected before quota increment or image download so one album cannot trigger multiple vision calls.
+- Global usage warning/exhaustion events are logged once per UTC day; `BOT_ADMIN_CHAT_ID` optionally receives a one-line Telegram alert.
+- Limiter errors fail closed with a localized retry-later message.
+
+User privacy commands:
+
+- `/privacy` explains recent-message, summary, stable-fact, and usage-counter storage in one short localized message.
+- `/forget` deletes the user's memory rows only; usage counters are retained for abuse/cost accounting.
+- `MEMORY_RETENTION_DAYS=0` keeps memory until `/forget`; positive values enable best-effort startup pruning of old memory rows.
 
 ## Nutrition Calculation
 
@@ -189,7 +213,7 @@ Deployment variables should be supplied by the target environment, not committed
 
 - `OPENAI_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
-- `BOT_AUTH_SECRET`
+- optional `BOT_AUTH_SECRET` for invite mode/access-key management
 - optional `USDA_API_KEY`
 - optional `FATSECRET_CLIENT_ID`
 - optional `FATSECRET_CLIENT_SECRET`
