@@ -15,6 +15,7 @@ class FallbackFood:
     aliases: tuple[str, ...]
     density_g_per_ml: float | None = None
     food_category: str | None = None
+    flags: frozenset[str] = frozenset()
 
     def as_nutrition(self) -> NutritionPer100g:
         return NutritionPer100g(
@@ -39,12 +40,24 @@ def _load_fallback_foods() -> tuple[FallbackFood, ...]:
             aliases=food.aliases,
             density_g_per_ml=food.density_g_per_ml,
             food_category=food.food_category,
+            flags=food.flags,
         )
         for food in load_food_vocabulary().foods
     )
 
 
 FALLBACK_FOODS: tuple[FallbackFood, ...] = _load_fallback_foods()
+_FOODS_BY_NAME = {food.name: food for food in FALLBACK_FOODS}
+_COMPONENT_CLASS_PRIOR_NAMES = frozenset(
+    food.name for food in FALLBACK_FOODS if "component_class_prior" in food.flags
+)
+_COMPONENT_CLASS_PRIOR_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"\b(?:sauce|dressing|spread|соус\w*|заправк\w*)\b", "generic sauce"),
+    (r"\b(?:mayonnaise|mayo|майонез\w*)\b", "mayonnaise"),
+    (r"\b(?:mushroom\w*|гриб\w*|шампиньон\w*)\b", "mushrooms"),
+    (r"\b(?:fried fish|battered fish|fish fillet|рыб\w*\s+в\s+кляр\w*)\b", "fried fish fillet"),
+    (r"\b(?:oat flakes|rolled oats|овсян\w*\s+хлоп\w*)\b", "dry oats"),
+)
 
 
 def fallback_names() -> set[str]:
@@ -98,3 +111,18 @@ def lookup_fallback_profile(query: str) -> FallbackFood | None:
 def lookup_fallback_food(query: str) -> NutritionPer100g | None:
     profile = lookup_fallback_profile(query)
     return profile.as_nutrition() if profile else None
+
+
+def lookup_component_class_prior(query: str) -> FallbackFood | None:
+    normalized = normalize_food_query(query)
+    profile = lookup_fallback_profile(normalized)
+    if profile and is_component_class_prior_name(profile.name):
+        return profile
+    for pattern, food_name in _COMPONENT_CLASS_PRIOR_PATTERNS:
+        if re.search(pattern, normalized):
+            return _FOODS_BY_NAME.get(food_name)
+    return None
+
+
+def is_component_class_prior_name(food_name: str) -> bool:
+    return food_name in _COMPONENT_CLASS_PRIOR_NAMES

@@ -1686,9 +1686,17 @@
     "dataset": "evals/datasets/nutrition_agent_golden_single_turn_v2.jsonl",
     "id": "na_golden_075",
     "language": "ru",
-    "mentions": [],
+    "mentions": [
+      {
+        "canonical_name": "mushrooms",
+        "end": 21,
+        "matched_text": "грибном",
+        "product": null,
+        "start": 14
+      }
+    ],
     "scope": {
-      "confidence": "low",
+      "confidence": "medium",
       "is_food_related": true,
       "needs_clarification": false,
       "route": "text_meal"

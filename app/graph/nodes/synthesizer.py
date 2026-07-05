@@ -81,6 +81,9 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
         f"{item.ingredient_name}: {round(item.grams_min)}-{round(item.grams_max)} g."
         for item in state.get("ingredient_nutrition", [])
     ]
+    item_warnings = [item.warning for item in items if item.warning]
+    if item_warnings:
+        assumptions = [*assumptions, *item_warnings]
     if failures:
         foods = ", ".join(failure.ingredient_name for failure in failures[:3])
         assumptions = [
@@ -174,7 +177,19 @@ def _combined_confidence(
 
 
 def _has_usable_partial_estimate(items: list, failures: list) -> bool:
-    return False
+    resolved = sum(_midpoint(item.grams_min, item.grams_max) for item in items)
+    missing = sum(
+        _midpoint(failure.grams_min, failure.grams_max)
+        for failure in failures
+        if failure.grams_min is not None and failure.grams_max is not None
+    )
+    if resolved <= 0 or missing <= 0:
+        return False
+    return resolved / (resolved + missing) >= 0.65
+
+
+def _midpoint(minimum: float, maximum: float) -> float:
+    return (minimum + maximum) / 2
 
 
 def _optional_refinement_note(language: str) -> str:

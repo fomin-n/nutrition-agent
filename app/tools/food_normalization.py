@@ -148,6 +148,7 @@ VOLUME_ML: dict[str, float] = {
 
 HIGH_VARIANCE_FOODS = set(_VOCABULARY.high_variance_foods)
 FOOD_ROLES = dict(_VOCABULARY.food_roles)
+_NEGATED_MENTION_PATTERN = re.compile(r"(?:^|\s)(?:without|no|без|безо)\s+$")
 
 PREPARATION_PATTERNS: tuple[tuple[str, str], ...] = (
     ("fried", r"\b(fried|pan fried|жарен\w*)\b"),
@@ -231,6 +232,8 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
         key=lambda item: (item.end - item.start, item.product is not None),
         reverse=True,
     ):
+        if _is_negated_mention(normalized, candidate):
+            continue
         if any(
             candidate.start < current.end and candidate.end > current.start
             for current in selected
@@ -240,6 +243,13 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
             continue
         selected.append(candidate)
     return tuple(sorted(selected, key=lambda item: item.start))
+
+
+def _is_negated_mention(normalized: str, mention: FoodMention) -> bool:
+    if mention.product is not None:
+        return False
+    prefix = normalized[max(0, mention.start - 24) : mention.start]
+    return bool(_NEGATED_MENTION_PATTERN.search(prefix))
 
 
 def _embedding_food_mentions(text: str, threshold: float) -> tuple[FoodMention, ...]:

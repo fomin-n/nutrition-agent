@@ -150,6 +150,12 @@ def test_specific_common_food_aliases_win_over_generic_components(
     assert [ingredient.name for ingredient in meal.ingredients] == [canonical]
 
 
+def test_negated_component_mentions_are_not_selected() -> None:
+    assert [mention.canonical_name for mention in find_food_mentions("200 г пасты без соуса")] == [
+        "cooked pasta"
+    ]
+
+
 @pytest.mark.parametrize(
     ("text", "canonical", "grams"),
     [

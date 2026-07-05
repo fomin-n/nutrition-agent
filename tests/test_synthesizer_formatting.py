@@ -84,6 +84,80 @@ def test_partial_estimate_with_unresolved_components_becomes_clarification() -> 
     assert "couldn't find reliable nutrition data" in final.text
 
 
+def test_small_unresolved_component_keeps_low_confidence_partial_estimate() -> None:
+    state = _estimate_state(language="en", assumptions=["One component was resolved."])
+    state["ingredient_nutrition"] = [
+        IngredientNutrition(
+            ingredient_name="rice",
+            matched_food_name="cooked white rice",
+            grams_min=100,
+            grams_max=100,
+            per_100g=NutritionPer100g(
+                food_name="cooked white rice",
+                calories_kcal=130,
+                protein_g=2.7,
+                fat_g=0.3,
+                carbs_g=28.2,
+                source="fallback",
+            ),
+            source="fallback",
+            warning="sauce: used a broad class prior; confidence reduced.",
+        )
+    ]
+    state["retrieval_failures"] = [
+        RetrievalFailure(
+            ingredient_name="garnish",
+            canonical_query="garnish",
+            reason="no match",
+            grams_min=10,
+            grams_max=20,
+        ),
+    ]
+
+    final = synthesize_answer(state)["final_estimate"]
+
+    assert final.is_clarification is False
+    assert final.confidence == "low"
+    assert final.totals is not None
+    assert "sauce: used a broad class prior" in final.text
+    assert "Partial estimate: reliable data was unavailable for garnish" in final.text
+
+
+def test_large_unresolved_component_still_clarifies() -> None:
+    state = _estimate_state(language="en", assumptions=["One component was resolved."])
+    state["ingredient_nutrition"] = [
+        IngredientNutrition(
+            ingredient_name="rice",
+            matched_food_name="cooked white rice",
+            grams_min=100,
+            grams_max=100,
+            per_100g=NutritionPer100g(
+                food_name="cooked white rice",
+                calories_kcal=130,
+                protein_g=2.7,
+                fat_g=0.3,
+                carbs_g=28.2,
+                source="fallback",
+            ),
+            source="fallback",
+        )
+    ]
+    state["retrieval_failures"] = [
+        RetrievalFailure(
+            ingredient_name="main topping",
+            canonical_query="main topping",
+            reason="no match",
+            grams_min=90,
+            grams_max=120,
+        ),
+    ]
+
+    final = synthesize_answer(state)["final_estimate"]
+
+    assert final.is_clarification is True
+    assert final.totals is None
+
+
 def test_calorie_comparison_uses_refreshed_layout() -> None:
     state = _comparison_state(language="en")
 

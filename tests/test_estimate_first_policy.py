@@ -132,7 +132,7 @@ def test_partial_retrieval_with_unresolved_component_clarifies(
         "meal": MealUnderstanding(
             ingredients=[
                 IngredientEstimate(name="banana", grams_min=100, grams_max=100),
-                IngredientEstimate(name="unknown topping", grams_min=10, grams_max=20),
+                IngredientEstimate(name="unknown topping", grams_min=90, grams_max=120),
             ],
             assumptions=["Приняты указанные продукты."],
             confidence="medium",

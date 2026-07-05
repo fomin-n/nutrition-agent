@@ -711,8 +711,17 @@ foods:
   aliases:
   - dry oats
   - rolled oats dry
+  - rolled oats
+  - oat flakes
+  - oats dry
+  - овсяные хлопья
   - сухие овсяные хлопья
   - овсяных хлопьев
+  default_portion_g:
+  - 40
+  - 70
+  flags:
+  - component_class_prior
 - name: butter croissant
   nutrition_per_100g:
     calories_kcal: 406
@@ -855,6 +864,103 @@ foods:
   default_portion_g:
   - 100
   - 150
+- name: mayonnaise
+  nutrition_per_100g:
+    calories_kcal: 680
+    protein_g: 1.0
+    fat_g: 75.0
+    carbs_g: 1.0
+  role: fat
+  aliases:
+  - mayonnaise
+  - mayo
+  - майонез
+  - майонеза
+  - майонезный
+  default_portion_g:
+  - 10
+  - 20
+  localized_names:
+    ru: майонез
+  russian_patterns:
+  - майонез\w*
+  flags:
+  - component_class_prior
+- name: generic sauce
+  nutrition_per_100g:
+    calories_kcal: 260
+    protein_g: 1.0
+    fat_g: 22.0
+    carbs_g: 12.0
+  role: fat
+  aliases:
+  - sauce
+  - dressing
+  - sandwich spread
+  - соус
+  - соуса
+  - соусом
+  - заправка
+  - заправки
+  default_portion_g:
+  - 10
+  - 30
+  localized_names:
+    ru: соус
+  russian_patterns:
+  - соус\w*
+  - заправк\w*
+  flags:
+  - component_class_prior
+- name: mushrooms
+  nutrition_per_100g:
+    calories_kcal: 28
+    protein_g: 2.2
+    fat_g: 0.5
+    carbs_g: 5.3
+  role: vegetable
+  aliases:
+  - mushroom
+  - mushrooms
+  - champignons
+  - грибы
+  - гриб
+  - грибов
+  - грибами
+  - шампиньоны
+  - шампиньонов
+  default_portion_g:
+  - 50
+  - 100
+  localized_names:
+    ru: грибы
+  russian_patterns:
+  - гриб\w*
+  - шампиньон\w*
+  flags:
+  - component_class_prior
+- name: fried fish fillet
+  nutrition_per_100g:
+    calories_kcal: 230
+    protein_g: 17.0
+    fat_g: 12.0
+    carbs_g: 14.0
+  role: protein
+  aliases:
+  - fried fish fillet
+  - battered fish
+  - fried fish
+  - breaded fish
+  - fish fillet fried
+  - рыба в кляре
+  - жареная рыба
+  default_portion_g:
+  - 150
+  - 220
+  localized_names:
+    ru: жареная рыба
+  flags:
+  - component_class_prior
 - name: dark chocolate
   nutrition_per_100g:
     calories_kcal: 598

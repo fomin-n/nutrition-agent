@@ -167,6 +167,71 @@ def test_retriever_diagnostic_includes_query_kind() -> None:
     assert outcome.diagnostic.model_dump(mode="json")["query_kind"] == "generic_ingredient"
 
 
+def test_retriever_backfills_unresolved_sauce_with_broad_class_prior() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(
+            name="Соус (майонез, горчица или аналогичный)",
+            grams_min=10,
+            grams_max=20,
+            origin="llm_component",
+        ),
+        language="ru",
+    )
+
+    assert outcome.failure is None
+    assert outcome.item is not None
+    assert outcome.item.matched_food_name == "mayonnaise"
+    assert outcome.item.grams_min < 10
+    assert outcome.item.grams_max > 20
+    assert outcome.item.warning is not None
+    assert "широкий типовой профиль" in outcome.item.warning
+    assert outcome.diagnostic.fallback_path == "component_class_prior_backfill"
+
+
+def test_retriever_backfills_generic_sauce_when_specific_sauce_is_unknown() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(
+            name="Соус (соевый, унаги или майонезный)",
+            grams_min=20,
+            grams_max=40,
+            origin="llm_component",
+        ),
+        language="ru",
+    )
+
+    assert outcome.failure is None
+    assert outcome.item is not None
+    assert outcome.item.matched_food_name == "generic sauce"
+    assert outcome.item.warning is not None
+    assert "широкий типовой профиль" in outcome.item.warning
+
+
+def test_retriever_backfills_fried_fish_with_wide_prior() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(
+            name="Fried fish fillet",
+            grams_min=180,
+            grams_max=220,
+            origin="llm_component",
+        ),
+        language="en",
+    )
+
+    assert outcome.failure is None
+    assert outcome.item is not None
+    assert outcome.item.matched_food_name == "fried fish fillet"
+    assert outcome.item.grams_min == 120
+    assert outcome.item.grams_max == 280
+    assert outcome.item.warning is not None
+    assert "broad" in outcome.item.warning
+
+
 def test_arbitration_prefers_fallback_over_weak_generic_provider() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     avocado_oil = NutritionCandidate(

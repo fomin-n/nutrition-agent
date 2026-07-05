@@ -15,10 +15,16 @@ from app.schemas.nutrition import (
     RetrievalDiagnostic,
     RetrievalFailure,
 )
-from app.tools.fallback_nutrition import contains_water_reference, is_plain_water_query
+from app.tools.fallback_nutrition import (
+    contains_water_reference,
+    is_component_class_prior_name,
+    is_plain_water_query,
+    lookup_component_class_prior,
+)
 from app.tools.food_query import normalize_food_description
 from app.tools.nutrition_tools import (
     NutritionSourceRouter,
+    candidate_from_per_100g,
     generic_fallback_candidate,
     get_default_router,
     provider_search_queries,
@@ -97,7 +103,34 @@ class NutritionRetriever:
                 fallback_path = "generic_mixed_food_for_composite_or_photo"
                 warning = f"No source match for {ingredient.name}; used a generic composite-food fallback."
         if selected is not None and selected.source == "fallback":
-            fallback_path = "explicit_category_or_food_fallback"
+            if is_component_class_prior_name(selected.name):
+                fallback_path = "component_class_prior_backfill"
+                warning = _component_class_prior_warning(
+                    ingredient.name,
+                    selected.name,
+                    language=language,
+                )
+            else:
+                fallback_path = "explicit_category_or_food_fallback"
+        if selected is None:
+            class_prior = lookup_component_class_prior(
+                ingredient.name
+            ) or lookup_component_class_prior(query.canonical_query)
+            if class_prior is not None:
+                selected = candidate_from_per_100g(
+                    class_prior.as_nutrition(),
+                    source="fallback",
+                    name_override=class_prior.name,
+                )
+                validation = validate_candidate(selected, query)
+                selection.candidates.append(selected)
+                selection.validations.append(validation)
+                fallback_path = "component_class_prior_backfill"
+                warning = _component_class_prior_warning(
+                    ingredient.name,
+                    class_prior.name,
+                    language=language,
+                )
 
         settings = get_settings()
         raw_context = None
@@ -185,11 +218,21 @@ class NutritionRetriever:
             selected.source_id,
             selected.match_score,
         )
+        grams_min = ingredient.grams_min
+        grams_max = ingredient.grams_max
+        if selected.source == "fallback" and is_component_class_prior_name(per_100g.food_name):
+            grams_min, grams_max = _widen_component_prior_grams(grams_min, grams_max)
+            warning = warning or _component_class_prior_warning(
+                ingredient.name,
+                per_100g.food_name,
+                language=language,
+            )
+            fallback_path = fallback_path or "component_class_prior_backfill"
         item = IngredientNutrition(
             ingredient_name=ingredient.name,
             matched_food_name=per_100g.food_name,
-            grams_min=ingredient.grams_min,
-            grams_max=ingredient.grams_max,
+            grams_min=grams_min,
+            grams_max=grams_max,
             per_100g=per_100g,
             source=per_100g.source,
             warning=warning,
@@ -233,6 +276,31 @@ def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
         "retrieval_failures": [outcome.failure for outcome in outcomes if outcome.failure is not None],
         "retrieval_diagnostics": [outcome.diagnostic for outcome in outcomes],
     }
+
+
+def _widen_component_prior_grams(minimum: float, maximum: float) -> tuple[float, float]:
+    midpoint = (minimum + maximum) / 2
+    if midpoint <= 0:
+        return minimum, maximum
+    half_width = max((maximum - minimum) / 2, midpoint * 0.4)
+    return round(max(1.0, midpoint - half_width), 1), round(midpoint + half_width, 1)
+
+
+def _component_class_prior_warning(
+    ingredient_name: str,
+    prior_name: str,
+    *,
+    language: str | None,
+) -> str:
+    if language == "ru":
+        return (
+            f"{ingredient_name}: использован широкий типовой профиль \"{prior_name}\"; "
+            "уверенность снижена."
+        )
+    return (
+        f"{ingredient_name}: used a broad \"{prior_name}\" class prior; "
+        "confidence reduced."
+    )
 
 
 def _lookup_ingredients(
