@@ -489,6 +489,22 @@ def test_retriever_widens_exact_provider_prepared_dish_row() -> None:
     assert "widened range for prepared dish" in outcome.item.warning
 
 
+def test_retriever_widens_high_variance_soup_fallback() -> None:
+    router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
+
+    outcome = NutritionRetriever(router=router).lookup_with_diagnostics(
+        IngredientEstimate(name="Куриный суп", grams_min=380, grams_max=420),
+        language="ru",
+    )
+
+    assert outcome.item is not None
+    assert outcome.item.matched_food_name == "vegetable soup"
+    assert outcome.item.grams_min == 260
+    assert outcome.item.grams_max == 540
+    assert outcome.item.warning is not None
+    assert "диапазон расширен" in outcome.item.warning
+
+
 def test_retriever_does_not_invent_generic_nutrition_when_no_sources() -> None:
     router = NutritionSourceRouter(usda=None, fatsecret=None, open_food_facts=None)
     item = NutritionRetriever(router=router).lookup(IngredientEstimate(name="unknown meal", grams_min=100, grams_max=100))

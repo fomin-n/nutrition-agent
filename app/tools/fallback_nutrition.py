@@ -126,3 +126,8 @@ def lookup_component_class_prior(query: str) -> FallbackFood | None:
 
 def is_component_class_prior_name(food_name: str) -> bool:
     return food_name in _COMPONENT_CLASS_PRIOR_NAMES
+
+
+def is_high_variance_fallback_name(food_name: str) -> bool:
+    profile = _FOODS_BY_NAME.get(food_name)
+    return bool(profile and "high_variance" in profile.flags)

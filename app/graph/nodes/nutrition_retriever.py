@@ -18,6 +18,7 @@ from app.schemas.nutrition import (
 from app.tools.fallback_nutrition import (
     contains_water_reference,
     is_component_class_prior_name,
+    is_high_variance_fallback_name,
     is_plain_water_query,
     lookup_component_class_prior,
 )
@@ -228,6 +229,14 @@ class NutritionRetriever:
                 language=language,
             )
             fallback_path = fallback_path or "component_class_prior_backfill"
+        elif _should_widen_high_variance_fallback(
+            selected.source,
+            per_100g.food_name,
+            grams_min,
+            grams_max,
+        ):
+            grams_min, grams_max = _widen_high_variance_fallback_grams(grams_min, grams_max)
+            warning = warning or _high_variance_fallback_warning(ingredient.name, language=language)
         elif _should_widen_provider_prepared_dish(selected.source, query.query_kind, grams_min, grams_max):
             grams_min, grams_max = _widen_provider_prepared_dish_grams(grams_min, grams_max)
             warning = warning or _provider_prepared_dish_warning(ingredient.name, language=language)
@@ -313,6 +322,30 @@ def _should_widen_provider_prepared_dish(
     grams_max: float,
 ) -> bool:
     return source != "fallback" and query_kind == "standard_prepared_dish" and grams_min == grams_max
+
+
+def _should_widen_high_variance_fallback(
+    source: str,
+    food_name: str,
+    grams_min: float,
+    grams_max: float,
+) -> bool:
+    if source != "fallback" or not is_high_variance_fallback_name(food_name):
+        return False
+    midpoint = (grams_min + grams_max) / 2
+    return midpoint > 0 and (grams_max - grams_min) / midpoint < 0.50
+
+
+def _widen_high_variance_fallback_grams(minimum: float, maximum: float) -> tuple[float, float]:
+    midpoint = (minimum + maximum) / 2
+    half_width = max((maximum - minimum) / 2, midpoint * 0.35)
+    return round(max(1.0, midpoint - half_width), 1), round(midpoint + half_width, 1)
+
+
+def _high_variance_fallback_warning(ingredient_name: str, *, language: str | None) -> str:
+    if language == "ru":
+        return f"{ingredient_name}: диапазон расширен для вариативного готового блюда."
+    return f"{ingredient_name}: widened range for high-variance prepared dish."
 
 
 def _widen_provider_prepared_dish_grams(minimum: float, maximum: float) -> tuple[float, float]:
