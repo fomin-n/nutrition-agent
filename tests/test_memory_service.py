@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 
 from app.memory.service import (
     MemoryConfig,
@@ -103,6 +104,79 @@ def test_memory_concurrent_writes_remain_isolated(tmp_path) -> None:
         context = service.load_context(index % 3, index)
         assert context.recent_messages[0].text == f"meal {index}"
         assert context.recent_messages[1].text == f"answer {index}"
+
+
+def test_delete_user_data_removes_messages_state_and_facts(tmp_path) -> None:
+    service = MemoryService(tmp_path / "memory.sqlite3")
+    service.record_turn(
+        user_id=1,
+        conversation_id=10,
+        user_text="I am allergic to peanuts. How many calories in chicken?",
+        assistant_text="clarify",
+        final_state={
+            "final_estimate": {
+                "text": "clarify",
+                "confidence": "low",
+                "is_clarification": True,
+            }
+        },
+    )
+    service.record_turn(user_id=2, conversation_id=20, user_text="100g rice", assistant_text="answer")
+
+    deleted = service.delete_user_data(1)
+
+    assert deleted > 0
+    deleted_context = service.load_context(1, 10)
+    assert deleted_context.recent_messages == []
+    assert deleted_context.summary == ""
+    assert deleted_context.unresolved_task is None
+    assert deleted_context.facts == []
+    assert service.load_context(2, 20).recent_messages
+
+
+def test_prune_older_than_removes_old_memory_rows(tmp_path) -> None:
+    service = MemoryService(tmp_path / "memory.sqlite3")
+    service.record_turn(user_id=1, conversation_id=10, user_text="old meal", assistant_text="old answer")
+    service.record_turn(
+        user_id=2,
+        conversation_id=20,
+        user_text="I am allergic to peanuts. new meal",
+        assistant_text="new answer",
+    )
+    now = datetime(2026, 7, 5, 12, 0, tzinfo=UTC)
+    old = (now - timedelta(days=10)).isoformat(timespec="seconds")
+    recent = (now - timedelta(hours=1)).isoformat(timespec="seconds")
+    with service._connection() as conn:
+        conn.execute(
+            "UPDATE conversation_messages SET created_at = ? WHERE user_id = '1'",
+            (old,),
+        )
+        conn.execute(
+            "UPDATE conversation_state SET updated_at = ? WHERE user_id = '1'",
+            (old,),
+        )
+        conn.execute(
+            "UPDATE user_memory_facts SET updated_at = ? WHERE user_id = '1'",
+            (old,),
+        )
+        conn.execute(
+            "UPDATE conversation_messages SET created_at = ? WHERE user_id = '2'",
+            (recent,),
+        )
+        conn.execute(
+            "UPDATE conversation_state SET updated_at = ? WHERE user_id = '2'",
+            (recent,),
+        )
+        conn.execute(
+            "UPDATE user_memory_facts SET updated_at = ? WHERE user_id = '2'",
+            (recent,),
+        )
+
+    deleted = service.prune_older_than(7, now=now)
+
+    assert deleted > 0
+    assert service.load_context(1, 10).recent_messages == []
+    assert service.load_context(2, 20).recent_messages
 
 
 def test_extract_long_term_facts_stores_stable_nutrition_context_only() -> None:

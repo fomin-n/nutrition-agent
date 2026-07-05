@@ -5,6 +5,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from app.auth.service import AuthService
 from app.bot.handlers import (
+    forget,
     handle_error,
     handle_photo,
     handle_text,
@@ -18,8 +19,11 @@ from app.bot.handlers import (
 )
 from app.bot.health_server import start_health_server
 from app.llm.client import get_settings, reveal_secret
+from app.memory.service import get_memory_service
 from app.observability.phoenix import configure_phoenix_tracing
 from app.observability.trace_logging import configure_trace_log_correlation
+
+LOGGER = logging.getLogger(__name__)
 
 
 def build_application() -> Application:
@@ -31,12 +35,14 @@ def build_application() -> Application:
             "TELEGRAM_BOT_TOKEN is missing. Export it or put it into .env before running the bot."
         )
     AuthService.from_settings(require_secret=settings.bot_access_mode == "invite")
+    _prune_memory_if_configured(settings.memory_retention_days)
 
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("health", health))
     application.add_handler(CommandHandler("privacy", privacy))
+    application.add_handler(CommandHandler("forget", forget))
     application.add_handler(CommandHandler("login", login))
     application.add_handler(CommandHandler("logout", logout))
     application.add_handler(CommandHandler("whoami", whoami))
@@ -46,6 +52,17 @@ def build_application() -> Application:
     )
     application.add_error_handler(handle_error)
     return application
+
+
+def _prune_memory_if_configured(retention_days: int) -> None:
+    if retention_days <= 0:
+        return
+    try:
+        deleted = get_memory_service().prune_older_than(retention_days)
+    except Exception:
+        LOGGER.exception("Failed to prune old memory rows")
+        return
+    LOGGER.info("Pruned old memory rows retention_days=%s deleted=%s", retention_days, deleted)
 
 
 def main() -> int:

@@ -3,7 +3,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -204,6 +204,28 @@ class MemoryService:
             self._append_message(conn, user_key, conversation_key, "assistant", assistant_text, now)
             self._upsert_long_term_facts(conn, user_key, user_text, now)
             self._compact_if_needed(conn, user_key, conversation_key, now)
+
+    def delete_user_data(self, user_id: str | int) -> int:
+        user_key = str(user_id)
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            before = conn.total_changes
+            conn.execute("DELETE FROM conversation_messages WHERE user_id = ?", (user_key,))
+            conn.execute("DELETE FROM conversation_state WHERE user_id = ?", (user_key,))
+            conn.execute("DELETE FROM user_memory_facts WHERE user_id = ?", (user_key,))
+            return conn.total_changes - before
+
+    def prune_older_than(self, days: int, *, now: datetime | None = None) -> int:
+        if days <= 0:
+            return 0
+        cutoff = ((now or datetime.now(UTC)) - timedelta(days=days)).isoformat(timespec="seconds")
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            before = conn.total_changes
+            conn.execute("DELETE FROM conversation_messages WHERE created_at < ?", (cutoff,))
+            conn.execute("DELETE FROM conversation_state WHERE updated_at < ?", (cutoff,))
+            conn.execute("DELETE FROM user_memory_facts WHERE updated_at < ?", (cutoff,))
+            return conn.total_changes - before
 
     def _next_unresolved_task(
         self,

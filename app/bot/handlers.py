@@ -13,6 +13,8 @@ from app.bot.rate_limit import UsageLimitResult, UsageLimitService, get_usage_li
 from app.graph.graph import process_request
 from app.i18n import detect_language, response_language
 from app.llm.client import get_settings
+from app.memory.service import MemoryService
+from app.memory.service import get_memory_service as build_memory_service
 from app.observability.request_context import TelegramRequestContext
 
 LOGGER = logging.getLogger(__name__)
@@ -36,6 +38,11 @@ def get_auth_service(*, require_secret: bool = True) -> AuthService:
 @lru_cache(maxsize=1)
 def get_rate_limit_service() -> UsageLimitService:
     return get_usage_limit_service()
+
+
+@lru_cache(maxsize=1)
+def get_memory_service() -> MemoryService:
+    return build_memory_service()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -85,6 +92,27 @@ async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(update, _banned_message(update))
         return
     await _reply(update, _privacy_message(update))
+
+
+async def forget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_private_chat(update):
+        await _reply(update, _private_chat_only_message(update))
+        return
+    user = update.effective_user
+    if user is None:
+        await _reply(update, _not_authorized_message(update))
+        return
+    try:
+        await asyncio.to_thread(get_memory_service().delete_user_data, user.id)
+    except Exception:
+        LOGGER.exception(
+            "Failed to delete Telegram user memory user_id=%s chat_id=%s",
+            user.id,
+            getattr(update.effective_chat, "id", None),
+        )
+        await _reply(update, _forget_failed_message(update))
+        return
+    await _reply(update, _forget_done_message(update))
 
 
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -428,6 +456,18 @@ def _privacy_message(update: Update) -> str:
         "separately for abuse and cost control. Use /forget to delete saved conversation "
         "memory."
     )
+
+
+def _forget_done_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Сохранённая память диалога удалена."
+    return "Saved conversation memory deleted."
+
+
+def _forget_failed_message(update: Update) -> str:
+    if _handler_language(update) == "ru":
+        return "Не удалось безопасно удалить память. Попробуйте позже."
+    return "I couldn’t safely delete saved memory. Please try again later."
 
 
 def _access_required_message(update: Update) -> str:

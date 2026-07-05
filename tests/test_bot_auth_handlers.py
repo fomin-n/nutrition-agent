@@ -53,6 +53,18 @@ class FakeRateLimitService:
         return self.result
 
 
+class FakeMemoryService:
+    def __init__(self, *, raises: bool = False) -> None:
+        self.raises = raises
+        self.deleted_user_ids: list[int] = []
+
+    def delete_user_data(self, user_id: int) -> int:
+        if self.raises:
+            raise RuntimeError("delete failed")
+        self.deleted_user_ids.append(user_id)
+        return 3
+
+
 class FakeMessage:
     def __init__(
         self,
@@ -272,6 +284,36 @@ def test_privacy_message_is_available_without_invite_auth(monkeypatch) -> None:
 
     assert "недавние сообщения" in message.replies[0]
     assert "/forget" in message.replies[0]
+
+
+def test_forget_deletes_memory_without_rate_limit_or_auth(monkeypatch) -> None:
+    message = FakeMessage(text="/forget")
+    update = make_update(message)
+    context = SimpleNamespace(bot=FakeBot())
+    memory = FakeMemoryService()
+    limiter = FakeRateLimitService()
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+    monkeypatch.setattr(handlers, "get_memory_service", lambda: memory)
+
+    asyncio.run(handlers.forget(update, context))
+
+    assert memory.deleted_user_ids == [1001]
+    assert limiter.user_ids == []
+    assert message.replies == ["Saved conversation memory deleted."]
+
+
+def test_forget_failure_is_localized(monkeypatch, caplog) -> None:
+    message = FakeMessage(text="/forget")
+    update = make_update(message)
+    update.effective_user.language_code = "ru"
+    context = SimpleNamespace(bot=FakeBot())
+    monkeypatch.setattr(handlers, "get_memory_service", lambda: FakeMemoryService(raises=True))
+
+    asyncio.run(handlers.forget(update, context))
+
+    assert message.replies == ["Не удалось безопасно удалить память. Попробуйте позже."]
+    assert "Failed to delete Telegram user memory" in caplog.text
 
 
 def test_open_mode_login_replies_no_key_needed_and_deletes_message(monkeypatch) -> None:

@@ -68,3 +68,31 @@ def test_build_application_invite_mode_requires_auth_secret(monkeypatch) -> None
     telegram_bot.build_application()
 
     assert calls == [True]
+
+
+def test_build_application_prunes_memory_when_retention_enabled(monkeypatch) -> None:
+    pruned: list[int] = []
+    monkeypatch.setattr(
+        telegram_bot,
+        "get_settings",
+        lambda: Settings(
+            telegram_bot_token=SecretStr("123456:TEST"),
+            bot_auth_secret=SecretStr("test-secret"),
+            memory_retention_days=14,
+        ),
+    )
+    monkeypatch.setattr(telegram_bot, "configure_phoenix_tracing", lambda _settings: None)
+    monkeypatch.setattr(
+        telegram_bot.AuthService,
+        "from_settings",
+        classmethod(lambda cls, **kwargs: object()),
+    )
+    monkeypatch.setattr(
+        telegram_bot,
+        "get_memory_service",
+        lambda: type("FakeMemory", (), {"prune_older_than": lambda self, days: pruned.append(days) or 2})(),
+    )
+
+    telegram_bot.build_application()
+
+    assert pruned == [14]

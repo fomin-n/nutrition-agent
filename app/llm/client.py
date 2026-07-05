@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     memory_recent_messages: int = 10
     memory_summarize_after_messages: int = 16
     memory_summary_max_chars: int = 2000
+    memory_retention_days: int = Field(default=0, ge=0)
     health_http_enabled: bool = False
     health_http_host: str = "127.0.0.1"
     health_http_port: int = Field(default=8080, ge=0, le=65535)
