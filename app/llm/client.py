@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     critic_max_iterations: int = Field(default=2, ge=0, le=3)
     openai_moderation_enabled: bool = True
 
-    bot_access_mode: Literal["invite", "open"] = "invite"
+    bot_access_mode: Literal["invite", "open"] = "open"
     enable_phoenix_tracing: bool = False
     phoenix_project_name: str = "nutrition-agent"
     phoenix_collector_endpoint: str = "http://127.0.0.1:6006/v1/traces"

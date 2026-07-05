@@ -4,6 +4,12 @@ from app.bot import handlers, telegram_bot
 from app.llm.client import Settings
 
 
+def test_settings_default_access_mode_is_open(monkeypatch) -> None:
+    monkeypatch.delenv("BOT_ACCESS_MODE", raising=False)
+
+    assert Settings(_env_file=None).bot_access_mode == "open"
+
+
 def test_build_application_registers_global_error_handler(monkeypatch) -> None:
     monkeypatch.setattr(
         telegram_bot,

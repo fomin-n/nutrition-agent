@@ -153,6 +153,11 @@ def allow_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: FakeRateLimitService())
 
 
+@pytest.fixture(autouse=True)
+def default_invite_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="invite"))
+
+
 def test_unauthorized_text_does_not_call_agent_graph(monkeypatch) -> None:
     message = FakeMessage(text="200g rice and chicken")
     update = make_update(message)
