@@ -11,13 +11,10 @@ from app.bot.handlers import (
     handle_error,
     handle_photo,
     handle_text,
-    health,
     help_command,
     login,
-    logout,
     privacy,
     start,
-    whoami,
 )
 from app.bot.health_server import start_health_server
 from app.bot.rate_limit import get_usage_limit_service
@@ -53,12 +50,9 @@ def build_application() -> Application:
     )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("health", health))
     application.add_handler(CommandHandler("privacy", privacy))
     application.add_handler(CommandHandler("forget", forget))
     application.add_handler(CommandHandler("login", login))
-    application.add_handler(CommandHandler("logout", logout))
-    application.add_handler(CommandHandler("whoami", whoami))
     application.add_handler(MessageHandler(filters.ChatType.PRIVATE & filters.PHOTO, handle_photo))
     application.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_text)

@@ -243,33 +243,6 @@ def test_banned_user_is_refused_before_quota_or_graph(monkeypatch) -> None:
     assert context.bot.actions == []
 
 
-def test_logout_revokes_current_user(monkeypatch) -> None:
-    message = FakeMessage()
-    update = make_update(message)
-    context = SimpleNamespace(bot=FakeBot())
-    auth = FakeAuthService(True)
-    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
-
-    asyncio.run(handlers.logout(update, context))
-
-    assert auth.revoked_users == [1001]
-    assert message.replies == ["Logged out."]
-
-
-def test_open_mode_logout_is_noop(monkeypatch) -> None:
-    message = FakeMessage()
-    update = make_update(message)
-    context = SimpleNamespace(bot=FakeBot())
-    auth = FakeAuthService(False)
-    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
-    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: auth)
-
-    asyncio.run(handlers.logout(update, context))
-
-    assert auth.revoked_users == []
-    assert message.replies == [handlers.OPEN_LOGOUT_MESSAGE]
-
-
 def test_russian_start_message_in_open_mode(monkeypatch) -> None:
     message = FakeMessage(text="/start")
     update = make_update(message)
@@ -342,20 +315,6 @@ def test_open_mode_login_replies_no_key_needed_and_deletes_message(monkeypatch) 
     assert auth.login_keys == []
     assert message.replies == ["Доступ открыт. Ключ не нужен."]
     assert message.deleted
-
-
-def test_open_mode_whoami_is_localized(monkeypatch) -> None:
-    message = FakeMessage(text="/whoami")
-    update = make_update(message)
-    update.effective_user.language_code = "ru"
-    context = SimpleNamespace(bot=FakeBot())
-    monkeypatch.setattr(handlers, "get_settings", lambda: SimpleNamespace(bot_access_mode="open"))
-    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(False))
-
-    asyncio.run(handlers.whoami(update, context))
-
-    assert "Режим доступа: open" in message.replies[0]
-    assert "Статус: разрешён" in message.replies[0]
 
 
 def test_authorized_text_passes_normalized_telegram_trace_metadata(monkeypatch) -> None:

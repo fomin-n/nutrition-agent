@@ -25,9 +25,6 @@ LOGGER = logging.getLogger(__name__)
 ACCESS_REQUIRED_MESSAGE = "Access required. Send /login <access_key>."
 BANNED_MESSAGE = "This Telegram account cannot use the bot."
 ACCESS_OPEN_MESSAGE = "Access is open. No access key is needed."
-OPEN_LOGOUT_MESSAGE = (
-    "Access is open, so there is no login session to end. Use /forget to delete saved memory."
-)
 PRIVATE_CHAT_ONLY_MESSAGE = "Please message me in a private chat. Group chats are not supported yet."
 ALBUM_REJECTED_MESSAGE = "Please send one standalone food photo instead of a photo album."
 TEMPORARY_ERROR_MESSAGE = "Something went wrong while handling that update. Please try again."
@@ -140,19 +137,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _reply(update, _access_required_message(update))
         return
     await _reply(update, _help_message(update))
-
-
-async def health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_private_chat(update):
-        await _reply(update, _private_chat_only_message(update))
-        return
-    if _is_banned(update):
-        await _reply(update, _banned_message(update))
-        return
-    if not _is_authorized(update):
-        await _reply(update, _access_required_message(update))
-        return
-    await _reply(update, "ok")
 
 
 async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -270,44 +254,6 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     finally:
         if should_delete_key_message:
             await _delete_login_message(update)
-
-
-async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_private_chat(update):
-        await _reply(update, _private_chat_only_message(update))
-        return
-    user = update.effective_user
-    if user is None:
-        await _reply(update, _access_required_message(update))
-        return
-    if _access_mode() == "open":
-        await _reply(update, _open_logout_message(update))
-        return
-    try:
-        get_auth_service(require_secret=True).revoke_user(user.id)
-    except AuthConfigurationError:
-        LOGGER.exception("Bot auth is not configured")
-    await _reply(update, _logged_out_message(update))
-
-
-async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_private_chat(update):
-        await _reply(update, _private_chat_only_message(update))
-        return
-    user = update.effective_user
-    if user is None:
-        await _reply(update, _not_authorized_message(update))
-        return
-    if _is_banned(update):
-        await _reply(update, _whoami_message(update, user_id=user.id, status="banned"))
-        return
-    if _access_mode() == "open":
-        await _reply(update, _whoami_message(update, user_id=user.id, status="allowed"))
-        return
-    if _is_authorized(update):
-        await _reply(update, _whoami_message(update, user_id=user.id, status="authorized"))
-    else:
-        await _reply(update, _not_authorized_message(update))
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -583,12 +529,6 @@ def _access_open_message(update: Update) -> str:
     return ACCESS_OPEN_MESSAGE
 
 
-def _open_logout_message(update: Update) -> str:
-    if _handler_language(update) == "ru":
-        return "Доступ открыт, поэтому выход не нужен. Используйте /forget, чтобы удалить память."
-    return OPEN_LOGOUT_MESSAGE
-
-
 def _private_chat_only_message(update: Update) -> str:
     if _handler_language(update) == "ru":
         return "Пожалуйста, напишите мне в личный чат. Групповые чаты пока не поддерживаются."
@@ -613,34 +553,10 @@ def _invalid_access_key_message(update: Update) -> str:
     return "Invalid or expired access key."
 
 
-def _logged_out_message(update: Update) -> str:
-    if _handler_language(update) == "ru":
-        return "Вы вышли."
-    return "Logged out."
-
-
 def _not_authorized_message(update: Update) -> str:
     if _handler_language(update) == "ru":
         return "Нет доступа. Отправьте /login <access_key>."
     return "Not authorized. Send /login <access_key>."
-
-
-def _whoami_message(update: Update, *, user_id: int, status: str) -> str:
-    mode = _access_mode()
-    if _handler_language(update) == "ru":
-        labels = {
-            "allowed": "разрешён",
-            "authorized": "авторизован",
-            "banned": "заблокирован",
-        }
-        return (
-            f"Telegram user ID: {user_id}\n"
-            f"Режим доступа: {mode}\n"
-            f"Статус: {labels.get(status, status)}"
-        )
-    if status == "authorized":
-        return f"Authorized Telegram user ID: {user_id}\nAccess mode: {mode}"
-    return f"Telegram user ID: {user_id}\nAccess mode: {mode}\nStatus: {status}"
 
 
 def _processing_error_message(update: Update, *, text: str | None, has_image: bool) -> str:

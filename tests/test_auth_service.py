@@ -72,7 +72,7 @@ def test_failed_login_releases_write_lock(tmp_path) -> None:
         conn.rollback()
 
 
-def test_logout_revokes_access(tmp_path) -> None:
+def test_revoke_user_revokes_access(tmp_path) -> None:
     service = AuthService(tmp_path / "auth.sqlite3", "test-secret")
     created = service.create_key(label="demo-user")
     service.login(raw_key=created.raw_key, telegram_user_id=1001)
