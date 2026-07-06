@@ -1,7 +1,13 @@
+import pytest
 from pydantic import SecretStr
 
 from app.bot import handlers, telegram_bot
 from app.llm.client import Settings
+
+
+@pytest.fixture(autouse=True)
+def disable_usage_prune(monkeypatch) -> None:
+    monkeypatch.setattr(telegram_bot, "_prune_usage_if_configured", lambda _days: None)
 
 
 def test_settings_default_access_mode_is_open(monkeypatch) -> None:
@@ -18,6 +24,12 @@ def test_settings_default_concurrency_is_bounded(monkeypatch) -> None:
 
     assert settings.bot_concurrent_updates == 8
     assert settings.bot_per_user_in_flight_limit == 1
+
+
+def test_settings_default_usage_counter_retention_is_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("USAGE_COUNTER_RETENTION_DAYS", raising=False)
+
+    assert Settings(_env_file=None).usage_counter_retention_days == 7
 
 
 def test_build_application_registers_global_error_handler(monkeypatch) -> None:
@@ -154,3 +166,27 @@ def test_build_application_prunes_memory_when_retention_enabled(monkeypatch) -> 
     telegram_bot.build_application()
 
     assert pruned == [14]
+
+
+def test_build_application_prunes_usage_when_retention_enabled(monkeypatch) -> None:
+    pruned: list[int] = []
+    monkeypatch.setattr(
+        telegram_bot,
+        "get_settings",
+        lambda: Settings(
+            telegram_bot_token=SecretStr("123456:TEST"),
+            bot_auth_secret=SecretStr("test-secret"),
+            usage_counter_retention_days=9,
+        ),
+    )
+    monkeypatch.setattr(telegram_bot, "_prune_usage_if_configured", lambda days: pruned.append(days))
+    monkeypatch.setattr(telegram_bot, "configure_phoenix_tracing", lambda _settings: None)
+    monkeypatch.setattr(
+        telegram_bot.AuthService,
+        "from_settings",
+        classmethod(lambda cls, **kwargs: object()),
+    )
+
+    telegram_bot.build_application()
+
+    assert pruned == [9]

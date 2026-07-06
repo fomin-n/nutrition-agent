@@ -191,6 +191,7 @@ Live provider checks are available with `uv run python -m app.evals.run_retrieva
 | `BOT_USER_BURST_REQUEST_LIMIT_PER_MINUTE`, `BOT_DAILY_USER_PHOTO_LIMIT` | Optional | `6`, `25` | Public traffic caps for bursts and expensive vision requests. |
 | `BOT_ADMIN_CHAT_ID`, `BOT_GLOBAL_USAGE_WARNING_RATIO` | Optional | empty, `0.8` | Optional Telegram admin alert when global capacity is near/exhausted. |
 | `MEMORY_RETENTION_DAYS` | Optional | `0` | Best-effort memory pruning; `0` keeps memory until `/forget`. |
+| `USAGE_COUNTER_RETENTION_DAYS` | Optional | `7` | Best-effort pruning for old usage counters; current-day counters are never pruned. |
 
 See [.env.example](.env.example) for the full configuration surface.
 

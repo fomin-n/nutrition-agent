@@ -83,7 +83,7 @@ def test_user_minute_burst_limit_blocks_within_same_minute(tmp_path) -> None:
     service = UsageLimitService(
         tmp_path / "usage.sqlite3",
         UsageLimitConfig(
-            daily_user_request_limit=0,
+            daily_user_request_limit=10,
             daily_global_request_limit=0,
             per_minute_user_request_limit=2,
             daily_user_photo_limit=0,
@@ -197,3 +197,88 @@ def test_usage_counter_migrates_old_scope_check_schema(tmp_path) -> None:
     )
 
     assert migrated.check_and_increment(1001).allowed
+
+
+def test_usage_counter_prune_removes_old_rows_but_keeps_current_day(tmp_path) -> None:
+    service = UsageLimitService(
+        tmp_path / "usage.sqlite3",
+        UsageLimitConfig(
+            daily_user_request_limit=10,
+            daily_global_request_limit=10,
+            per_minute_user_request_limit=10,
+            daily_user_photo_limit=10,
+        ),
+    )
+    old_time = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)
+    recent_time = datetime(2026, 7, 4, 12, 0, tzinfo=UTC)
+    current_time = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
+
+    assert service.check_and_increment(1001, has_image=True, now=old_time).allowed
+    assert service.check_and_increment(1002, has_image=True, now=recent_time).allowed
+    assert service.check_and_increment(1003, has_image=True, now=current_time).allowed
+
+    with service._connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO usage_counters (day, scope, key, request_count, updated_at)
+            VALUES ('2026-07-06', 'user', 'stale-current-day', 1, '2026-06-01T00:00:00+00:00')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO usage_counters (day, scope, key, request_count, updated_at)
+            VALUES ('2026-07-06T08:00Z', 'user_minute', 'stale-current-minute', 1, '2026-06-01T00:00:00+00:00')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO usage_notifications (day, event, sent_at)
+            VALUES ('2026-06-20', 'global_warning', '2026-06-20T12:00:00+00:00')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO usage_notifications (day, event, sent_at)
+            VALUES ('2026-07-06', 'global_warning', '2026-06-01T00:00:00+00:00')
+            """
+        )
+
+    deleted = service.prune_older_than(7, now=current_time)
+
+    assert deleted == 5
+    with service._connection() as conn:
+        counter_rows = list(
+            conn.execute("SELECT day, scope, key FROM usage_counters ORDER BY day, scope, key")
+        )
+        notification_rows = list(
+            conn.execute("SELECT day, event FROM usage_notifications ORDER BY day, event")
+        )
+
+    assert ("2026-06-20", "global", "all") not in [
+        (row["day"], row["scope"], row["key"]) for row in counter_rows
+    ]
+    assert ("2026-07-04", "global", "all") in [
+        (row["day"], row["scope"], row["key"]) for row in counter_rows
+    ]
+    assert ("2026-07-06", "user", "stale-current-day") in [
+        (row["day"], row["scope"], row["key"]) for row in counter_rows
+    ]
+    assert ("2026-07-06T08:00Z", "user_minute", "stale-current-minute") in [
+        (row["day"], row["scope"], row["key"]) for row in counter_rows
+    ]
+    assert [(row["day"], row["event"]) for row in notification_rows] == [
+        ("2026-07-06", "global_warning")
+    ]
+
+
+def test_usage_counter_prune_disabled(tmp_path) -> None:
+    service = UsageLimitService(tmp_path / "usage.sqlite3")
+    assert service.check_and_increment(
+        1001,
+        now=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+    ).allowed
+
+    assert service.prune_older_than(0, now=datetime(2026, 7, 6, 12, 0, tzinfo=UTC)) == 0
+
+    with service._connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM usage_counters").fetchone()[0] > 0

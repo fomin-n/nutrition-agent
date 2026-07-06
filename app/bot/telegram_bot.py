@@ -20,6 +20,7 @@ from app.bot.handlers import (
     whoami,
 )
 from app.bot.health_server import start_health_server
+from app.bot.rate_limit import get_usage_limit_service
 from app.llm.client import get_settings, reveal_secret
 from app.memory.service import get_memory_service
 from app.observability.phoenix import configure_phoenix_tracing
@@ -38,6 +39,7 @@ def build_application() -> Application:
         )
     AuthService.from_settings(require_secret=settings.bot_access_mode == "invite")
     _prune_memory_if_configured(settings.memory_retention_days)
+    _prune_usage_if_configured(settings.usage_counter_retention_days)
 
     application = (
         Application.builder()
@@ -97,6 +99,17 @@ def _prune_memory_if_configured(retention_days: int) -> None:
         LOGGER.exception("Failed to prune old memory rows")
         return
     LOGGER.info("Pruned old memory rows retention_days=%s deleted=%s", retention_days, deleted)
+
+
+def _prune_usage_if_configured(retention_days: int) -> None:
+    if retention_days <= 0:
+        return
+    try:
+        deleted = get_usage_limit_service().prune_older_than(retention_days)
+    except Exception:
+        LOGGER.exception("Failed to prune old usage counter rows")
+        return
+    LOGGER.info("Pruned old usage counter rows retention_days=%s deleted=%s", retention_days, deleted)
 
 
 def main() -> int:

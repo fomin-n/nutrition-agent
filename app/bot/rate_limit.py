@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from math import ceil
 from pathlib import Path
@@ -201,6 +201,35 @@ class UsageLimitService:
                 photo_count=photo_count,
                 admin_alert=admin_alert,
             )
+
+    def prune_older_than(self, days: int, *, now: datetime | None = None) -> int:
+        if days <= 0:
+            return 0
+        current_time = now or datetime.now(UTC)
+        current_day = current_time.date().isoformat()
+        current_day_prefix = f"{current_day}T%"
+        cutoff = (current_time - timedelta(days=days)).isoformat(timespec="seconds")
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            before = conn.total_changes
+            conn.execute(
+                """
+                DELETE FROM usage_counters
+                WHERE updated_at < ?
+                  AND day != ?
+                  AND day NOT LIKE ?
+                """,
+                (cutoff, current_day, current_day_prefix),
+            )
+            conn.execute(
+                """
+                DELETE FROM usage_notifications
+                WHERE sent_at < ?
+                  AND day != ?
+                """,
+                (cutoff, current_day),
+            )
+            return conn.total_changes - before
 
     def _count(self, conn: sqlite3.Connection, *, day: str, scope: str, key: str) -> int:
         row = conn.execute(
