@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -37,7 +39,16 @@ def build_application() -> Application:
     AuthService.from_settings(require_secret=settings.bot_access_mode == "invite")
     _prune_memory_if_configured(settings.memory_retention_days)
 
-    application = Application.builder().token(token).build()
+    application = (
+        Application.builder()
+        .token(token)
+        .concurrent_updates(settings.bot_concurrent_updates)
+        .build()
+    )
+    LOGGER.info(
+        "Configured Telegram update concurrency concurrent_updates=%s",
+        settings.bot_concurrent_updates,
+    )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("health", health))
@@ -52,6 +63,29 @@ def build_application() -> Application:
     )
     application.add_error_handler(handle_error)
     return application
+
+
+def configure_default_executor(max_workers: int) -> ThreadPoolExecutor:
+    executor = ThreadPoolExecutor(
+        max_workers=max_workers,
+        thread_name_prefix="nutrition-agent",
+    )
+    loop = _get_or_create_event_loop()
+    loop.set_default_executor(executor)
+    LOGGER.info(
+        "Configured default asyncio executor thread_workers=%s",
+        max_workers,
+    )
+    return executor
+
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
 
 
 def _prune_memory_if_configured(retention_days: int) -> None:
@@ -78,10 +112,14 @@ def main() -> int:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     settings = get_settings()
     health_server = None
+    executor: ThreadPoolExecutor | None = None
     try:
+        executor = configure_default_executor(settings.bot_concurrent_updates)
         application = build_application()
         health_server = start_health_server(settings)
     except RuntimeError as exc:
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
         print(str(exc), file=sys.stderr)
         return 2
     try:
@@ -89,6 +127,8 @@ def main() -> int:
     finally:
         if health_server is not None:
             health_server.stop()
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
     return 0
 
 

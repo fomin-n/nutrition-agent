@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     temp_image_dir: str = "/tmp/nutrition-agent-images"
     auth_db_path: str = "data/auth.sqlite3"
     usage_db_path: str | None = None
+    bot_concurrent_updates: int = Field(default=8, ge=1, le=64)
+    bot_per_user_in_flight_limit: int = Field(default=1, ge=0, le=16)
     bot_daily_user_request_limit: int = Field(default=100, ge=0)
     bot_daily_global_request_limit: int = Field(default=1000, ge=0)
     bot_user_burst_request_limit_per_minute: int = Field(default=6, ge=0)

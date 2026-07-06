@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -28,6 +30,9 @@ PRIVATE_CHAT_ONLY_MESSAGE = "Please message me in a private chat. Group chats ar
 ALBUM_REJECTED_MESSAGE = "Please send one standalone food photo instead of a photo album."
 TEMPORARY_ERROR_MESSAGE = "Something went wrong while handling that update. Please try again."
 TEMPORARY_ERROR_MESSAGE_RU = "При обработке сообщения произошла ошибка. Попробуйте еще раз."
+IN_FLIGHT_MESSAGE = (
+    "I’m still working on your previous request. Please wait for that answer before sending another one."
+)
 
 
 @lru_cache(maxsize=2)
@@ -43,6 +48,35 @@ def get_rate_limit_service() -> UsageLimitService:
 @lru_cache(maxsize=1)
 def get_memory_service() -> MemoryService:
     return build_memory_service()
+
+
+class _UserInFlightTracker:
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._counts: dict[int, int] = {}
+
+    async def try_acquire(self, user_id: int, *, limit: int) -> bool:
+        if limit <= 0:
+            return True
+        async with self._lock:
+            current = self._counts.get(user_id, 0)
+            if current >= limit:
+                return False
+            self._counts[user_id] = current + 1
+            return True
+
+    async def release(self, user_id: int, *, limit: int) -> None:
+        if limit <= 0:
+            return
+        async with self._lock:
+            current = self._counts.get(user_id, 0)
+            if current <= 1:
+                self._counts.pop(user_id, None)
+            else:
+                self._counts[user_id] = current - 1
+
+
+_USER_IN_FLIGHT = _UserInFlightTracker()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -251,10 +285,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not _is_authorized(update):
         await _reply(update, _access_required_message(update))
         return
-    if not await _consume_usage_or_reply(context, update, text=message.text, has_image=False):
-        return
-    await _send_typing(update, context)
-    await _process_and_reply(update, text=message.text)
+    async with _user_request_slot(update) as acquired:
+        if not acquired:
+            await _reply(update, _in_flight_message(update, text=message.text, has_image=False))
+            return
+        if not await _consume_usage_or_reply(context, update, text=message.text, has_image=False):
+            return
+        await _send_typing(update, context)
+        await _process_and_reply(update, text=message.text)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -272,16 +310,35 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if _is_album_message(message):
         await _reply(update, _album_rejected_message(update, text=message.caption))
         return
-    if not await _consume_usage_or_reply(context, update, text=message.caption, has_image=True):
-        return
+    async with _user_request_slot(update) as acquired:
+        if not acquired:
+            await _reply(update, _in_flight_message(update, text=message.caption, has_image=True))
+            return
+        if not await _consume_usage_or_reply(context, update, text=message.caption, has_image=True):
+            return
 
-    await _send_typing(update, context)
-    photo = message.photo[-1]
-    with tempfile.TemporaryDirectory(prefix="nutrition-agent-", dir=_temp_image_base_dir()) as temp_dir:
-        image_path = Path(temp_dir) / f"{photo.file_unique_id}.jpg"
-        telegram_file = await photo.get_file()
-        await telegram_file.download_to_drive(custom_path=str(image_path))
-        await _process_and_reply(update, text=message.caption, image_path=str(image_path))
+        await _send_typing(update, context)
+        photo = message.photo[-1]
+        with tempfile.TemporaryDirectory(prefix="nutrition-agent-", dir=_temp_image_base_dir()) as temp_dir:
+            image_path = Path(temp_dir) / f"{photo.file_unique_id}.jpg"
+            telegram_file = await photo.get_file()
+            await telegram_file.download_to_drive(custom_path=str(image_path))
+            await _process_and_reply(update, text=message.caption, image_path=str(image_path))
+
+
+@asynccontextmanager
+async def _user_request_slot(update: Update) -> AsyncIterator[bool]:
+    user = update.effective_user
+    if user is None:
+        yield False
+        return
+    limit = getattr(get_settings(), "bot_per_user_in_flight_limit", 1)
+    acquired = await _USER_IN_FLIGHT.try_acquire(user.id, limit=limit)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            await _USER_IN_FLIGHT.release(user.id, limit=limit)
 
 
 async def _process_and_reply(update: Update, *, text: str | None, image_path: str | None = None) -> None:
@@ -552,6 +609,14 @@ def _processing_error_message(update: Update, *, text: str | None, has_image: bo
     if _handler_language(update, text=text, has_image=has_image) == "ru":
         return "Я не смог безопасно обработать запрос. Пришлите понятное описание блюда или фото еды."
     return "I couldn’t process that safely. Please try again with a clear meal description or food photo."
+
+
+def _in_flight_message(update: Update, *, text: str | None, has_image: bool) -> str:
+    if _handler_language(update, text=text, has_image=has_image) == "ru":
+        return (
+            "Я ещё обрабатываю предыдущий запрос. Дождитесь ответа, прежде чем отправлять следующий."
+        )
+    return IN_FLIGHT_MESSAGE
 
 
 async def _send_usage_admin_alert(

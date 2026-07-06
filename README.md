@@ -185,6 +185,8 @@ Live provider checks are available with `uv run python -m app.evals.run_retrieva
 | `FATSECRET_CLIENT_ID` / `FATSECRET_CLIENT_SECRET` | Optional | empty | Enables FatSecret lookup. |
 | `ENABLE_PHOENIX_TRACING` | Optional | `false` | Enables OpenTelemetry/Phoenix tracing. |
 | `AUTH_DB_PATH`, `MEMORY_DB_PATH`, `USAGE_DB_PATH` | Optional | `data/*.sqlite3` | SQLite locations for auth, memory, and request limits. |
+| `BOT_CONCURRENT_UPDATES` | Optional | `8` | Bounded Telegram update concurrency; set `1` to restore sequential processing. |
+| `BOT_PER_USER_IN_FLIGHT_LIMIT` | Optional | `1` | Concurrent paid-work requests allowed per Telegram user; `0` disables the guard. |
 | `BOT_DAILY_USER_REQUEST_LIMIT`, `BOT_DAILY_GLOBAL_REQUEST_LIMIT` | Optional | `100`, `1000` | Daily Telegram request caps; `0` disables each cap. |
 | `BOT_USER_BURST_REQUEST_LIMIT_PER_MINUTE`, `BOT_DAILY_USER_PHOTO_LIMIT` | Optional | `6`, `25` | Public traffic caps for bursts and expensive vision requests. |
 | `BOT_ADMIN_CHAT_ID`, `BOT_GLOBAL_USAGE_WARNING_RATIO` | Optional | empty, `0.8` | Optional Telegram admin alert when global capacity is near/exhausted. |

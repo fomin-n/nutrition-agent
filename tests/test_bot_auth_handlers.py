@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -135,16 +136,22 @@ class DownloadablePhoto:
         return self.telegram_file
 
 
-def make_update(message: FakeMessage):
+def make_update(
+    message: FakeMessage,
+    *,
+    user_id: int = 1001,
+    chat_id: int = 2001,
+    language_code: str = "en",
+):
     return SimpleNamespace(
         effective_message=message,
         effective_user=SimpleNamespace(
-            id=1001,
+            id=user_id,
             username="demo_user",
             full_name="Demo User",
-            language_code="en",
+            language_code=language_code,
         ),
-        effective_chat=SimpleNamespace(id=2001, type="private"),
+        effective_chat=SimpleNamespace(id=chat_id, type="private"),
     )
 
 
@@ -684,3 +691,110 @@ def test_global_error_handler_swallows_reply_failure(caplog) -> None:
     assert "Failed to send Telegram error fallback" in caplog.text
     assert "update failed" not in caplog.text
     assert "100 g chicken" not in caplog.text
+
+
+def test_different_users_can_process_text_requests_concurrently(monkeypatch) -> None:
+    first_message = FakeMessage(text="100 g chicken")
+    second_message = FakeMessage(text="100 g rice")
+    first_update = make_update(first_message, user_id=1001, chat_id=2001)
+    second_update = make_update(second_message, user_id=1002, chat_id=2002)
+    context = SimpleNamespace(bot=FakeBot())
+    entered: list[int] = []
+    both_entered = threading.Event()
+    release = threading.Event()
+
+    def slow_process_request(**kwargs):
+        entered.append(int(kwargs["user_id"]))
+        if len(entered) == 2:
+            both_entered.set()
+        assert release.wait(timeout=2)
+        return f"done {kwargs['user_id']}"
+
+    monkeypatch.setattr(handlers, "_USER_IN_FLIGHT", handlers._UserInFlightTracker())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "process_request", slow_process_request)
+
+    async def run_requests() -> None:
+        first = asyncio.create_task(handlers.handle_text(first_update, context))
+        second = asyncio.create_task(handlers.handle_text(second_update, context))
+        await asyncio.wait_for(asyncio.to_thread(both_entered.wait), timeout=1)
+        release.set()
+        await asyncio.gather(first, second)
+
+    asyncio.run(run_requests())
+
+    assert set(entered) == {1001, 1002}
+    assert first_message.replies == ["done 1001"]
+    assert second_message.replies == ["done 1002"]
+
+
+def test_same_user_second_text_request_is_rejected_before_quota(monkeypatch) -> None:
+    first_message = FakeMessage(text="100 g chicken")
+    second_message = FakeMessage(text="100 g rice")
+    first_update = make_update(first_message)
+    second_update = make_update(second_message)
+    context = SimpleNamespace(bot=FakeBot())
+    entered = threading.Event()
+    release = threading.Event()
+    limiter = FakeRateLimitService()
+
+    def slow_process_request(**kwargs):
+        entered.set()
+        assert release.wait(timeout=2)
+        return "done"
+
+    monkeypatch.setattr(handlers, "_USER_IN_FLIGHT", handlers._UserInFlightTracker())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+    monkeypatch.setattr(handlers, "process_request", slow_process_request)
+
+    async def run_requests() -> None:
+        first = asyncio.create_task(handlers.handle_text(first_update, context))
+        await asyncio.wait_for(asyncio.to_thread(entered.wait), timeout=1)
+        await handlers.handle_text(second_update, context)
+        release.set()
+        await first
+
+    asyncio.run(run_requests())
+
+    assert first_message.replies == ["done"]
+    assert second_message.replies == [handlers.IN_FLIGHT_MESSAGE]
+    assert limiter.user_ids == [1001]
+
+
+def test_same_user_second_russian_photo_request_gets_localized_in_flight_reply(
+    monkeypatch,
+) -> None:
+    first_message = FakeMessage(text="100 g chicken")
+    second_message = FakeMessage(photo=[ExplodingPhoto()])
+    first_update = make_update(first_message, language_code="ru")
+    second_update = make_update(second_message, language_code="ru")
+    context = SimpleNamespace(bot=FakeBot())
+    entered = threading.Event()
+    release = threading.Event()
+    limiter = FakeRateLimitService()
+
+    def slow_process_request(**kwargs):
+        entered.set()
+        assert release.wait(timeout=2)
+        return "done"
+
+    monkeypatch.setattr(handlers, "_USER_IN_FLIGHT", handlers._UserInFlightTracker())
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+    monkeypatch.setattr(handlers, "process_request", slow_process_request)
+
+    async def run_requests() -> None:
+        first = asyncio.create_task(handlers.handle_text(first_update, context))
+        await asyncio.wait_for(asyncio.to_thread(entered.wait), timeout=1)
+        await handlers.handle_photo(second_update, context)
+        release.set()
+        await first
+
+    asyncio.run(run_requests())
+
+    assert first_message.replies == ["done"]
+    assert second_message.replies == [
+        "Я ещё обрабатываю предыдущий запрос. Дождитесь ответа, прежде чем отправлять следующий."
+    ]
+    assert limiter.user_ids == [1001]

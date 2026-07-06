@@ -10,6 +10,16 @@ def test_settings_default_access_mode_is_open(monkeypatch) -> None:
     assert Settings(_env_file=None).bot_access_mode == "open"
 
 
+def test_settings_default_concurrency_is_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("BOT_CONCURRENT_UPDATES", raising=False)
+    monkeypatch.delenv("BOT_PER_USER_IN_FLIGHT_LIMIT", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.bot_concurrent_updates == 8
+    assert settings.bot_per_user_in_flight_limit == 1
+
+
 def test_build_application_registers_global_error_handler(monkeypatch) -> None:
     monkeypatch.setattr(
         telegram_bot,
@@ -29,6 +39,48 @@ def test_build_application_registers_global_error_handler(monkeypatch) -> None:
     application = telegram_bot.build_application()
 
     assert handlers.handle_error in application.error_handlers
+    assert application.concurrent_updates == 8
+
+
+def test_build_application_uses_configured_concurrent_updates(monkeypatch) -> None:
+    monkeypatch.setattr(
+        telegram_bot,
+        "get_settings",
+        lambda: Settings(
+            telegram_bot_token=SecretStr("123456:TEST"),
+            bot_auth_secret=SecretStr("test-secret"),
+            bot_concurrent_updates=1,
+        ),
+    )
+    monkeypatch.setattr(telegram_bot, "configure_phoenix_tracing", lambda _settings: None)
+    monkeypatch.setattr(
+        telegram_bot.AuthService,
+        "from_settings",
+        classmethod(lambda cls, **kwargs: object()),
+    )
+
+    application = telegram_bot.build_application()
+
+    assert application.concurrent_updates == 1
+
+
+def test_configure_default_executor_uses_configured_workers(monkeypatch) -> None:
+    class FakeLoop:
+        def __init__(self) -> None:
+            self.executor = None
+
+        def set_default_executor(self, executor) -> None:
+            self.executor = executor
+
+    fake_loop = FakeLoop()
+    monkeypatch.setattr(telegram_bot, "_get_or_create_event_loop", lambda: fake_loop)
+
+    executor = telegram_bot.configure_default_executor(3)
+    try:
+        assert fake_loop.executor is executor
+        assert executor._max_workers == 3
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def test_build_application_open_mode_does_not_require_auth_secret(monkeypatch) -> None:
