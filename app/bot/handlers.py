@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import tempfile
-from collections.abc import AsyncIterator
+import time
+from collections import OrderedDict
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -77,6 +79,41 @@ class _UserInFlightTracker:
 
 
 _USER_IN_FLIGHT = _UserInFlightTracker()
+
+
+class _ExpiringKeySet:
+    def __init__(
+        self,
+        *,
+        ttl_seconds: float,
+        max_entries: int,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.ttl_seconds = ttl_seconds
+        self.max_entries = max_entries
+        self._clock = clock
+        self._entries: OrderedDict[str, float] = OrderedDict()
+
+    def add_if_new(self, key: str) -> bool:
+        now = self._clock()
+        self._prune(now)
+        expires_at = self._entries.get(key)
+        if expires_at is not None and expires_at > now:
+            self._entries.move_to_end(key)
+            return False
+        self._entries[key] = now + self.ttl_seconds
+        self._entries.move_to_end(key)
+        while len(self._entries) > self.max_entries:
+            self._entries.popitem(last=False)
+        return True
+
+    def _prune(self, now: float) -> None:
+        expired = [key for key, expires_at in self._entries.items() if expires_at <= now]
+        for key in expired:
+            self._entries.pop(key, None)
+
+
+_ALBUM_REPLY_DEDUP = _ExpiringKeySet(ttl_seconds=120, max_entries=2048)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -308,7 +345,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _reply(update, _access_required_message(update))
         return
     if _is_album_message(message):
-        await _reply(update, _album_rejected_message(update, text=message.caption))
+        if _should_reply_to_album(message):
+            await _reply(update, _album_rejected_message(update, text=message.caption))
         return
     async with _user_request_slot(update) as acquired:
         if not acquired:
@@ -712,6 +750,11 @@ def _is_private_chat(update: Update) -> bool:
 
 def _is_album_message(message: object) -> bool:
     return bool(getattr(message, "media_group_id", None))
+
+
+def _should_reply_to_album(message: object) -> bool:
+    media_group_id = getattr(message, "media_group_id", None)
+    return bool(media_group_id and _ALBUM_REPLY_DEDUP.add_if_new(str(media_group_id)))
 
 
 def _is_banned(update: Update) -> bool:

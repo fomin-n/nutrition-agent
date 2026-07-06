@@ -554,6 +554,11 @@ def test_album_photo_is_rejected_before_quota_or_download(monkeypatch) -> None:
     update = make_update(message)
     context = SimpleNamespace(bot=FakeBot())
     limiter = FakeRateLimitService()
+    monkeypatch.setattr(
+        handlers,
+        "_ALBUM_REPLY_DEDUP",
+        handlers._ExpiringKeySet(ttl_seconds=120, max_entries=10),
+    )
     monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
     monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
 
@@ -562,6 +567,42 @@ def test_album_photo_is_rejected_before_quota_or_download(monkeypatch) -> None:
     assert message.replies == [handlers.ALBUM_REJECTED_MESSAGE]
     assert limiter.user_ids == []
     assert context.bot.actions == []
+
+
+def test_album_photo_replies_once_per_media_group(monkeypatch) -> None:
+    messages = [
+        FakeMessage(photo=[ExplodingPhoto()], media_group_id="album-dedupe")
+        for _ in range(3)
+    ]
+    updates = [make_update(message) for message in messages]
+    context = SimpleNamespace(bot=FakeBot())
+    limiter = FakeRateLimitService()
+    monkeypatch.setattr(
+        handlers,
+        "_ALBUM_REPLY_DEDUP",
+        handlers._ExpiringKeySet(ttl_seconds=120, max_entries=10),
+    )
+    monkeypatch.setattr(handlers, "get_auth_service", lambda **_: FakeAuthService(True))
+    monkeypatch.setattr(handlers, "get_rate_limit_service", lambda: limiter)
+
+    for update in updates:
+        asyncio.run(handlers.handle_photo(update, context))
+
+    assert messages[0].replies == [handlers.ALBUM_REJECTED_MESSAGE]
+    assert messages[1].replies == []
+    assert messages[2].replies == []
+    assert limiter.user_ids == []
+    assert context.bot.actions == []
+
+
+def test_album_dedupe_set_is_size_bounded() -> None:
+    dedupe = handlers._ExpiringKeySet(ttl_seconds=120, max_entries=2)
+
+    assert dedupe.add_if_new("a")
+    assert dedupe.add_if_new("b")
+    assert dedupe.add_if_new("c")
+
+    assert list(dedupe._entries) == ["b", "c"]
 
 
 def test_group_text_message_is_ignored_before_quota_or_graph(monkeypatch) -> None:
