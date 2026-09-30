@@ -89,8 +89,8 @@ def test_llm_critic_uses_configured_model_and_schema(monkeypatch: pytest.MonkeyP
 
     result = critic_module.critic(_estimate_state(use_llm=True))["critic_result"]
 
-    assert result.action == "revise"
-    assert result.source == "llm"
+    assert result.action == "accept"
+    assert result.source == "deterministic"
     assert result.iteration == 0
     assert captured["model_name"] == "critic-test-model"
     assert captured["schema"] is CriticResult
@@ -128,7 +128,7 @@ def test_llm_critic_error_degrades_to_deterministic_accept(
     assert "request-critic" in caplog.text
 
 
-def test_graph_always_rejected_answer_stops_at_cap(
+def test_graph_unchanged_rejection_stops_before_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -154,8 +154,8 @@ def test_graph_always_rejected_answer_stops_at_cap(
         }
     )
 
-    assert state["critic_iteration"] == 2
-    assert len(state["critic_history"]) == 3
+    assert state["critic_iteration"] == 1
+    assert len(state["critic_history"]) == 1
     assert state["critic_result"].action == "clarify"
     assert state["final_estimate"].is_clarification is True
     assert state["final_estimate"].text.startswith("I need one more detail")

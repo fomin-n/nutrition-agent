@@ -47,7 +47,7 @@ Primary graph flow:
 9. `critic`
 10. either `output_moderation` or a bounded `prepare_critic_revision` -> `synthesize_answer` loop
 
-The critic loop only revisits deterministic answer synthesis. It never reparses food, repeats provider retrieval, or changes calculator totals. `CRITIC_MAX_ITERATIONS` defaults to `2` and is schema-bounded to `0-3`; reaching the cap produces a localized clarification.
+The critic loop only revisits deterministic answer synthesis. It never reparses food, repeats provider retrieval, or changes calculator totals. `CRITIC_MAX_ITERATIONS` defaults to `2` and is schema-bounded to `0-3`; reaching the hard-check cap produces a localized clarification. Qualitative revisions require the typed `restore_canonical_presentation` repair and an actual presentation difference; unactionable or repeated qualitative revisions preserve the hard-validated answer.
 
 Keep the graph controlled. Do not replace it with an unconstrained agent loop.
 
@@ -61,6 +61,10 @@ Structured schemas live under `app/schemas/`:
 - `outputs.py`: final estimate and critic result.
 
 Any model output that changes routing or calculation inputs should be parsed through a schema.
+
+`app/tools/meal_validation.py` is the final semantic meal boundary before retrieval, including local/product/vision paths. Rejected parses cannot reach calculation. Clarification meals must not retrieve ingredients. Preserve repeated occurrences, explicit mass ownership and preparation; never silently substitute cooked food for raw/dry input. Meaningful unresolved components require clarification, not a whole-meal total with missing mass.
+
+Packaging uses `PackagingObservation` and `ObservedNutritionLabel`, distinct from meal extraction. Only the image/package path may supply transcribed label values, with an explicit per-100g or per-serving basis and consumed mass. Calculator arithmetic remains authoritative; never treat model-estimated nutrition as a label.
 
 ## Model Configuration
 
@@ -90,12 +94,15 @@ Conversation and user memory live in `app/memory/service.py`.
 - Long-term memory stores extracted stable nutrition facts only: allergies, dietary preferences, measurement preferences, and recurring goals. Do not store every message as long-term memory.
 - The default memory database is `memory.sqlite3` next to `AUTH_DB_PATH`; override with `MEMORY_DB_PATH` when needed.
 - Use SQLite transactions and composite keys for memory writes. Do not add a vector database unless there is a concrete retrieval need that the current memory schema cannot satisfy.
+- `memory_generations` stores a deletion generation per user. Load it with context and pass `expected_generation` on every production write; `/forget` increments it atomically so an in-flight older request cannot recreate deleted memory. Keep tombstones when pruning.
+- Telegram defers recording until all answer chunks are delivered; local/eval callers record immediately. Memory failures must not discard an otherwise completed answer.
+- Only affirmative first-person assertions become stable facts; explicit negations retract matching facts. Summaries and assistant messages are history, not parser evidence. Standalone requests do not receive recent conversational messages as extraction evidence.
 
 ## Phoenix Observability
 
 Phoenix tracing is optional and must be enabled explicitly with `ENABLE_PHOENIX_TRACING=true`. The self-hosted Compose file is `deploy/phoenix/docker-compose.yml`; it runs one `arizephoenix/phoenix:17.2.0` container with a named `nutrition_agent_phoenix_data` volume and localhost-only bindings for ports `6006` and `4317`.
 
-The app uses `arize-phoenix-otel` with `auto_instrument=True` and `openinference-instrumentation-langchain`, which also covers LangGraph. Each request has an explicit `nutrition_agent.request` root span; trace context is attached around `process_request` with the Telegram user/chat/message identity metadata, request language/type, model names, app version, and graph version. Authenticated Telegram usernames and display names are allowed only in this controlled Phoenix metadata because they are required for user-level investigation. Do not put those names in application logs. Do not add raw prompts, message text, complete Telegram updates, auth keys, tokens, or credentials to trace metadata or logs.
+The app explicitly instruments LangChain/LangGraph with content hiding enabled and wraps the Phoenix exporter with an attribute allowlist. Inputs, outputs, images, prompts, invocation parameters, exception events and status descriptions are removed before export. Each request has an explicit `nutrition_agent.request` root span with allowlisted Telegram identity metadata, request language/type, model names, app version, and graph version. Telegram names are allowed only in this controlled metadata, never application logs. Test exported spans, not only metadata helpers; see `docs/observability.md`.
 
 Application logs include OpenTelemetry trace/span IDs for correlation. Optional Telegram fields must be omitted safely, and concurrent requests must rely on OpenTelemetry context propagation rather than shared mutable request metadata.
 
@@ -153,6 +160,7 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 
 - maps each ingredient to a normalized provider candidate and then to per-100 g calories, protein, fat, and carbs
 - scales each nutrient by `grams_min` and `grams_max`
+- applies separate bounded source-uncertainty factors without rewriting measured portion mass
 - aggregates ingredient ranges
 - rounds calories to practical 10 kcal increments
 - checks macro-derived energy consistency
@@ -175,6 +183,8 @@ LLMs should not calculate totals. They may extract structured ingredients and es
 Whole-ingredient retrieval is parallelized with a bounded thread pool; provider calls for one ingredient stay sequential. `NUTRITION_RETRIEVAL_MAX_WORKERS` defaults to `3` and is bounded to `1-8`. Outcomes must be reassembled in ingredient-input order, and tracing context must be copied into workers. The shared file cache synchronizes reads/writes, and FatSecret token refresh remains lock-protected.
 
 External data should be treated as untrusted and potentially incomplete.
+
+Selected candidates, including class priors and transcribed labels, must pass the final validation boundary. Provider HTTP connections are pooled; USDA detail requests are ranked/deduplicated and bounded by `USDA_DETAIL_LIMIT`. The cooperative request budget prevents new network work after expiry but cannot forcibly stop running threads. See `docs/engineering-integrity.md` for limits and measurement status.
 
 Provider credentials are optional and independently disabled:
 

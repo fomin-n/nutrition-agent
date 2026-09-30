@@ -11,6 +11,7 @@ from app.llm.structured import read_prompt
 from app.schemas.nutrition import MealUnderstanding
 from app.schemas.safety import Confidence
 from app.tools.image_utils import encode_image_data_url
+from app.tools.meal_validation import clarification_meal, validate_meal
 
 LOGGER = logging.getLogger(__name__)
 _CONFIDENCE_RANK: dict[Confidence, int] = {"low": 0, "medium": 1, "high": 2}
@@ -80,7 +81,7 @@ def _log_image_fallback(*, request_id: str | None, branch: str, exc: Exception) 
         request_id,
         branch,
         type(exc).__name__,
-        exc,
+        "redacted",
     )
 
 
@@ -103,6 +104,8 @@ def recognize_image_with_optional_escalation(
         language=language,
         model_name=base_model,
     )
+    if validate_meal(base_meal, caption or ""):
+        base_meal = clarification_meal(language)
     diagnostic: dict[str, str | bool | None] = {
         "branch": branch,
         "base_model": base_model,
@@ -136,12 +139,14 @@ def recognize_image_with_optional_escalation(
             base_model,
             escalation_model,
             type(exc).__name__,
-            exc,
+            "redacted",
         )
         diagnostic["failure_type"] = type(exc).__name__
         _record_vision_trace(diagnostic)
         return base_meal, diagnostic
 
+    if validate_meal(escalated_meal, caption or ""):
+        escalated_meal = clarification_meal(language)
     selected = (
         escalated_meal
         if _meal_quality_rank(escalated_meal) >= _meal_quality_rank(base_meal)
@@ -185,7 +190,7 @@ def recognize_image_with_llm(
     settings = get_settings()
     prompt = read_prompt("image_recognizer.md")
     data_url = encode_image_data_url(image_path, image_mime_type)
-    model = build_chat_model(model_name or settings.openai_vision_model).with_structured_output(
+    model = build_chat_model(model_name or settings.openai_vision_model, task="vision").with_structured_output(
         MealUnderstanding
     )
     content = [

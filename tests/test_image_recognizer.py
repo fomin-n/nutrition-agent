@@ -255,7 +255,7 @@ def test_packaging_logs_llm_fallback_without_raw_caption(monkeypatch, caplog) ->
 
     monkeypatch.setattr(
         packaging_recognizer,
-        "recognize_image_with_optional_escalation",
+        "read_packaging_observation",
         fail_recognition,
     )
 
@@ -283,30 +283,19 @@ def test_packaging_logs_llm_fallback_without_raw_caption(monkeypatch, caplog) ->
     assert "private-wrapper" not in caplog.text
 
 
-def test_packaging_uses_vision_escalation_path(monkeypatch) -> None:
+def test_packaging_uses_dedicated_label_schema(monkeypatch) -> None:
+    from app.schemas.packaging import ObservedNutritionLabel, PackagingObservation
     monkeypatch.setattr(packaging_recognizer, "has_openai_key", lambda: True)
 
     def fake_escalation(*_args, **kwargs):
-        return (
-            MealUnderstanding(
-                confidence="medium",
-                ingredients=[IngredientEstimate(name="yogurt", grams_min=180, grams_max=180)],
-            ),
-            {
-                "branch": kwargs["branch"],
-                "base_model": "base-vision",
-                "base_confidence": "low",
-                "escalation_model": "strong-vision",
-                "escalated": True,
-                "selected_model": "strong-vision",
-                "selected_confidence": "medium",
-                "failure_type": None,
-            },
+        return PackagingObservation(
+            is_food=True, product_name="yogurt", confidence="medium",
+            label=ObservedNutritionLabel(basis="per_100g", calories_kcal=60, protein_g=4, fat_g=3, carbs_g=5),
         )
 
     monkeypatch.setattr(
         packaging_recognizer,
-        "recognize_image_with_optional_escalation",
+        "read_packaging_observation",
         fake_escalation,
     )
 
@@ -326,5 +315,5 @@ def test_packaging_uses_vision_escalation_path(monkeypatch) -> None:
     )
 
     assert result["meal"].ingredients[0].name == "yogurt"
-    assert result["vision_escalation"]["branch"] == "packaged_food"
-    assert result["vision_escalation"]["escalated"] is True
+    assert result["meal"].ingredients[0].observed_label is not None
+    assert result["meal"].ingredients[0].grams_min == 180

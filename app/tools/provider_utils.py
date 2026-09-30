@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+from app.execution import bounded_timeout
+
 LOGGER = logging.getLogger(__name__)
 
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -42,6 +44,7 @@ def request_json_with_retries(
     last_status: int | None = None
     for attempt in range(max_retries + 1):
         try:
+            bounded_timeout(1)
             response = request()
             last_status = response.status_code
             if response.status_code in RETRY_STATUS_CODES and attempt < max_retries:
@@ -76,7 +79,7 @@ def request_json_with_retries(
 
 
 def log_provider_failure(logger: logging.Logger, exc: ProviderUnavailableError, *, query: str | None = None) -> None:
-    query_part = f" query={query!r}" if query else ""
+    query_part = ""
     logger.warning(
         "%s provider operation=%s failed status=%s reason=%s%s",
         exc.provider,
@@ -118,4 +121,4 @@ def retrieval_span(provider: str, operation: str, **attributes: str | int | floa
 def _sleep_before_retry(backoff_base: float, attempt: int, sleep: Callable[[float], None]) -> None:
     delay = backoff_base * (2**attempt) + random.uniform(0, backoff_base)
     if delay > 0:
-        sleep(delay)
+        sleep(bounded_timeout(delay))

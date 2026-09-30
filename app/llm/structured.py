@@ -22,9 +22,9 @@ def invoke_structured_text(
     system_prompt: str,
     user_prompt: str,
 ) -> SchemaT:
-    model = build_chat_model(model_name).with_structured_output(schema)
+    task = {"ScopeDecision": "scope", "CriticResult": "critic"}.get(schema.__name__, "text")
+    model = build_chat_model(model_name, task=task).with_structured_output(schema)
     result = model.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
     if not isinstance(result, schema):
         return schema.model_validate(result)
     return result
-

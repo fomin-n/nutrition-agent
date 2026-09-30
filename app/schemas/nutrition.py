@@ -1,22 +1,25 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.packaging import ObservedNutritionLabel
 from app.schemas.safety import Confidence
 
-FoodSource = Literal["fatsecret", "usda", "open_food_facts", "fallback", "generic_fallback"]
+FoodSource = Literal["fatsecret", "usda", "open_food_facts", "fallback", "generic_fallback", "observed_label"]
 FoodType = Literal["generic", "branded", "restaurant", "prepared", "composite", "unknown"]
 
 
 class IngredientEstimate(BaseModel):
-    name: str = Field(..., min_length=1)
+    model_config = ConfigDict(allow_inf_nan=False)
+    name: str = Field(..., min_length=1, max_length=240)
     grams_min: float = Field(..., ge=0)
     grams_max: float = Field(..., ge=0)
     preparation: str | None = None
     notes: str | None = None
     origin: str | None = None
     confidence: Confidence = "medium"
+    observed_label: ObservedNutritionLabel | None = None
 
     @model_validator(mode="after")
     def validate_range(self) -> "IngredientEstimate":
@@ -29,14 +32,15 @@ class IngredientEstimate(BaseModel):
 
 class MealUnderstanding(BaseModel):
     dish_name: str | None = None
-    ingredients: list[IngredientEstimate] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
+    ingredients: list[IngredientEstimate] = Field(default_factory=list, max_length=12)
+    assumptions: list[str] = Field(default_factory=list, max_length=48)
     confidence: Confidence = "medium"
     needs_clarification: bool = False
     clarification_question: str | None = None
 
 
 class NutritionPer100g(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     food_name: str
     calories_kcal: float = Field(..., ge=0)
     protein_g: float = Field(..., ge=0)
@@ -47,6 +51,7 @@ class NutritionPer100g(BaseModel):
 
 
 class NutritionValues(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     calories_kcal: float | None = Field(default=None, ge=0)
     protein_g: float | None = Field(default=None, ge=0)
     carbohydrate_g: float | None = Field(default=None, ge=0)
@@ -65,6 +70,7 @@ class CandidateScore(BaseModel):
 
 
 class NutritionCandidate(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     source: FoodSource
     source_id: str | None = None
     serving_id: str | None = None
@@ -117,6 +123,8 @@ class IngredientNutrition(BaseModel):
     matched_food_name: str
     grams_min: float = Field(..., ge=0)
     grams_max: float = Field(..., ge=0)
+    source_factor_min: float = Field(default=1.0, gt=0, le=1)
+    source_factor_max: float = Field(default=1.0, ge=1, le=2)
     per_100g: NutritionPer100g
     source: str
     warning: str | None = None
@@ -161,6 +169,8 @@ class RetrievalDiagnostic(BaseModel):
     component_origin: str | None = None
     amount_min_g: float
     amount_max_g: float
+    source_factor_min: float = 1.0
+    source_factor_max: float = 1.0
     provider_queries: list[str] = Field(default_factory=list)
     candidates: list[CandidateDiagnostic] = Field(default_factory=list)
     selected_identity: str | None = None

@@ -14,7 +14,8 @@ LOGGER = logging.getLogger(__name__)
 
 def normalize_food_query(query: str) -> str:
     cleaned = query.lower().replace("ё", "е")
-    cleaned = re.sub(r"[^\w\s]", " ", cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r"(?<=\d),(?=\d)", ".", cleaned)
+    cleaned = re.sub(r"[^\w\s.]|(?<!\d)\.|\.(?!\d)", " ", cleaned, flags=re.UNICODE)
     cleaned = cleaned.replace("_", " ")
     return re.sub(r"\s+", " ", cleaned).strip()
 

@@ -198,7 +198,7 @@ def test_parser_memory_prompt_excludes_previous_assistant_estimates(tmp_path) ->
 
     prompt = memory_context_prompt(service.load_context(1, 10))
 
-    assert "Estimate an apple" in prompt
+    assert "Estimate an apple" not in prompt
     assert "999" not in prompt
     assert "assistant" not in prompt
 

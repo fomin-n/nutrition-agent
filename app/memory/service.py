@@ -60,6 +60,7 @@ class UnresolvedTask(BaseModel):
 class MemoryContext(BaseModel):
     user_id: str
     conversation_id: str
+    generation: int = 0
     summary: str = ""
     unresolved_task: UnresolvedTask | None = None
     recent_messages: list[MemoryMessage] = Field(default_factory=list)
@@ -98,6 +99,8 @@ class MemoryService:
         user_key = str(user_id)
         conversation_key = str(conversation_id)
         with self._connection() as conn:
+            conn.execute("BEGIN")
+            generation = self._generation(conn, user_key)
             state = conn.execute(
                 """
                 SELECT summary, unresolved_task_json
@@ -137,6 +140,7 @@ class MemoryService:
         return MemoryContext(
             user_id=user_key,
             conversation_id=conversation_key,
+            generation=generation,
             summary=state["summary"] if state else "",
             unresolved_task=unresolved_task,
             recent_messages=[
@@ -171,6 +175,7 @@ class MemoryService:
         effective_text: str | None = None,
         final_state: dict[str, Any] | None = None,
         prepared_task: UnresolvedTask | None = None,
+        expected_generation: int | None = None,
     ) -> None:
         user_key = str(user_id)
         conversation_key = str(conversation_id)
@@ -183,6 +188,8 @@ class MemoryService:
         )
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if expected_generation is not None and self._generation(conn, user_key) != expected_generation:
+                return
             conn.execute(
                 """
                 INSERT INTO conversation_state
@@ -213,7 +220,20 @@ class MemoryService:
             conn.execute("DELETE FROM conversation_messages WHERE user_id = ?", (user_key,))
             conn.execute("DELETE FROM conversation_state WHERE user_id = ?", (user_key,))
             conn.execute("DELETE FROM user_memory_facts WHERE user_id = ?", (user_key,))
-            return conn.total_changes - before
+            deleted = conn.total_changes - before
+            conn.execute(
+                "INSERT INTO memory_generations (user_id, generation) VALUES (?, 1) "
+                "ON CONFLICT(user_id) DO UPDATE SET generation = generation + 1",
+                (user_key,),
+            )
+            return deleted
+
+    @staticmethod
+    def _generation(conn: sqlite3.Connection, user_id: str) -> int:
+        row = conn.execute(
+            "SELECT generation FROM memory_generations WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return int(row[0]) if row else 0
 
     def prune_older_than(self, days: int, *, now: datetime | None = None) -> int:
         if days <= 0:
@@ -328,7 +348,13 @@ class MemoryService:
         text: str | None,
         now: str,
     ) -> None:
-        for fact_type, key, value in extract_long_term_facts(text):
+        for fact_type, key, value in _fact_changes(text):
+            if value is None:
+                conn.execute(
+                    "DELETE FROM user_memory_facts WHERE user_id = ? AND fact_type = ? AND key = ?",
+                    (user_id, fact_type, key),
+                )
+                continue
             conn.execute(
                 """
                 INSERT INTO user_memory_facts (user_id, fact_type, key, value, source, created_at, updated_at)
@@ -357,6 +383,10 @@ class MemoryService:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS memory_generations (
+                    user_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE TABLE IF NOT EXISTS conversation_state (
                     user_id TEXT NOT NULL,
                     conversation_id TEXT NOT NULL,
@@ -430,6 +460,45 @@ def derive_unresolved_task(text: str | None) -> UnresolvedTask | None:
 
 
 def extract_long_term_facts(text: str | None) -> list[tuple[str, str, str]]:
+    return [(kind, key, value) for kind, key, value in _fact_changes(text) if value is not None]
+
+
+def _fact_changes(text: str | None) -> list[tuple[str, str, str | None]]:
+    """Store only explicit personal assertions; negative assertions retract, not invert."""
+    if not text or not local_moderate_text(text).allowed:
+        return []
+    changes: list[tuple[str, str, str | None]] = []
+    clause_boundary = (
+        r"[.!?;\n]|\b(?:but|но)\b|(?:,|\b(?:and|и)\b)\s*(?="
+        r"(?:i|my|he|she|they|prefer|use|show|я|мой|моя|он|она|они|предпочитаю|"
+        r"хочу|показывай|используй)\b|у меня\b)"
+    )
+    for clause in re.split(clause_boundary, text.lower()):
+        clause = normalize_food_query(clause.replace(",", " and "))
+        if not re.match(
+            r"^(?:i (?:am|m|prefer|use|want|avoid)\b|my (?:goal|allergy)\b|я\b|у меня\b|моя цель\b|"
+            r"предпочитаю\b|хочу\b|показывай\b|используй\b|(?:please )?(?:prefer|use|show)\b)", clause
+        ):
+            continue
+        if re.search(
+            r"\b(?:he|she|they|friend|husband|wife|son|daughter|think|said|say|"
+            r"он|она|они|друг\w*|муж\w*|жен\w*|сын\w*|доч\w*|думаю|сказал\w*)\b",
+            clause,
+        ):
+            continue
+        if clause == "я не ем мясо":
+            changes.append(("dietary_preference", "no_meat", "does not eat meat"))
+            continue
+        negative = bool(re.search(r"\b(?:not|no longer|never|не|нет|больше не)\b", clause))
+        # Rewrite only for identifying the fact key to delete. Never store that rewrite.
+        assertion = re.sub(r"\b(?:no longer|not|never|больше не|не|нет)\b", "", clause)
+        assertion = " ".join(assertion.split())
+        for kind, key, value in _extract_asserted_facts(assertion):
+            changes.append((kind, key, None if negative else value))
+    return changes
+
+
+def _extract_asserted_facts(text: str | None) -> list[tuple[str, str, str]]:
     if not text:
         return []
     normalized = normalize_food_query(text)
@@ -438,7 +507,7 @@ def extract_long_term_facts(text: str | None) -> list[tuple[str, str, str]]:
     allergy_patterns = (
         r"\ballergic to ([a-zа-яё ,]+)",
         r"\ballergy to ([a-zа-яё ,]+)",
-        r"\bаллергия на ([a-zа-яё ,]+)",
+        r"\bаллерги[яи] на ([a-zа-яё ,]+)",
     )
     for pattern in allergy_patterns:
         match = re.search(pattern, normalized)
@@ -484,8 +553,7 @@ def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str
         return ""
     memory_context = MemoryContext.model_validate(context) if isinstance(context, dict) else context
     lines: list[str] = []
-    if memory_context.summary:
-        lines.append(f"Older conversation summary: {memory_context.summary}")
+    # Summaries can contain old assistant estimates. They are history, never evidence.
     if memory_context.unresolved_task:
         task = memory_context.unresolved_task
         missing = ", ".join(task.missing_fields) or "none"
@@ -500,7 +568,7 @@ def memory_context_prompt(context: dict[str, Any] | MemoryContext | None) -> str
     if memory_context.facts:
         facts = "; ".join(f"{fact.fact_type}:{fact.key}={fact.value}" for fact in memory_context.facts[:12])
         lines.append(f"Stable user facts: {facts}")
-    if memory_context.recent_messages:
+    if memory_context.unresolved_task and memory_context.recent_messages:
         compact_messages = [
             f"user: {_compact_text(message.text, 120)}"
             for message in memory_context.recent_messages[-6:]
@@ -846,7 +914,7 @@ def _user_memory_text(text: str | None) -> str:
 
 
 def _split_fact_items(value: str) -> list[str]:
-    value = re.split(r"\b(?:and|but|also|и|но|а также)\b", value, maxsplit=1)[0]
+    value = re.split(r"\b(?:but|also|но|а также)\b", value, maxsplit=1)[0]
     value = value.strip(" .,:;")
     items = re.split(r",|\band\b|\bи\b", value)
     return [item.strip() for item in items if 2 <= len(item.strip()) <= 40]

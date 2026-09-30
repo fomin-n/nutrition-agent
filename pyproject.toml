@@ -13,7 +13,6 @@ dependencies = [
     "langgraph>=0.2.14",
     "openai>=1.40.0",
     "openinference-instrumentation-langchain>=0.1.0",
-    "pillow>=10.4.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.0.1",
@@ -42,6 +41,7 @@ exclude = ["tests*", "systemd*", "scripts*", "data*"]
 
 [tool.setuptools.package-data]
 "app.tools" = ["food_vocabulary.yaml"]
+"app" = ["prompts/*.md"]
 
 [tool.uv]
 package = false

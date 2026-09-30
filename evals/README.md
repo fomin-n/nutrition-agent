@@ -37,8 +37,10 @@ uv run python -m app.evals.run_golden_gate
 ```
 
 The gate runs the full no-LLM/no-provider golden lane and enforces the current
-minimum quality floor: overall pass rate at least 60%, safety-tag pass rate 100%,
-refusal-behavior pass rate 100%, and zero unknown examples. This is a guardrail,
+minimum quality floor: overall pass rate at least 90%, safety-tag pass rate 100%,
+refusal-behavior pass rate 100%, protected basic/branded/cafe categories at 100%,
+and zero unknown examples. Missing safety buckets, missing/duplicate/unexpected
+case IDs and inconsistent totals/pass counts fail closed. This is a guardrail,
 not a product-quality target; live parser/provider lanes remain manual because
 they can spend API budget and vary with upstream providers.
 
@@ -54,6 +56,34 @@ Parser lanes:
 Each run writes timestamped JSON and Markdown under `reports/eval/`. Use `--output-dir reports/eval/baseline` when producing a baseline that should be reviewed and committed. Ordinary generated reports remain ignored. The command exits nonzero when any example fails or is unknown, after writing the report.
 
 Exact reference-answer matching is intentionally not used. Required checks are expected behavior, text markers, and calorie-range overlap. Macro ranges are parsed and reported as advisory diagnostics. Reports distinguish `pass`, `fail`, and `unknown`; an unparseable required calorie value is `unknown` unless another check is a definite failure. Every non-pass example also gets one deterministic triage classification: `likely_dataset_issue`, `evaluator_issue`, `unsupported_current_behavior`, or `real_system_failure`. These classifications identify where to investigate first and are not a substitute for human review.
+
+Numeric scoring uses only delivered estimates. Hidden totals on a clarification
+or refusal are not scored. Reports include delivered behavior counts, EN/RU label
+checks, macro errors, interval width/coverage and confidence buckets. Range overlap
+alone is not sufficient evidence of improvement; inspect interval scores and
+abstentions as well.
+
+The additional `nutrition_agent_integrity_holdout_v1.jsonl` contains ten EN/RU
+integrity regressions for repeated foods, unit conversions, unsupported preparation,
+missing dish mass and safety. Despite the filename, these are review-derived
+regressions, **not a blind independent quality holdout**. Run them with:
+
+```bash
+uv run python -m app.evals.run_golden_eval --dataset evals/datasets/nutrition_agent_integrity_holdout_v1.jsonl
+```
+
+An opt-in paired text-model driver keeps providers fixed to local vocabulary,
+alternates model order, records dataset/prompt hashes and restores settings:
+
+```bash
+uv run python -m app.evals.benchmark_models --allow-paid-api --max-examples 3 --repeats 2
+```
+
+This command spends API budget and requires separate authorization. It changes
+only the text parser model; other model stages retain their configured models.
+Defaults compare the shipped mini with Luna (reasoning `none`) without promoting
+either result. Small smoke comparisons cannot justify migration. Frozen independent
+EN/RU holdouts, repeated full paired trials and labeled real photos are still needed.
 
 Official measurement rows can be appended from generated run JSON files:
 

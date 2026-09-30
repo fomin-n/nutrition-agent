@@ -27,7 +27,7 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
     language = state_language(state)
     failures = state.get("retrieval_failures", [])
     items = state.get("ingredient_nutrition", [])
-    if failures and not _has_usable_partial_estimate(items, failures):
+    if failures:
         foods = ", ".join(failure.ingredient_name for failure in failures[:3])
         if language == "ru":
             text = (
@@ -46,7 +46,7 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
                 is_clarification=True,
             )
         }
-    if meal is None or totals is None or not meal.ingredients:
+    if meal is None or meal.needs_clarification or totals is None or not meal.ingredients:
         question = localize_clarification_question(
             meal.clarification_question if meal else None,
             language,
@@ -65,7 +65,7 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
             )
         }
 
-    confidence = _combined_confidence(meal, totals, has_failures=bool(failures))
+    confidence = _combined_confidence(meal, totals)
     normalized = state.get("normalized_input")
     normalized_text = normalized.text if normalized and normalized.text else ""
     if len(items) >= 2 and _is_comparison_request(normalized_text):
@@ -84,18 +84,6 @@ def synthesize_answer(state: NutritionGraphState) -> NutritionGraphState:
     item_warnings = [item.warning for item in items if item.warning]
     if item_warnings:
         assumptions = [*assumptions, *item_warnings]
-    if failures:
-        foods = ", ".join(failure.ingredient_name for failure in failures[:3])
-        assumptions = [
-            *assumptions,
-            (
-                f"Частичная оценка: надежные данные не найдены для {foods}; "
-                "нужно уточнить продукт или состав."
-                if language == "ru"
-                else f"Partial estimate: reliable data was unavailable for {foods}; "
-                "the product or composition needs clarification."
-            ),
-        ]
     text = _format_estimate(totals, assumptions, confidence, language=language)
     if confidence == "low":
         text = f"{text}\n{_optional_refinement_note(language)}"
@@ -168,28 +156,10 @@ def _format_confidence(confidence: Confidence, language: str) -> str:
 def _combined_confidence(
     meal: MealUnderstanding,
     totals: NutritionTotals,
-    *,
-    has_failures: bool = False,
 ) -> Confidence:
-    if totals.warnings or has_failures:
+    if totals.warnings:
         return "low"
     return meal.confidence
-
-
-def _has_usable_partial_estimate(items: list, failures: list) -> bool:
-    resolved = sum(_midpoint(item.grams_min, item.grams_max) for item in items)
-    missing = sum(
-        _midpoint(failure.grams_min, failure.grams_max)
-        for failure in failures
-        if failure.grams_min is not None and failure.grams_max is not None
-    )
-    if resolved <= 0 or missing <= 0:
-        return False
-    return resolved / (resolved + missing) >= 0.65
-
-
-def _midpoint(minimum: float, maximum: float) -> float:
-    return (minimum + maximum) / 2
 
 
 def _optional_refinement_note(language: str) -> str:

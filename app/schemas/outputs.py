@@ -21,6 +21,7 @@ CriticSource = Literal["deterministic", "llm"]
 class CriticResult(BaseModel):
     action: CriticAction = "accept"
     issues: list[str] = Field(default_factory=list)
+    repairs: list[Literal["restore_canonical_presentation"]] = Field(default_factory=list)
     clarification_question: str | None = None
     source: CriticSource = "deterministic"
     iteration: int = Field(default=0, ge=0)

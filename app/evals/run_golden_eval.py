@@ -50,7 +50,12 @@ MODEL_PRICING_USD_PER_MILLION = {
         "output": 1.60,
         "source": "https://developers.openai.com/api/docs/models/gpt-4.1-mini",
         "checked_date": "2026-06-24",
-    }
+    },
+    "gpt-6-luna": {
+        "input": 0.10, "cached_input": 0.01, "output": 0.50,
+        "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+        "checked_date": "2026-09-28",
+    },
 }
 
 
@@ -166,6 +171,11 @@ def run_golden_eval(
         "llm_usage": llm_usage,
         "numeric_metrics": _aggregate_numeric_metrics(results),
         "confidence_calibration": _confidence_calibration(results),
+        "delivered_behavior_counts": {
+            behavior: sum(r.get("evaluation", {}).get("actual_behavior") == behavior for r in results)
+            for behavior in ("estimate", "clarify", "refuse", "unknown")
+        },
+        "numeric_scoring_policy": "Only delivered estimates; internal totals on refusals/clarifications excluded.",
     }
     run_scope = split or "all"
     settings = get_settings()
@@ -186,6 +196,10 @@ def run_golden_eval(
             "openai_vision_model": settings.openai_vision_model,
             "openai_critic_model": settings.openai_critic_model,
             "temperature": 0.0,
+            "reasoning_effort": settings.openai_reasoning_effort,
+            "text_reasoning_effort": settings.openai_text_reasoning_effort,
+            "max_output_tokens": settings.openai_max_output_tokens,
+            "qualitative_critic_enabled": settings.qualitative_critic_enabled,
             "critic_max_iterations": settings.critic_max_iterations,
             "openai_moderation_enabled": settings.openai_moderation_enabled,
             "provider_flags": {
@@ -390,19 +404,22 @@ def _capture_llm_usage(*, enabled: bool) -> Iterator[LLMUsageCollector]:
 
     original_structured = structured.build_chat_model
     original_image = image_recognizer.build_chat_model
+    original_packaging = packaging_recognizer.build_chat_model
 
-    def build_with_collector(model_name: str, *, temperature: float = 0.0):
-        model = original_structured(model_name, temperature=temperature)
+    def build_with_collector(model_name: str, *, temperature: float = 0.0, task: str = "text"):
+        model = original_structured(model_name, temperature=temperature, task=task)
         callbacks = [*(model.callbacks or []), collector]
         return model.model_copy(update={"callbacks": callbacks})
 
     structured.build_chat_model = build_with_collector
     image_recognizer.build_chat_model = build_with_collector
+    packaging_recognizer.build_chat_model = build_with_collector
     try:
         yield collector
     finally:
         structured.build_chat_model = original_structured
         image_recognizer.build_chat_model = original_image
+        packaging_recognizer.build_chat_model = original_packaging
 
 
 @contextmanager
@@ -518,6 +535,11 @@ def _parsed_nutrition_from_graph_states(
 ) -> dict[str, dict[str, float]] | None:
     for state in reversed(graph_states):
         final = state.get("final_estimate")
+        if final is None:
+            continue
+        payload = final.model_dump() if isinstance(final, BaseModel) else final
+        if isinstance(payload, dict) and (payload.get("is_refusal") or payload.get("is_clarification")):
+            return None
         totals = getattr(final, "totals", None)
         if totals is None and isinstance(final, dict):
             totals = final.get("totals")

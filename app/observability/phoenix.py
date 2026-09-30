@@ -17,6 +17,18 @@ _ROOT_METADATA_KEYS = {
     "request_type",
     "request_language",
 }
+_ALLOWED_METADATA_KEYS = _ROOT_METADATA_KEYS | {
+    "app_version", "graph_version", "use_llm", "openai_text_model", "openai_vision_model",
+    "openai_vision_escalation_model", "openai_vision_escalation_confidence",
+    "openai_critic_model", "critic_max_iterations",
+    "telegram.update.id", "telegram.user.id", "telegram.user.username",
+    "telegram.user.first_name", "telegram.user.last_name", "telegram.user.display_name",
+    "telegram.user.language_code", "telegram.user.is_bot", "telegram.chat.id",
+    "telegram.chat.type", "telegram.chat.title", "telegram.chat.username",
+    "telegram.chat.is_forum", "telegram.conversation.id", "telegram.message.id",
+    "telegram.message.thread_id", "telegram.message.date", "telegram.message.media_group_id",
+    "telegram.message.is_topic_message",
+}
 _SENSITIVE_METADATA_KEY_PARTS = (
     "access_key",
     "access_token",
@@ -52,21 +64,27 @@ def configure_phoenix_tracing(settings: Settings | None = None) -> bool:
         return _ENABLED
 
     try:
-        from phoenix.otel import register
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from phoenix.otel import GRPCSpanExporter, HTTPSpanExporter
 
-        protocol = (
-            "http/protobuf"
-            if settings.phoenix_collector_endpoint.endswith("/v1/traces")
-            else "grpc"
+        from app.observability.redaction import RedactingExporter, private_trace_config
+
+        exporter_class = (
+            HTTPSpanExporter if settings.phoenix_collector_endpoint.endswith("/v1/traces")
+            else GRPCSpanExporter
         )
-        register(
-            project_name=settings.phoenix_project_name,
-            endpoint=settings.phoenix_collector_endpoint,
-            protocol=protocol,
-            auto_instrument=True,
-        )
+        provider = TracerProvider(resource=Resource.create({"openinference.project.name": settings.phoenix_project_name}))
+        provider.add_span_processor(BatchSpanProcessor(RedactingExporter(
+            exporter_class(endpoint=settings.phoenix_collector_endpoint)
+        )))
+        trace.set_tracer_provider(provider)
+        LangChainInstrumentor().instrument(tracer_provider=provider, config=private_trace_config())
     except Exception as exc:  # pragma: no cover - optional integration fallback
-        LOGGER.warning("Phoenix tracing initialization failed; continuing without traces: %s", exc)
+        LOGGER.warning("Phoenix tracing initialization failed; error_type=%s", type(exc).__name__)
         _ENABLED = False
     else:
         _ENABLED = True
@@ -135,7 +153,7 @@ def phoenix_trace_context(
                     span.set_attribute(key, value)
     except Exception as exc:  # pragma: no cover - optional integration fallback
         stack.close()
-        LOGGER.warning("Phoenix trace context failed; continuing without trace metadata: %s", exc)
+        LOGGER.warning("Phoenix trace context failed; error_type=%s", type(exc).__name__)
         yield
         return
 
@@ -147,7 +165,7 @@ def _safe_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bo
     safe: dict[str, str | int | float | bool] = {}
     for key, value in metadata.items():
         normalized_key = str(key).strip()
-        if not normalized_key or _is_sensitive_metadata_key(normalized_key) or value is None:
+        if normalized_key not in _ALLOWED_METADATA_KEYS or _is_sensitive_metadata_key(normalized_key) or value is None:
             continue
         if isinstance(value, bool | int | float):
             safe[normalized_key] = value

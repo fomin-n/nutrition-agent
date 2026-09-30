@@ -13,6 +13,8 @@ from app.tools.cache import JsonFileCache
 from app.tools.fallback_nutrition import lookup_fallback_food, normalize_food_query
 from app.tools.fatsecret_client import FatSecretAuthClient, FatSecretClient
 from app.tools.food_query import NormalizedFoodQuery, normalize_food_description
+from app.tools.food_vocabulary import load_food_vocabulary
+from app.tools.http_pool import provider_http_client
 from app.tools.nutrition_arbitration import arbitrate_candidate
 from app.tools.nutrition_ranking import rank_candidates
 from app.tools.nutrition_validation import validate_candidate
@@ -58,9 +60,8 @@ class NutritionSourceRouter:
                     candidates.append(fallback)
         ranked = rank_candidates(_dedupe_candidates(candidates), query)
         LOGGER.info(
-            "Nutrition retrieval query_kind=%s canonical=%r result_count=%d top_source=%s top_id=%s",
+            "Nutrition retrieval query_kind=%s result_count=%d top_source=%s top_id=%s",
             query.query_kind,
-            query.canonical_query,
             len(ranked),
             ranked[0].source if ranked else None,
             ranked[0].source_id if ranked else None,
@@ -118,6 +119,7 @@ class NutritionSourceRouter:
             )
         search_results = _dedupe_candidates(search_results)
         detailed: list[NutritionCandidate] = []
+        search_results = rank_candidates(search_results, query)
         for candidate in search_results[:3]:
             if candidate.source_id:
                 detail = self.fatsecret.get_food(
@@ -141,10 +143,16 @@ class NutritionSourceRouter:
                     search_query,
                     data_types=data_types_for_query_kind(query.query_kind),
                     page_size=10,
-                    require_details=True,
+                    require_details=False,
                 )
             )
-        return _dedupe_candidates(candidates)
+        candidates = rank_candidates(_dedupe_candidates(candidates), query)
+        limit = get_settings().usda_detail_limit
+        return [
+            (self.usda.get_food(candidate.source_id) or candidate)
+            if index < limit and candidate.source_id else candidate
+            for index, candidate in enumerate(candidates)
+        ]
 
     def _open_food_facts_candidates(self, query: NormalizedFoodQuery) -> list[NutritionCandidate]:
         if self.open_food_facts is None:
@@ -159,15 +167,17 @@ class NutritionSourceRouter:
 def get_default_router() -> NutritionSourceRouter:
     settings = get_settings()
     cache = JsonFileCache(settings.nutrition_cache_dir)
-    usda = UsdaClient(reveal_secret(settings.usda_api_key), cache) if settings.enable_usda else None
+    client = provider_http_client()
+    usda = UsdaClient(reveal_secret(settings.usda_api_key), cache, client=client) if settings.enable_usda else None
     fatsecret = None
     if settings.enable_fatsecret:
         auth_client = FatSecretAuthClient(
             client_id=reveal_secret(settings.fatsecret_client_id),
             client_secret=reveal_secret(settings.fatsecret_client_secret),
+            client=client,
         )
-        fatsecret = FatSecretClient(auth_client=auth_client)
-    open_food_facts = OpenFoodFactsClient(cache) if settings.enable_open_food_facts else None
+        fatsecret = FatSecretClient(auth_client=auth_client, client=client)
+    open_food_facts = OpenFoodFactsClient(cache, client=client) if settings.enable_open_food_facts else None
     return NutritionSourceRouter(usda=usda, fatsecret=fatsecret, open_food_facts=open_food_facts)
 
 
@@ -231,6 +241,25 @@ def _fallback_candidate(query: NormalizedFoodQuery) -> NutritionCandidate | None
     if per_100g is None:
         return None
     candidate = candidate_from_per_100g(per_100g, source="fallback")
+    if (
+        query.preparation == "fried" and "fried" not in per_100g.food_name
+        and load_food_vocabulary().food_roles.get(per_100g.food_name) in {"protein", "starch", "vegetable"}
+    ):
+        oil = lookup_fallback_food("olive oil")
+        if oil is None:
+            return None
+        oil_share = 0.0 if query.frying_oil_in_meal else 0.05
+        values = {
+            nutrient: getattr(per_100g, nutrient) * (1 - oil_share) + getattr(oil, nutrient) * oil_share
+            for nutrient in ("calories_kcal", "protein_g", "fat_g", "carbs_g")
+        }
+        prepared = per_100g.model_copy(update={
+            **values, "food_name": f"fried {per_100g.food_name}",
+            "source_id": f"preparation:pan-fried-v1:{per_100g.food_name}:{oil_share}",
+        })
+        candidate = candidate_from_per_100g(prepared, source="fallback")
+        candidate.metadata["preparation_assumption"] = "unbreaded_pan_frying"
+        candidate.source_confidence = "low"
     if query.query_kind == "branded_product":
         return candidate.model_copy(
             update={
@@ -248,6 +277,11 @@ def _fallback_candidate(query: NormalizedFoodQuery) -> NutritionCandidate | None
 
 def provider_search_queries(query: NormalizedFoodQuery) -> list[str]:
     queries = [query.canonical_query, *query.query_expansions]
+    if query.preparation:
+        base = normalize_food_query(query.canonical_query)
+        for term in ("cooked", "raw", "boiled", "fried", "dry"):
+            base = base.replace(term, " ")
+        queries.insert(0, f"{' '.join(base.split())} {query.preparation}")
     normalized = normalize_food_query(query.canonical_query)
     original_normalized = normalize_food_query(query.original)
     if original_normalized != normalized and len(original_normalized.split()) <= 6:
@@ -329,10 +363,10 @@ def candidate_from_per_100g(
 
 
 def _dedupe_candidates(candidates: list[NutritionCandidate]) -> list[NutritionCandidate]:
-    seen: set[tuple[str, str | None, str]] = set()
+    seen: set[tuple[str, str | None, str | None, str]] = set()
     result: list[NutritionCandidate] = []
     for candidate in candidates:
-        key = (candidate.source, candidate.source_id, candidate.name.lower())
+        key = (candidate.source, candidate.source_id, candidate.serving_id, candidate.name.lower())
         if key in seen:
             continue
         seen.add(key)

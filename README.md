@@ -98,22 +98,23 @@ sequenceDiagram
     G->>P: lookup ingredients
     P-->>G: ranked candidates
     Note over G: deterministic calc -> synth -> critic loop
-    G->>M: record_turn(...)
-    G-->>H: final answer
+    G-->>H: final answer / deferred memory write
     H-->>U: reply
+    H->>M: record_turn if generation is unchanged
 ```
 
 ## Model And Deterministic Boundaries
 
 | Area | Behavior |
 | --- | --- |
-| Text model | Structured scope tiebreaks and meal parsing when local logic is insufficient. |
+| Text model | Structured scope tiebreaks and meal parsing; some locally recognized meals still call the model. |
 | Vision model | Food-photo and image+caption recognition. |
+| Package-label model | Transcribes visible label values and their basis; asks for consumed mass when absent. |
 | Critic model | Optional schema-validated qualitative review after deterministic checks. |
 | Moderation API | Optional; local moderation always runs first. |
 | Deterministic code | Retrieval ranking, candidate validation, macro calculation, answer formatting, memory merging, rate limiting, and auth. |
 
-The bounded `critic -> synthesize -> critic` loop can only revisit answer formatting; it cannot reparse food or recompute nutrition values. Model names and limits are configured through `.env`; see [.env.example](.env.example) for the canonical list.
+The bounded `critic -> synthesize -> critic` loop can only revisit answer formatting; it cannot reparse food or recompute nutrition values. Unactionable qualitative revisions stop without replacing a hard-validated answer. Model names and limits are configured through `.env`; see [.env.example](.env.example) for the canonical list.
 
 ## Memory
 
@@ -147,6 +148,8 @@ PHOENIX_COLLECTOR_ENDPOINT=http://127.0.0.1:6006/v1/traces
 ```
 
 Start Phoenix with `./scripts/phoenix.sh start`. Keep it bound to localhost because trace metadata includes Telegram user/chat identifiers. Full setup, SSH tunnel, metadata, and smoke-check notes are in [docs/observability.md](docs/observability.md).
+
+Content is redacted before trace export. `/forget` protects against in-flight memory writes but does not delete external traces or backups. Integrity safeguards and remaining measurement limits are documented in [engineering notes](docs/engineering-integrity.md).
 
 ## Evaluation
 

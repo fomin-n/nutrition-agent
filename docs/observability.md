@@ -109,6 +109,20 @@ Do not add the following to trace metadata or logs:
 
 Application logs include OpenTelemetry `trace_id` and `span_id` values plus request/user/chat/message numeric IDs where relevant. They should not include Telegram names, message contents, credentials, or raw provider payloads.
 
+Content redaction is explicit, not dependent on OpenInference environment defaults.
+The LangChain instrumentor hides inputs/outputs, images, prompts, messages, tool
+definitions and invocation parameters. A final exporter allowlist drops arbitrary
+attributes, child metadata, exception events and status descriptions; operational
+model names, token counts, timing, IDs and approved request metadata remain.
+Application exception logging retains error classes without validation inputs or
+traceback contents. `tests/test_trace_redaction.py` inspects exported instrumented
+spans containing synthetic private data.
+
+This does not make tracing anonymous: approved Telegram identity metadata remains.
+`/forget` deletes app memory, not historical Phoenix records, backups or records
+held by Telegram/OpenAI. Operators must define retention and restricted access for
+those stores separately. Existing traces are not retroactively scrubbed.
+
 ## Smoke Check
 
 1. Start Phoenix with `./scripts/phoenix.sh start`.

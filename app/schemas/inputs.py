@@ -9,7 +9,7 @@ from app.i18n import LanguageCode
 class UserInput(BaseModel):
     """Raw request entering the graph."""
 
-    text: str | None = Field(default=None, description="User text or photo caption.")
+    text: str | None = Field(default=None, max_length=8192, description="User text or photo caption.")
     image_path: str | None = Field(default=None, description="Temporary local image path.")
     image_mime_type: str | None = Field(default=None, description="Best-effort image MIME type.")
     source: Literal["telegram", "cli", "test", "phoenix_eval"] = "telegram"

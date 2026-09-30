@@ -159,11 +159,12 @@ async def forget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     try:
         await asyncio.to_thread(get_memory_service().delete_user_data, user.id)
-    except Exception:
-        LOGGER.exception(
-            "Failed to delete Telegram user memory user_id=%s chat_id=%s",
+    except Exception as exc:
+        LOGGER.error(
+            "Failed to delete Telegram user memory user_id=%s chat_id=%s error_type=%s",
             user.id,
             getattr(update.effective_chat, "id", None),
+            type(exc).__name__,
         )
         await _reply(update, _forget_failed_message(update))
         return
@@ -243,7 +244,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 display_name=user.full_name,
             )
         except AuthConfigurationError:
-            LOGGER.exception("Bot auth is not configured")
+            LOGGER.error("Bot auth is not configured")
             await _reply(update, _auth_not_configured_message(update))
             return
 
@@ -294,6 +295,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if _should_reply_to_album(message):
             await _reply(update, _album_rejected_message(update, text=message.caption))
         return
+    size = getattr(message.photo[-1], "file_size", None)
+    if isinstance(size, int) and size > getattr(get_settings(), "max_image_bytes", 10_000_000):
+        await _reply(update, "Фото слишком большое. Пришлите уменьшенное фото." if _handler_language(update) == "ru" else "Photo is too large. Please send a smaller photo.")
+        return
     async with _user_request_slot(update) as acquired:
         if not acquired:
             await _reply(update, _in_flight_message(update, text=message.caption, has_image=True))
@@ -326,6 +331,9 @@ async def _user_request_slot(update: Update) -> AsyncIterator[bool]:
 
 
 async def _process_and_reply(update: Update, *, text: str | None, image_path: str | None = None) -> None:
+    from collections.abc import Callable
+
+    pending_memory: list[Callable[[], None]] = []
     request_context = TelegramRequestContext.from_update(update)
     try:
         answer = await asyncio.to_thread(
@@ -336,22 +344,29 @@ async def _process_and_reply(update: Update, *, text: str | None, image_path: st
             user_id=request_context.user_id,
             session_id=request_context.session_id,
             trace_metadata=request_context.to_trace_metadata(),
+            defer_memory_write=pending_memory.append,
         )
-    except Exception:
-        LOGGER.exception(
-            "Failed to process Telegram message user_id=%s chat_id=%s message_id=%s",
+    except Exception as exc:
+        LOGGER.error(
+            "Failed to process Telegram message user_id=%s chat_id=%s message_id=%s error_type=%s",
             request_context.user_id,
             request_context.chat_id,
             request_context.message_id,
+            type(exc).__name__,
         )
         answer = _processing_error_message(update, text=text, has_image=image_path is not None)
     await _reply(update, answer)
+    for write_memory in pending_memory:
+        await asyncio.to_thread(write_memory)
 
 
 async def _reply(update: Update, text: str) -> None:
+    from app.bot.delivery import split_reply
+
     message = update.effective_message
     if message:
-        await message.reply_text(text)
+        for part in split_reply(text):
+            await message.reply_text(part)
 
 
 async def _delete_login_message(update: Update) -> None:
@@ -372,7 +387,7 @@ async def _delete_login_message(update: Update) -> None:
             user_id,
             chat_id,
             message_id,
-            exc,
+            type(exc).__name__,
         )
 
 
@@ -392,11 +407,12 @@ async def _consume_usage_or_reply(
             user.id,
             has_image=has_image,
         )
-    except Exception:
-        LOGGER.exception(
-            "Failed to verify request limits user_id=%s chat_id=%s",
+    except Exception as exc:
+        LOGGER.error(
+            "Failed to verify request limits user_id=%s chat_id=%s error_type=%s",
             user.id,
             getattr(update.effective_chat, "id", None),
+            type(exc).__name__,
         )
         await _reply(update, _rate_limit_unavailable_message_for_update(update, text=text, has_image=has_image))
         return False
@@ -489,13 +505,15 @@ def _privacy_message(update: Update) -> str:
             "Я сохраняю недавние сообщения, краткую историю диалога и устойчивые "
             "пищевые предпочтения, чтобы лучше отвечать на уточнения. Счётчики "
             "использования хранятся отдельно для защиты от злоупотреблений. "
-            "Команда /forget удаляет сохранённую память диалога."
+            "Запросы обрабатываются Telegram и OpenAI. Команда /forget удаляет память "
+            "диалога, но не счётчики, резервные копии или записи внешних сервисов."
         )
     return (
         "I store recent messages, a compact conversation summary, and stable nutrition "
         "preferences so follow-up questions work better. Usage counters are kept "
         "separately for abuse and cost control. Use /forget to delete saved conversation "
-        "memory."
+        "memory, not usage counters, backups, or external-service records. "
+        "Requests are processed by Telegram and OpenAI."
     )
 
 
@@ -680,7 +698,7 @@ def _is_banned(update: Update) -> bool:
     try:
         return get_auth_service(require_secret=False).is_banned(user.id)
     except AuthConfigurationError:
-        LOGGER.exception("Bot ban list is not configured")
+        LOGGER.error("Bot ban list is not configured")
         return True
 
 
@@ -695,5 +713,5 @@ def _is_authorized(update: Update) -> bool:
     try:
         return _auth_service_for_access().is_authorized(user.id)
     except AuthConfigurationError:
-        LOGGER.exception("Bot auth is not configured")
+        LOGGER.error("Bot auth is not configured")
         return False

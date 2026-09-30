@@ -279,7 +279,7 @@ def test_local_malformed_composite_triggers_one_forced_llm_repair(monkeypatch) -
     )
 
     meal = result["meal"]
-    assert calls == [(True, ("composite_not_decomposed",))]
+    assert calls == [(True, ("component_weights_do_not_match_total", "composite_not_decomposed"))]
     assert [ingredient.name for ingredient in meal.ingredients] == ["yogurt plain", "bread"]
 
 

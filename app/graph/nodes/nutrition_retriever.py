@@ -1,9 +1,8 @@
-import json
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.graph.state import NutritionGraphState
 from app.llm.client import get_settings
@@ -12,6 +11,7 @@ from app.schemas.nutrition import (
     IngredientEstimate,
     IngredientNutrition,
     NutritionCandidate,
+    NutritionValues,
     RetrievalDiagnostic,
     RetrievalFailure,
 )
@@ -22,12 +22,14 @@ from app.tools.fallback_nutrition import (
     is_plain_water_query,
     lookup_component_class_prior,
 )
+from app.tools.food_normalization import detect_preparation, find_food_mentions
 from app.tools.food_query import normalize_food_description
 from app.tools.food_vocabulary import load_food_vocabulary
+from app.tools.meal_validation import clarification_meal, validate_meal
 from app.tools.nutrition_tools import (
+    CandidateSelection,
     NutritionSourceRouter,
     candidate_from_per_100g,
-    generic_fallback_candidate,
     get_default_router,
     provider_search_queries,
 )
@@ -79,6 +81,14 @@ class NutritionRetriever:
             language=language,
             source_route=source_route,
         )
+        preparation = detect_preparation(ingredient.preparation or "") or detect_preparation(ingredient.name)
+        if load_food_vocabulary().food_roles.get(query.canonical_query) == "fat":
+            preparation = None
+        query = replace(query, preparation=preparation)
+        if preparation == "fried":
+            roles = load_food_vocabulary().food_roles
+            oil_separate = ingredient.origin == "composite_allocation" or any(roles.get(m.canonical_name) == "fat" for m in find_food_mentions(raw_input or ""))
+            query = replace(query, frying_oil_in_meal=oil_separate)
         modified_water_context = bool(
             query.food_category == "plain_water"
             and raw_input
@@ -91,24 +101,36 @@ class NutritionRetriever:
                 language=language,
                 source_route=source_route,
             )
-        selection = self.router.select_candidate(query)
+        if ingredient.observed_label is not None:
+            label = ingredient.observed_label
+            factor = 1.0 if label.basis == "per_100g" else 100.0 / float(label.serving_grams or 100)
+            observed = NutritionCandidate(
+                source="observed_label", source_id="label", name=ingredient.name,
+                serving_id=label.basis, source_confidence=ingredient.confidence,
+                values_per_100g=NutritionValues(
+                    calories_kcal=label.calories_kcal * factor, protein_g=label.protein_g * factor,
+                    fat_g=label.fat_g * factor, carbohydrate_g=label.carbs_g * factor,
+                ), metadata={"basis": label.basis, "serving_grams": label.serving_grams},
+            )
+            validation = validate_candidate(observed, query)
+            selection = CandidateSelection(
+                selected=observed if validation.accepted else None,
+                candidates=[observed], validations=[validation], arbitration_path="observed_label",
+            )
+        else:
+            selection = self.router.select_candidate(query)
         selected = selection.selected
         warning: str | None = None
         fallback_path: str | None = None
-        if (
-            selected is None
-            and not modified_water_context
-            and query.query_kind in {"user_composite_meal", "photo_derived_food"}
-        ):
-            generic = generic_fallback_candidate(ingredient.name)
-            validation = validate_candidate(generic, query)
-            selection.candidates.append(generic)
-            selection.validations.append(validation)
-            if validation.accepted:
-                selected = generic
-                fallback_path = "generic_mixed_food_for_composite_or_photo"
-                warning = f"No source match for {ingredient.name}; used a generic composite-food fallback."
         if selected is not None and selected.source == "fallback":
+            if selected.metadata.get("preparation_assumption"):
+                warning = (
+                    "Принята жарка без панировки; масло учтено отдельно." if query.frying_oil_in_meal
+                    else "Принята жарка без панировки с 5% масла по массе готовой порции."
+                ) if language == "ru" else (
+                    "Assumed unbreaded frying; oil is counted separately." if query.frying_oil_in_meal
+                    else "Assumed unbreaded frying with oil at 5% of cooked serving mass."
+                )
             if is_component_class_prior_name(selected.name):
                 fallback_path = "component_class_prior_backfill"
                 warning = _component_class_prior_warning(
@@ -131,12 +153,19 @@ class NutritionRetriever:
                 validation = validate_candidate(selected, query)
                 selection.candidates.append(selected)
                 selection.validations.append(validation)
+                if not validation.accepted:
+                    selected = None
                 fallback_path = "component_class_prior_backfill"
                 warning = _component_class_prior_warning(
                     ingredient.name,
                     class_prior.name,
                     language=language,
                 )
+
+        # All sources, including injected routers and class priors, cross this boundary.
+        if selected is not None and not validate_candidate(selected, query).accepted:
+            selected = None
+            fallback_path = None
 
         settings = get_settings()
         raw_context = None
@@ -185,7 +214,11 @@ class NutritionRetriever:
             fallback_path=fallback_path,
             raw_context=raw_context,
         )
-        LOGGER.info("Nutrition retrieval diagnostic=%s", json.dumps(diagnostic.model_dump(), ensure_ascii=True))
+        LOGGER.info(
+            "Nutrition retrieval request_id=%s candidates=%d selected_identity=%s path=%s",
+            request_id, len(diagnostic.candidates), diagnostic.selected_identity,
+            diagnostic.arbitration_path,
+        )
 
         if selected is None:
             failure = RetrievalFailure(
@@ -197,9 +230,8 @@ class NutritionRetriever:
                 component_origin=ingredient.origin,
             )
             LOGGER.warning(
-                "Nutrition retrieval failed request_id=%s canonical=%r reason=%s",
+                "Nutrition retrieval failed request_id=%s reason=%s",
                 request_id,
-                query.canonical_query,
                 failure.reason,
             )
             return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
@@ -217,9 +249,8 @@ class NutritionRetriever:
             return LookupOutcome(item=None, failure=failure, diagnostic=diagnostic)
 
         LOGGER.info(
-            "Nutrition selected ingredient=%r canonical=%r source=%s source_id=%s score=%s",
-            ingredient.name,
-            query.canonical_query,
+            "Nutrition selected request_id=%s source=%s source_id=%s score=%s",
+            request_id,
             selected.source,
             selected.source_id,
             selected.match_score,
@@ -245,11 +276,19 @@ class NutritionRetriever:
         elif _should_widen_provider_prepared_dish(selected.source, query.query_kind, grams_min, grams_max):
             grams_min, grams_max = _widen_provider_prepared_dish_grams(grams_min, grams_max)
             warning = warning or _provider_prepared_dish_warning(ingredient.name, language=language)
+        factor_min = grams_min / ingredient.grams_min if ingredient.grams_min else 1.0
+        factor_max = grams_max / ingredient.grams_max
+        if selected.metadata.get("preparation_assumption"):
+            factor_min, factor_max = min(factor_min, 0.8), max(factor_max, 1.2)
+        diagnostic.source_factor_min = factor_min
+        diagnostic.source_factor_max = factor_max
         item = IngredientNutrition(
             ingredient_name=ingredient.name,
             matched_food_name=per_100g.food_name,
-            grams_min=grams_min,
-            grams_max=grams_max,
+            grams_min=ingredient.grams_min,
+            grams_max=ingredient.grams_max,
+            source_factor_min=factor_min,
+            source_factor_max=factor_max,
             per_100g=per_100g,
             source=per_100g.source,
             warning=warning,
@@ -262,6 +301,27 @@ def retrieve_nutrition(state: NutritionGraphState) -> NutritionGraphState:
     meal = state.get("meal")
     if meal is None:
         return {"ingredient_nutrition": []}
+    if meal.needs_clarification:
+        return {
+            "meal": meal.model_copy(update={"ingredients": []}),
+            "ingredient_nutrition": [],
+            "retrieval_failures": [],
+            "retrieval_diagnostics": [],
+        }
+
+    normalized = state.get("normalized_input")
+    scope = state.get("scope_decision")
+    failures = validate_meal(
+        meal, normalized.text or "" if normalized else "",
+        allow_observed_label=bool(normalized and normalized.has_image and scope and scope.route == "packaged_food"),
+    )
+    if failures:
+        LOGGER.warning("Meal rejected request_id=%s reasons=%s", state.get("request_id"), failures)
+        return {
+            "meal": clarification_meal(normalized.language if normalized else "en"),
+            "ingredient_nutrition": [],
+            "retrieval_failures": [],
+        }
 
     scope = state.get("scope_decision")
     normalized = state.get("normalized_input")
@@ -435,11 +495,11 @@ def _lookup_ingredient_safely(
             request_id=request_id,
             raw_input=raw_input,
         )
-    except Exception:
-        LOGGER.exception(
-            "Nutrition ingredient lookup raised request_id=%s ingredient=%r",
+    except Exception as exc:
+        LOGGER.error(
+            "Nutrition ingredient lookup raised request_id=%s error_type=%s",
             request_id,
-            ingredient.name,
+            type(exc).__name__,
         )
         return _unexpected_failure_outcome(
             ingredient,
@@ -449,9 +509,8 @@ def _lookup_ingredient_safely(
         )
     finally:
         LOGGER.info(
-            "Nutrition ingredient lookup complete request_id=%s ingredient=%r duration_ms=%.1f",
+            "Nutrition ingredient lookup complete request_id=%s duration_ms=%.1f",
             request_id,
-            ingredient.name,
             (time.perf_counter() - started) * 1000,
         )
 
@@ -487,6 +546,9 @@ def _unexpected_failure_outcome(
         ingredient_name=ingredient.name,
         canonical_query=canonical_query,
         reason="unexpected_retrieval_error",
+        grams_min=ingredient.grams_min,
+        grams_max=ingredient.grams_max,
+        component_origin=ingredient.origin,
     )
     diagnostic = RetrievalDiagnostic(
         request_id=request_id,

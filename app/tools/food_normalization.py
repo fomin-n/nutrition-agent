@@ -155,8 +155,9 @@ PREPARATION_PATTERNS: tuple[tuple[str, str], ...] = (
     ("baked", r"\b(baked|roasted|запеч\w*)\b"),
     ("boiled", r"\b(boiled|варен\w*|отварн\w*)\b"),
     ("grilled", r"\b(grilled|грил\w*)\b"),
-    ("cooked", r"\b(cooked|приготовлен\w*)\b"),
+    ("cooked", r"\b(cooked|приготовлен(?:ный|ная|ное|ные|ного|ной|ных|ную|ным|ными|а|о|ы)?)\b"),
     ("raw", r"\b(raw|сырой|сырая|сырое|сырого)\b"),
+    ("dry", r"\b(dry|uncooked|сухой|сухая|сухие|сухого|сухих)\b"),
 )
 
 
@@ -181,8 +182,7 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
 
     for product in PRODUCT_ALIASES:
         for alias in sorted(product.aliases, key=len, reverse=True):
-            match = _search_alias(normalized, alias)
-            if match:
+            for match in re.finditer(rf"\b{re.escape(normalize_food_query(alias))}\b", normalized):
                 candidates.append(
                     FoodMention(
                         canonical_name=product.canonical_product,
@@ -192,14 +192,12 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
                         product=product,
                     )
                 )
-                break
 
     for food in FALLBACK_FOODS:
         if food.food_category == "plain_water" and not is_plain_water_query(normalized):
             continue
         for alias in sorted((food.name, *food.aliases), key=len, reverse=True):
-            match = _search_alias(normalized, alias)
-            if match:
+            for match in re.finditer(rf"\b{re.escape(normalize_food_query(alias))}\b", normalized):
                 candidates.append(
                     FoodMention(
                         canonical_name=food.name,
@@ -208,14 +206,12 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
                         end=match.end(),
                     )
                 )
-                break
 
     for canonical, patterns in RUSSIAN_FOOD_PATTERNS:
         if canonical == "water" and not is_plain_water_query(normalized):
             continue
         for pattern in patterns:
-            match = re.search(rf"\b(?:{pattern})\b", normalized)
-            if match:
+            for match in re.finditer(rf"\b(?:{pattern})\b", normalized):
                 candidates.append(
                     FoodMention(
                         canonical_name=canonical,
@@ -224,7 +220,6 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
                         end=match.end(),
                     )
                 )
-                break
 
     selected: list[FoodMention] = []
     for candidate in sorted(
@@ -239,7 +234,11 @@ def _find_food_mentions_legacy(text: str) -> tuple[FoodMention, ...]:
             for current in selected
         ):
             continue
-        if any(current.canonical_name == candidate.canonical_name for current in selected):
+        if any(
+            current.canonical_name == candidate.canonical_name
+            and not normalized[min(current.end, candidate.end):max(current.start, candidate.start)].strip()
+            for current in selected
+        ):
             continue
         selected.append(candidate)
     return tuple(sorted(selected, key=lambda item: item.start))
@@ -355,7 +354,11 @@ def allocate_composite_portions(
     *,
     preparation: str | None = None,
 ) -> tuple[CompositeAllocation, ...]:
-    if len(mentions) < 2 or any(mention.product for mention in mentions):
+    if (
+        len(mentions) < 2
+        or any(mention.product for mention in mentions)
+        or len({mention.canonical_name for mention in mentions}) != len(mentions)
+    ):
         return ()
     total_grams = extract_total_portion_grams(text, mentions)
     if total_grams is None:
@@ -399,10 +402,14 @@ def extract_total_portion_grams(
         for quantity in extract_quantity_mentions(normalized)
         if quantity.unit in {"g", "gram", "grams", "г", "гр", "грамм", "грамма", "граммов", "kg", "кг", "oz"}
     ]
-    if len(mentions) < 2 or len(quantities) != 1:
+    if not mentions or len(quantities) != 1:
         return None
     quantity = quantities[0]
-    if not _quantity_looks_like_total_portion(normalized, quantity, mentions):
+    single_total = len(mentions) == 1 and (
+        _single_mention_quantity_looks_like_unmatched_composite_total(normalized, quantity, mentions[0])
+        or _has_total_dish_term(normalized)
+    )
+    if not single_total and not _quantity_looks_like_total_portion(normalized, quantity, mentions):
         return None
     if quantity.unit in {"kg", "кг"}:
         return quantity.amount * 1000
@@ -474,6 +481,8 @@ def _quantity_for_mention(
     ):
         return None
     if len(mentions) == 1:
+        # A weighed mass overrides an approximate spoon/count conversion.
+        quantities = tuple(sorted(quantities, key=lambda q: not is_mass_quantity(q)))
         if _single_mention_quantity_looks_like_unmatched_composite_total(
             normalized,
             quantities[0],
@@ -481,11 +490,20 @@ def _quantity_for_mention(
         ):
             return None
         return quantities[0]
-    nearest = min(quantities, key=lambda item: _span_distance(mention, item))
-    owner = min(mentions, key=lambda item: _span_distance(item, nearest))
-    if owner != mention or _span_distance(mention, nearest) > 32:
+    owned = [q for q in quantities if min(mentions, key=lambda m: _span_distance(m, q)) == mention]
+    if not owned:
+        return None
+    nearest = min(owned, key=lambda q: (not is_mass_quantity(q), _span_distance(mention, q)))
+    if _span_distance(mention, nearest) > 32:
         return None
     return nearest
+
+
+def is_mass_quantity(quantity: QuantityMention) -> bool:
+    return quantity.unit in {
+        "g", "gram", "grams", "г", "гр", "грамм", "грамма", "граммов", "kg", "кг",
+        "oz", "ounce", "ounces",
+    }
 
 
 def _span_distance(mention: FoodMention, quantity: QuantityMention) -> int:

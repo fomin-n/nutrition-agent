@@ -17,11 +17,25 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
     deterministic = _deterministic_critic(state).model_copy(
         update={"source": "deterministic", "iteration": iteration}
     )
+    history = state.get("critic_history", [])
+    if (
+        deterministic.action == "revise" and iteration > 0 and history
+        and history[-1].issues == deterministic.issues
+    ):
+        deterministic = deterministic.model_copy(update={
+            "action": "clarify",
+            "clarification_question": default_clarification_question(state_language(state)),
+        })
     if deterministic.action != "accept":
         _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
-    if not state.get("use_llm", False) or not has_openai_key():
+    final = state.get("final_estimate")
+    if (
+        not state.get("use_llm", False) or not has_openai_key()
+        or final is None or final.is_refusal or final.is_clarification
+        or not getattr(get_settings(), "qualitative_critic_enabled", True)
+    ):
         _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
 
@@ -40,7 +54,7 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
             ),
             request_id,
             iteration,
-            exc,
+            type(exc).__name__,
         )
         _log_result(deterministic, request_id=request_id)
         return {"critic_result": deterministic}
@@ -58,8 +72,17 @@ def critic(state: NutritionGraphState) -> NutritionGraphState:
         return {"critic_result": deterministic}
 
     issues = [issue.strip() for issue in llm_result.issues if issue.strip()]
-    if llm_result.action == "revise" and not issues:
-        issues = ["qualitative critic requested canonical answer regeneration"]
+    if llm_result.action == "revise":
+        from app.graph.nodes.synthesizer import synthesize_answer
+
+        regenerated = synthesize_answer(state).get("final_estimate")
+        if (
+            "restore_canonical_presentation" not in llm_result.repairs
+            or regenerated is None or regenerated.text == final.text
+            or state.get("critic_iteration", 0) > 0
+        ):
+            LOGGER.warning("Unactionable critic revision request_id=%s; preserving validated answer", request_id)
+            return {"critic_result": deterministic, "critic_history": [*state.get("critic_history", []), llm_result]}
     result = llm_result.model_copy(
         update={
             "issues": issues,

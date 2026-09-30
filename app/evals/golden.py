@@ -130,7 +130,10 @@ def evaluate_answer(
     answer_folded = _normalize_text_match(answer)
     contained = [value for value in must_contain if _normalize_text_match(value) in answer_folded]
     forbidden = [value for value in must_not_contain if _normalize_text_match(value) in answer_folded]
-    parsed_nutrition = parsed_nutrition_override or parse_nutrition_ranges(answer)
+    parsed_nutrition = (
+        parsed_nutrition_override or parse_nutrition_ranges(answer)
+        if actual_behavior == "estimate" else {}
+    )
     numeric = _evaluate_numeric_ranges(example.output.acceptable_range, parsed_nutrition)
     numeric_metrics = evaluate_numeric_magnitude(example.output.nutrition, parsed_nutrition)
 
@@ -140,6 +143,11 @@ def evaluate_answer(
         failed_checks.append(
             f"behavior: expected {example.output.expected_behavior}, got {actual_behavior}"
         )
+    expected_language = example.input.language
+    if actual_behavior == "estimate" and expected_language in {"ru", "en"}:
+        labels = ("калории", "белки", "жиры", "углеводы") if expected_language == "ru" else ("calories", "protein", "fat", "carbs")
+        if not any(label in answer.lower() for label in labels):
+            failed_checks.append(f"language: missing {expected_language} nutrition labels")
     if must_contain and not contained:
         failed_checks.append(f"must_contain_any: none of {must_contain!r} found")
     if forbidden:
@@ -177,9 +185,12 @@ def classify_answer_behavior(answer: str) -> Literal["estimate", "clarify", "ref
         "cannot help",
         "can’t help",
         "не могу помочь",
+        "не могу помогать",
         "с этим запросом я не могу",
     )
     clarification_markers = (
+        "couldn't find reliable nutrition data",
+        "couldn’t find reliable nutrition data",
         "need one more detail",
         "please clarify",
         "what foods are in",

@@ -59,6 +59,7 @@ class NormalizedFoodQuery:
     brand: str | None = None
     restaurant: str | None = None
     preparation: str | None = None
+    frying_oil_in_meal: bool = False
     quantity: float | None = None
     unit: str | None = None
     region: str | None = None

@@ -156,7 +156,7 @@ def find_embedding_food_mentions(
     try:
         return get_food_linker().find_mentions(text, threshold=threshold)
     except Exception as exc:  # pragma: no cover - defensive degradation
-        LOGGER.warning("Food embedding linker unavailable; falling back to legacy matcher: %s", exc)
+        LOGGER.warning("Food embedding linker unavailable; falling back to legacy matcher: %s", type(exc).__name__)
         return ()
 
 
@@ -164,7 +164,7 @@ def link_food_span(span: str, *, threshold: float) -> LinkedFoodSpan | None:
     try:
         return get_food_linker().link_span(span, threshold=threshold)
     except Exception as exc:  # pragma: no cover - defensive degradation
-        LOGGER.warning("Food embedding span link failed; falling back to legacy matcher: %s", exc)
+        LOGGER.warning("Food embedding span link failed; falling back to legacy matcher: %s", type(exc).__name__)
         return None
 
 

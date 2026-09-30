@@ -1,8 +1,10 @@
 import logging
+import math
 from typing import Any
 
 import httpx
 
+from app.execution import bounded_timeout
 from app.schemas.nutrition import NutritionCandidate, NutritionPer100g, NutritionValues
 from app.tools.cache import JsonFileCache
 from app.tools.fallback_nutrition import normalize_food_query
@@ -11,9 +13,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class OpenFoodFactsClient:
-    def __init__(self, cache: JsonFileCache, timeout_seconds: float = 8.0) -> None:
+    def __init__(self, cache: JsonFileCache, timeout_seconds: float = 8.0, client: httpx.Client | None = None) -> None:
         self.cache = cache
         self.timeout_seconds = timeout_seconds
+        self.client = client
 
     def search_product(self, product_name: str) -> NutritionPer100g | None:
         candidates = self.search_products(product_name, page_size=1)
@@ -28,9 +31,11 @@ class OpenFoodFactsClient:
             return [_parse_off_product(product) for product in _cached_products(cached)]
 
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            from contextlib import nullcontext
+            with nullcontext(self.client) if self.client else httpx.Client(timeout=self.timeout_seconds) as client:
                 response = client.get(
                     "https://world.openfoodfacts.org/cgi/search.pl",
+                    timeout=bounded_timeout(self.timeout_seconds),
                     params={
                         "search_terms": product_name,
                         "search_simple": 1,
@@ -43,11 +48,11 @@ class OpenFoodFactsClient:
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            LOGGER.warning("Open Food Facts product search failed for %s: %s", product_name, exc)
+            LOGGER.warning("Open Food Facts search failed error_type=%s", type(exc).__name__)
             return []
 
-        products = payload.get("products") or []
-        if not products:
+        products = payload.get("products") if isinstance(payload, dict) else None
+        if not isinstance(products, list) or not products:
             return []
         self.cache.set(cache_key, {"products": products})
         return [_parse_off_product(product) for product in products if isinstance(product, dict)]
@@ -63,18 +68,20 @@ class OpenFoodFactsClient:
             return _parse_off_product(cached)
 
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            from contextlib import nullcontext
+            with nullcontext(self.client) if self.client else httpx.Client(timeout=self.timeout_seconds) as client:
                 response = client.get(
                     f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json",
+                    timeout=bounded_timeout(self.timeout_seconds),
                     headers={"User-Agent": "nutrition-agent/0.1"},
                 )
                 response.raise_for_status()
                 payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            LOGGER.warning("Open Food Facts barcode lookup failed for %s: %s", barcode, exc)
+            LOGGER.warning("Open Food Facts lookup failed error_type=%s", type(exc).__name__)
             return None
 
-        product = payload.get("product")
+        product = payload.get("product") if isinstance(payload, dict) else None
         if not isinstance(product, dict):
             return None
         self.cache.set(cache_key, product)
@@ -90,6 +97,8 @@ def _cached_products(cached: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _parse_off_product(product: dict[str, Any]) -> NutritionCandidate:
     nutriments = product.get("nutriments") or {}
+    if not isinstance(nutriments, dict):
+        nutriments = {}
 
     def number(*keys: str) -> float | None:
         for key in keys:
@@ -97,15 +106,16 @@ def _parse_off_product(product: dict[str, Any]) -> NutritionCandidate:
             if value is None:
                 continue
             try:
-                return float(value)
+                number = float(value)
+                return number if math.isfinite(number) and number >= 0 else None
             except (TypeError, ValueError):
                 continue
         return None
 
-    calories = number("energy-kcal_100g", "energy-kcal")
-    protein = number("proteins_100g", "proteins")
-    fat = number("fat_100g", "fat")
-    carbs = number("carbohydrates_100g", "carbohydrates")
+    calories = number("energy-kcal_100g")
+    protein = number("proteins_100g")
+    fat = number("fat_100g")
+    carbs = number("carbohydrates_100g")
     values = NutritionValues(
         calories_kcal=calories,
         protein_g=protein,

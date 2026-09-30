@@ -263,3 +263,31 @@ CIQUAL is a strong future local source for foods commonly consumed in France and
 - Composite meals still rely on parser decomposition and portion estimates; retrieval does not solve portion uncertainty.
 - Raw provider payloads are not retained for diagnostics; only bounded candidate metadata is available under the explicit raw diagnostics flag.
 - No large local CIQUAL database is committed.
+
+## Integrity Boundary And Bounded Work
+
+Every selected candidate, including class-prior backfills and observed package
+labels, passes semantic validation immediately before conversion to calculator
+inputs. Unsupported explicit raw/dry preparation clarifies instead of using a
+cooked prior. Ingredient occurrences retain their own quantities; explicit mass
+takes precedence over household-unit conversions.
+
+For plain fried protein/starch/vegetable requests without an existing fried prior,
+the deterministic fallback can state a low-confidence unbreaded pan-frying
+assumption: 95% existing base food plus 5% existing oil. When oil is already a
+separate component it is not added again. This is a disclosed recipe assumption,
+not an authoritative fried-food measurement, and receives a wider source range.
+Unsupported preparation with no accepted match still clarifies.
+
+Recipe/source uncertainty is represented by `source_factor_min/max`; it does not
+change the user's stated gram range. Per-ingredient diagnostics include these
+factors and that occurrence's calculated contribution, not the whole meal total.
+Any meaningful unresolved ingredient prevents delivery of a partial whole-meal
+total. Parser-level mass checks also catch omitted mass before provider lookup.
+
+Default provider clients share an HTTP connection pool. USDA searches produce a
+deduplicated ranked list before at most `USDA_DETAIL_LIMIT=3` detail fetches per
+ingredient. Ingredient workers remain bounded and results remain in input order.
+Calls and backoff obey the cooperative `REQUEST_DEADLINE_SECONDS` budget; this is
+not a hard wall-clock cancellation guarantee. No new sources or early-ranking
+shortcuts have been introduced. See [engineering notes](engineering-integrity.md).

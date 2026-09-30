@@ -84,7 +84,7 @@ def test_partial_estimate_with_unresolved_components_becomes_clarification() -> 
     assert "couldn't find reliable nutrition data" in final.text
 
 
-def test_small_unresolved_component_keeps_low_confidence_partial_estimate() -> None:
+def test_unresolved_component_does_not_ship_incomplete_total() -> None:
     state = _estimate_state(language="en", assumptions=["One component was resolved."])
     state["ingredient_nutrition"] = [
         IngredientNutrition(
@@ -116,11 +116,10 @@ def test_small_unresolved_component_keeps_low_confidence_partial_estimate() -> N
 
     final = synthesize_answer(state)["final_estimate"]
 
-    assert final.is_clarification is False
+    assert final.is_clarification is True
     assert final.confidence == "low"
-    assert final.totals is not None
-    assert "sauce: used a broad class prior" in final.text
-    assert "Partial estimate: reliable data was unavailable for garnish" in final.text
+    assert final.totals is None
+    assert "garnish" in final.text
 
 
 def test_large_unresolved_component_still_clarifies() -> None:

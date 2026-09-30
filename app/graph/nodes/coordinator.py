@@ -93,7 +93,7 @@ def scope_classifier(state: NutritionGraphState) -> NutritionGraphState:
                 "Scope classifier LLM unavailable request_id=%s; using local decision route=%s: %s",
                 state.get("request_id"),
                 local_decision.route,
-                exc,
+                type(exc).__name__,
             )
             return {"scope_decision": local_decision}
 

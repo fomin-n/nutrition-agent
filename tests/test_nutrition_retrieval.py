@@ -202,8 +202,10 @@ def test_retriever_backfills_unresolved_sauce_with_broad_class_prior() -> None:
     assert outcome.failure is None
     assert outcome.item is not None
     assert outcome.item.matched_food_name == "mayonnaise"
-    assert outcome.item.grams_min < 10
-    assert outcome.item.grams_max > 20
+    assert outcome.item.grams_min == 10
+    assert outcome.item.grams_max == 20
+    assert outcome.item.source_factor_min < 1
+    assert outcome.item.source_factor_max > 1
     assert outcome.item.warning is not None
     assert "широкий типовой профиль" in outcome.item.warning
     assert outcome.diagnostic.fallback_path == "component_class_prior_backfill"
@@ -245,8 +247,10 @@ def test_retriever_backfills_fried_fish_with_wide_prior() -> None:
     assert outcome.failure is None
     assert outcome.item is not None
     assert outcome.item.matched_food_name == "fried fish fillet"
-    assert outcome.item.grams_min == 120
-    assert outcome.item.grams_max == 280
+    assert outcome.item.grams_min == 180
+    assert outcome.item.grams_max == 220
+    assert outcome.item.grams_min * outcome.item.source_factor_min == 120
+    assert outcome.item.grams_max * outcome.item.source_factor_max == 280
     assert outcome.item.warning is not None
     assert "broad" in outcome.item.warning
 
@@ -502,8 +506,9 @@ def test_retriever_widens_exact_provider_prepared_dish_row() -> None:
     )
 
     assert outcome.item is not None
-    assert outcome.item.grams_min == 308
-    assert outcome.item.grams_max == 392
+    assert outcome.item.grams_min == outcome.item.grams_max == 350
+    assert outcome.item.grams_min * outcome.item.source_factor_min == 308
+    assert round(outcome.item.grams_max * outcome.item.source_factor_max) == 392
     assert outcome.item.warning is not None
     assert "widened range for prepared dish" in outcome.item.warning
 
@@ -519,8 +524,10 @@ def test_retriever_widens_high_variance_soup_fallback() -> None:
     assert outcome.item is not None
     assert outcome.item.matched_food_name == "chicken soup"
     assert outcome.item.per_100g.calories_kcal == 53
-    assert outcome.item.grams_min == 260
-    assert outcome.item.grams_max == 540
+    assert outcome.item.grams_min == 380
+    assert outcome.item.grams_max == 420
+    assert outcome.item.grams_min * outcome.item.source_factor_min == 260
+    assert outcome.item.grams_max * outcome.item.source_factor_max == 540
     assert outcome.item.warning is not None
     assert "куриный суп" in outcome.item.warning.lower()
     assert "диапазон расширен" in outcome.item.warning

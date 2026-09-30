@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 import threading
 import time
@@ -8,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from app.execution import bounded_timeout
 from app.schemas.nutrition import NutritionCandidate, NutritionValues
 from app.tools.fallback_nutrition import normalize_food_query
 from app.tools.provider_utils import (
@@ -80,6 +82,7 @@ class FatSecretAuthClient:
             try:
                 return client.post(
                     FATSECRET_TOKEN_URL,
+                    timeout=bounded_timeout(self.timeout_seconds),
                     auth=(self.client_id or "", self.client_secret or ""),
                     data={"grant_type": "client_credentials", "scope": "basic"},
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -181,6 +184,7 @@ class FatSecretClient:
             try:
                 return client.post(
                     FATSECRET_REST_URL,
+                    timeout=bounded_timeout(self.timeout_seconds),
                     data=params,
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -394,7 +398,8 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(str(value).replace(",", "."))
+        number = float(str(value).replace(",", "."))
+        return number if math.isfinite(number) and number >= 0 else None
     except (TypeError, ValueError):
         return None
 

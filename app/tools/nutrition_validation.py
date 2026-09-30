@@ -1,3 +1,5 @@
+import re
+
 from app.schemas.nutrition import CandidateValidationResult, NutritionCandidate
 from app.tools.fallback_nutrition import is_plain_water_query, normalize_food_query
 from app.tools.food_query import NormalizedFoodQuery, product_profile_for_canonical
@@ -33,6 +35,22 @@ def validate_candidate(
             if part
         )
     )
+    if query.preparation in {"raw", "dry", "fried"}:
+        preparation_terms = {
+            "raw": r"\b(?:raw|uncooked|сыр\w*)\b",
+            "dry": r"\b(?:dry|uncooked|dehydrated|сух\w*)\b",
+            "fried": r"\b(?:fried|жарен\w*)\b",
+        }
+        naturally_raw = query.preparation == "raw" and not re.search(
+            r"\b(?:cooked|boiled|baked|roasted|fried|grilled)\b", normalize_food_query(query.canonical_query)
+        ) and candidate.source == "fallback" and not re.search(
+            r"\b(?:cooked|boiled|baked|roasted|fried|grilled|dry)\b", candidate_haystack
+        )
+        if not naturally_raw and not re.search(preparation_terms[query.preparation], candidate_haystack):
+            reasons.append("explicit_preparation_not_supported")
+    elif query.preparation in {"cooked", "boiled", "baked", "grilled"}:
+        if re.search(r"\b(?:raw|dry|uncooked)\b", candidate_haystack):
+            reasons.append("explicit_preparation_mismatch")
     if query.restaurant:
         expected_restaurant = normalize_food_query(query.restaurant)
         if expected_restaurant not in candidate_haystack:

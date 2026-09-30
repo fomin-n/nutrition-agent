@@ -9,6 +9,7 @@ from openai import OpenAI
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.execution import bounded_timeout, request_budget_active
 from app.schemas.safety import Confidence, ModerationDecision
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +34,17 @@ class Settings(BaseSettings):
     openai_critic_model: str = "gpt-4.1-mini"
     openai_request_timeout_seconds: float = Field(default=45.0, gt=0)
     openai_max_retries: int = Field(default=1, ge=0, le=5)
+    request_deadline_seconds: float = Field(default=90.0, gt=0, le=300)
+    openai_max_output_tokens: int = Field(default=2048, ge=256, le=8192)
+    openai_scope_max_output_tokens: int = Field(default=512, ge=128, le=2048)
+    openai_critic_max_output_tokens: int = Field(default=512, ge=128, le=2048)
+    openai_vision_max_output_tokens: int = Field(default=2048, ge=256, le=8192)
+    openai_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    openai_text_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    usda_detail_limit: int = Field(default=3, ge=0, le=10)
     critic_max_iterations: int = Field(default=2, ge=0, le=3)
+    qualitative_critic_enabled: bool = True
+    max_image_bytes: int = Field(default=10_000_000, ge=1024, le=20_000_000)
     openai_moderation_enabled: bool = True
 
     bot_access_mode: Literal["invite", "open"] = "open"
@@ -88,17 +99,31 @@ def has_openai_key(settings: Settings | None = None) -> bool:
     return bool(reveal_secret(settings.openai_api_key))
 
 
-def build_chat_model(model_name: str, *, temperature: float = 0.0) -> ChatOpenAI:
+def build_chat_model(model_name: str, *, temperature: float = 0.0, task: str = "text") -> ChatOpenAI:
     settings = get_settings()
     api_key = reveal_secret(settings.openai_api_key)
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required for LLM calls")
+    reasoning = settings.openai_reasoning_effort
+    if task == "text" and settings.openai_text_reasoning_effort is not None:
+        reasoning = settings.openai_text_reasoning_effort
+    if model_name.startswith("gpt-6-luna") and reasoning is None:
+        reasoning = "none"
+    if reasoning is not None and model_name.startswith("gpt-4."):
+        raise ValueError("reasoning effort is unsupported by GPT-4 models")
+    output_limit = {
+        "scope": settings.openai_scope_max_output_tokens,
+        "critic": settings.openai_critic_max_output_tokens,
+        "vision": settings.openai_vision_max_output_tokens,
+    }.get(task, settings.openai_max_output_tokens)
     return ChatOpenAI(
         model=model_name,
-        temperature=temperature,
+        temperature=temperature if reasoning in {None, "none"} else None,
+        reasoning_effort=reasoning,
+        max_tokens=output_limit,
         api_key=api_key,
-        timeout=settings.openai_request_timeout_seconds,
-        max_retries=settings.openai_max_retries,
+        timeout=bounded_timeout(settings.openai_request_timeout_seconds),
+        max_retries=0 if request_budget_active() else settings.openai_max_retries,
     )
 
 
@@ -212,8 +237,8 @@ class ModerationService:
         try:
             client = OpenAI(
                 api_key=api_key,
-                timeout=self.settings.openai_request_timeout_seconds,
-                max_retries=self.settings.openai_max_retries,
+                timeout=bounded_timeout(self.settings.openai_request_timeout_seconds),
+                max_retries=0 if request_budget_active() else self.settings.openai_max_retries,
             )
             response = client.moderations.create(model="omni-moderation-latest", input=text)
             result = response.results[0]
@@ -231,7 +256,7 @@ class ModerationService:
                 "using local fallback",
                 request_id,
                 type(exc).__name__,
-                exc,
+                "redacted",
             )
 
         return local

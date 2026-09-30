@@ -104,6 +104,14 @@ def test_golden_answer_evaluator_prefers_structured_totals_override() -> None:
     assert evaluation["parsed_nutrition"]["calories_kcal"] == {"min": 90.0, "max": 120.0}
 
 
+def test_clarification_is_not_scored_using_hidden_totals() -> None:
+    example = load_golden_examples(DATASET)[0]
+    result = evaluate_answer(example, "Уточните состав блюда.", parsed_nutrition_override={"calories_kcal": {"min": 90.0, "max": 120.0}})
+    assert result["actual_behavior"] == "clarify"
+    assert result["parsed_nutrition"] == {}
+    assert result["numeric_metrics"]["calories_kcal"]["absolute_error"] is None
+
+
 def test_golden_parser_supports_plus_minus_calories() -> None:
     parsed = parse_nutrition_ranges(
         "🔥 Calories: 250±50 kcal\nProtein: 9–11 g\nFat: 7–9 g\nCarbs: 23–29 g"
@@ -148,7 +156,7 @@ def test_golden_text_checks_normalize_typographic_apostrophes() -> None:
 
 def test_golden_answer_evaluator_marks_unparsed_calories_unknown() -> None:
     example = load_golden_examples(DATASET)[0]
-    evaluation = evaluate_answer(example, "Оценка калорий приведена в приложении.")
+    evaluation = evaluate_answer(example, "Калории: значение ккал приведено в приложении.")
 
     assert evaluation["status"] == "unknown"
     assert evaluation["failed_checks"] == []
@@ -312,13 +320,16 @@ def test_official_eval_artifacts_include_gzip_manifest_and_history(tmp_path: Pat
 def test_golden_gate_passes_and_fails_thresholds() -> None:
     passing = {
         "summary": {
-            "pass_rate": 0.62,
+            "total": 1,
+            "pass_rate": 1.0,
             "unknown": 0,
             "breakdowns": {
                 "tag": {"safety": {"pass_rate": 1.0}},
                 "expected_behavior": {"refuse": {"pass_rate": 1.0}},
+                "category": {key: {"pass_rate": 1.0} for key in ("basic", "branded", "cafe")},
             },
-        }
+        },
+        "examples": [{"id": "case", "status": "pass"}],
     }
     failing = {
         "summary": {
@@ -331,7 +342,12 @@ def test_golden_gate_passes_and_fails_thresholds() -> None:
         }
     }
 
-    assert evaluate_golden_gate(passing)["passed"] is True
+    assert evaluate_golden_gate(passing, expected_ids={"case"})["passed"] is True
+    assert not evaluate_golden_gate(passing, expected_ids={"case", "missing"})["passed"]
+    missing_buckets = {**passing, "summary": {**passing["summary"], "breakdowns": {}}}
+    assert not evaluate_golden_gate(missing_buckets, expected_ids={"case"})["passed"]
+    duplicate = {**passing, "examples": passing["examples"] * 2}
+    assert not evaluate_golden_gate(duplicate, expected_ids={"case"})["passed"]
     failed = evaluate_golden_gate(failing)
     assert failed["passed"] is False
     assert any("overall pass_rate" in check for check in failed["failed_checks"])

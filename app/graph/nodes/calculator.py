@@ -16,8 +16,8 @@ def calculate_totals(items: list[IngredientNutrition]) -> NutritionTotals:
 
     for item in items:
         per_100g = item.per_100g
-        min_factor = item.grams_min / 100.0
-        max_factor = item.grams_max / 100.0
+        min_factor = item.grams_min / 100.0 * item.source_factor_min
+        max_factor = item.grams_max / 100.0 * item.source_factor_max
         calories_min += per_100g.calories_kcal * min_factor
         calories_max += per_100g.calories_kcal * max_factor
         protein_min += per_100g.protein_g * min_factor
@@ -76,10 +76,19 @@ def calculate_macros(state: NutritionGraphState) -> NutritionGraphState:
                 )
             }
         )
-    diagnostics = [
-        diagnostic.model_copy(update={"calculated_totals": totals.model_dump()})
-        for diagnostic in state.get("retrieval_diagnostics", [])
-    ]
+    diagnostics = []
+    remaining = list(items)
+    for diagnostic in state.get("retrieval_diagnostics", []):
+        contribution = None
+        for index, item in enumerate(remaining):
+            if (
+                item.candidate
+                and item.candidate.stable_identity == diagnostic.selected_identity
+                and item.ingredient_name == diagnostic.ingredient_name
+            ):
+                contribution = calculate_totals([remaining.pop(index)]).model_dump()
+                break
+        diagnostics.append(diagnostic.model_copy(update={"calculated_totals": contribution}))
     LOGGER.info(
         "Nutrition calculation diagnostic=%s",
         json.dumps(

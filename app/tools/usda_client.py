@@ -1,8 +1,10 @@
 import logging
+import math
 from typing import Any
 
 import httpx
 
+from app.execution import bounded_timeout
 from app.schemas.nutrition import NutritionCandidate, NutritionPer100g, NutritionValues
 from app.tools.cache import JsonFileCache
 from app.tools.fallback_nutrition import normalize_food_query
@@ -110,6 +112,7 @@ class UsdaClient:
             try:
                 return client.post(
                     USDA_SEARCH_URL,
+                    timeout=bounded_timeout(self.timeout_seconds),
                     params={"api_key": self.api_key},
                     json={
                         "query": query,
@@ -127,7 +130,7 @@ class UsdaClient:
         def request() -> httpx.Response:
             client = self.client or httpx.Client(timeout=self.timeout_seconds)
             try:
-                return client.get(f"{USDA_DETAIL_URL}/{fdc_id}", params={"api_key": self.api_key})
+                return client.get(f"{USDA_DETAIL_URL}/{fdc_id}", params={"api_key": self.api_key}, timeout=bounded_timeout(self.timeout_seconds))
             finally:
                 if self.client is None:
                     client.close()
@@ -275,7 +278,8 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(str(value).replace(",", "."))
+        number = float(str(value).replace(",", "."))
+        return number if math.isfinite(number) and number >= 0 else None
     except (TypeError, ValueError):
         return None
 

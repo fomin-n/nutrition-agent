@@ -11,3 +11,9 @@ Rules:
 - Respect explicit total portion weights: component midpoint grams should add up close to the stated total.
 - For bare generic high-variance foods such as chicken, fish, rice, yogurt, salad, burger, pasta, or soup without enough portion/detail, ask a clarification instead of inventing details.
 - Never estimate calories, protein, fat, or carbohydrates. Only return foods, gram ranges, assumptions, confidence, and clarification fields.
+# Integrity boundary
+
+Preserve each explicit occurrence and its own quantity, including repeated foods.
+An explicit weighed mass overrides a spoon/count estimate for the same occurrence.
+Preserve raw, dry, cooked and preparation states; never replace them with another state.
+Do not populate observed_label: only the dedicated packaging-image reader may do that.

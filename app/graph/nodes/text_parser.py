@@ -25,6 +25,7 @@ from app.tools.food_normalization import (
 )
 from app.tools.food_query import product_profiles_in_text
 from app.tools.food_vocabulary import load_food_vocabulary
+from app.tools.meal_validation import clarification_meal, validate_meal
 
 LOCALIZED_FOOD_NAMES: dict[str, dict[str, str]] = {
     language: dict(names)
@@ -63,10 +64,6 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
     product_profiles = product_profiles_in_text(text)
     expected_products = {profile.canonical_product for profile in product_profiles}
     parsed_products = {ingredient.name for ingredient in local_meal.ingredients}
-    if expected_products and parsed_products == expected_products:
-        return {"meal": local_meal}
-    if _uses_conventional_dish_prior(local_meal):
-        return {"meal": local_meal}
     local_failures = _validate_llm_meal(text, local_meal, local_meal=local_meal)
     if local_meal.ingredients and local_failures:
         LOGGER.warning(
@@ -109,6 +106,8 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
                 language=language,
             )
         }
+    if expected_products and parsed_products == expected_products or _uses_conventional_dish_prior(local_meal):
+        return {"meal": local_meal}
     if state.get("use_llm", True) and has_openai_key():
         llm_meal = _try_parse_text_with_llm(
             text,
@@ -133,7 +132,7 @@ def parse_text_meal(state: NutritionGraphState) -> NutritionGraphState:
                 return {"meal": validated_meal}
             if local_meal.ingredients:
                 return {"meal": local_meal}
-            return {"meal": llm_meal}
+            return {"meal": clarification_meal(language)}
         if local_meal.ingredients:
             return {"meal": local_meal}
         return {"meal": llm_meal}
@@ -169,7 +168,7 @@ def _try_parse_text_with_llm(
             request_id,
             branch,
             type(exc).__name__,
-            exc,
+            "redacted",
         )
         return None
 
@@ -271,7 +270,7 @@ def _validate_llm_meal(
         return ["llm_parse_unavailable"]
     if meal.needs_clarification:
         return []
-    failures: list[str] = []
+    failures = validate_meal(meal, text)
     ingredients = meal.ingredients
     if not ingredients:
         return ["no_ingredients"]
@@ -289,7 +288,8 @@ def _validate_llm_meal(
     if product_profiles:
         expected_products = {profile.canonical_product for profile in product_profiles}
         predicted_products = _predicted_canonical_names(ingredients)
-        if len(ingredients) > len(expected_products) or not expected_products.issubset(predicted_products):
+        product_occurrences = [m for m in find_food_mentions(text) if m.product]
+        if len(ingredients) > len(product_occurrences) or not expected_products.issubset(predicted_products):
             failures.append("product_decomposed_or_lost")
         return sorted(set(failures))
 
@@ -311,7 +311,7 @@ def _validate_llm_meal(
     if missing and len(expected_mentions) <= 4:
         failures.append("obvious_food_mentions_missing")
 
-    if _looks_like_composite_text(text) and len(ingredients) == 1:
+    if _looks_like_composite_text(text) and len(ingredients) == 1 and not _uses_conventional_dish_prior(meal):
         failures.append("composite_not_decomposed")
     if not _component_weights_match_total(text, meal):
         failures.append("component_weights_do_not_match_total")
@@ -394,20 +394,7 @@ def _downgrade_meal_for_validation_failures(
     *,
     language: LanguageCode,
 ) -> MealUnderstanding:
-    assumptions = list(meal.assumptions)
-    note = (
-        "Состав блюда распознан не полностью; оценка дана с пониженной уверенностью."
-        if response_language(language) == "ru"
-        else "Dish composition was only partially recognized; confidence was reduced."
-    )
-    if note not in assumptions:
-        assumptions.append(note)
-    return meal.model_copy(
-        update={
-            "assumptions": assumptions,
-            "confidence": "low",
-        }
-    )
+    return clarification_meal(language)
 
 
 def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> MealUnderstanding:
@@ -415,6 +402,8 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
     normalized = normalize_food_query(text)
     unresolved_task = derive_unresolved_task(text)
     guard_mentions = find_food_mentions(normalized)
+    if len(guard_mentions) > 12:
+        return clarification_meal(language)
     has_conventional_dish_mention = any(
         mention.canonical_name in CONVENTIONAL_DISH_PRIORS for mention in guard_mentions
     )
@@ -491,6 +480,20 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
         )
     mentions_to_parse = () if allocations else mentions
     for mention in mentions_to_parse:
+        mention_index = mentions.index(mention)
+        prefix_start = mentions[mention_index - 1].end if mention_index else 0
+        suffix_end = mentions[mention_index + 1].start if mention_index + 1 < len(mentions) else len(normalized)
+        # Prefer a state directly before the food (e.g. dry oats cooked with water).
+        boundary = r"\b(?:and|with|и|с)\b"
+        prefix = re.split(boundary, normalized[prefix_start:mention.start])[-1]
+        suffix = re.split(boundary, normalized[mention.end:suffix_end], maxsplit=1)[0]
+        item_preparation = detect_preparation(prefix)
+        if item_preparation is None:
+            item_preparation = detect_preparation(mention.matched_text)
+        if item_preparation is None:
+            item_preparation = detect_preparation(suffix)
+        if load_food_vocabulary().food_roles.get(mention.canonical_name) in {"fat", "dairy", "fruit"}:
+            item_preparation = None
         portion = estimate_portion(normalized, mention, mentions)
         used_conventional_prior = (
             used_conventional_prior
@@ -505,7 +508,7 @@ def parse_text_locally(text: str, *, language: LanguageCode | None = None) -> Me
                 name=mention.canonical_name,
                 grams_min=portion.grams_min,
                 grams_max=portion.grams_max,
-                preparation=preparation,
+                preparation=item_preparation,
                 notes=portion.note,
                 origin=(
                     "conventional_dish_prior"
@@ -581,6 +584,10 @@ def _retry_opaque_composite_parse(
 
 def _looks_like_composite_text(text: str) -> bool:
     normalized = normalize_food_query(text)
+    normalized = re.sub(
+        r"\b(?:calories and (?:macros|protein)|калори\w* и (?:белк\w*|бжу|макро\w*))\b",
+        "nutrition", normalized,
+    )
     if product_profiles_in_text(normalized):
         return False
     mentions = find_food_mentions(normalized)

@@ -22,7 +22,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
 
       - name: Lint
         run: uv run ruff check .
@@ -44,3 +44,6 @@ jobs:
 
       - name: Golden smoke eval
         run: uv run python -m app.evals.run_golden_eval --split smoke
+
+      - name: Integrity regression holdout
+        run: uv run python -m app.evals.run_golden_eval --dataset evals/datasets/nutrition_agent_integrity_holdout_v1.jsonl

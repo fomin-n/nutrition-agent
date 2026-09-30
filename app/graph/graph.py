@@ -1,10 +1,12 @@
 import logging
-from functools import lru_cache
-from typing import Literal
+from collections.abc import Callable
+from functools import lru_cache, partial
+from typing import Any, Literal
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
+from app.execution import request_budget
 from app.graph.nodes.calculator import calculate_macros
 from app.graph.nodes.coordinator import route, route_from_scope, scope_classifier
 from app.graph.nodes.critic import (
@@ -119,6 +121,7 @@ def process_request(
     session_id: str | int | None = None,
     trace_metadata: dict[str, str | int | float | bool | None] | None = None,
     memory_service: MemoryService | None = None,
+    defer_memory_write: Callable[[Callable[[], None]], None] | None = None,
 ) -> str:
     settings = get_settings()
     configure_phoenix_tracing(settings)
@@ -129,10 +132,14 @@ def process_request(
     conversation_id = session_id if session_id is not None else user_id
     request_id = str(uuid4())
     if user_id is not None and conversation_id is not None:
-        memory_service = memory_service or get_memory_service()
-        memory_context = memory_service.load_context(user_id, conversation_id)
-        prepared_memory_input = memory_service.prepare_input(text, memory_context)
-        effective_text = prepared_memory_input.effective_text
+        try:
+            memory_service = memory_service or get_memory_service()
+            memory_context = memory_service.load_context(user_id, conversation_id)
+            prepared_memory_input = memory_service.prepare_input(text, memory_context)
+            effective_text = prepared_memory_input.effective_text
+        except Exception as exc:
+            LOGGER.warning("Memory load unavailable request_id=%s error_type=%s", request_id, type(exc).__name__)
+            memory_service = None
 
     metadata = _trace_metadata(
         text=effective_text,
@@ -145,7 +152,7 @@ def process_request(
     metadata["request_id"] = request_id
     telegram_update_id = metadata.get("telegram.update.id")
     telegram_message_id = metadata.get("telegram.message.id")
-    with phoenix_trace_context(user_id=user_id, session_id=session_id, metadata=metadata):
+    with request_budget(settings.request_deadline_seconds), phoenix_trace_context(user_id=user_id, session_id=session_id, metadata=metadata):
         try:
             result = graph.invoke(
                 {
@@ -168,7 +175,7 @@ def process_request(
                 and conversation_id is not None
                 and memory_service is not None
             ):
-                memory_service.record_turn(
+                write_memory = partial(_record_memory_safely, memory_service, request_id=request_id,
                     user_id=user_id,
                     conversation_id=conversation_id,
                     user_text=text,
@@ -178,9 +185,14 @@ def process_request(
                     prepared_task=(
                         prepared_memory_input.unresolved_task if prepared_memory_input else None
                     ),
+                    expected_generation=memory_context.generation if memory_context else None,
                 )
+                if defer_memory_write is None:
+                    write_memory()
+                else:
+                    defer_memory_write(write_memory)
         except Exception:
-            LOGGER.exception(
+            LOGGER.error(
                 (
                     "Nutrition request failed request_id=%s source=%s user_id=%s "
                     "session_id=%s telegram_update_id=%s telegram_message_id=%s"
@@ -206,6 +218,13 @@ def process_request(
             telegram_message_id,
         )
     return answer
+
+
+def _record_memory_safely(service: MemoryService, *, request_id: str, **kwargs: Any) -> None:
+    try:
+        service.record_turn(**kwargs)
+    except Exception as exc:
+        LOGGER.warning("Memory write unavailable request_id=%s error_type=%s", request_id, type(exc).__name__)
 
 
 def _record_graph_trace_attributes(diagnostic: object) -> None:
