@@ -116,6 +116,8 @@ sequenceDiagram
 
 The bounded `critic -> synthesize -> critic` loop can only revisit answer formatting; it cannot reparse food or recompute nutrition values. Unactionable qualitative revisions stop without replacing a hard-validated answer. Model names and limits are configured through `.env`; see [.env.example](.env.example) for the canonical list.
 
+Text parsing and scope tiebreaks default to `gpt-6-luna` with reasoning disabled. Vision and qualitative criticism retain `gpt-4.1-mini`, with `gpt-5.4-mini` for vision escalation. The [small release comparison](reports/eval/milestones/model_default_20260930/README.md) records the evidence and its limits; it is not a full benchmark or photo evaluation.
+
 ## Memory
 
 The SQLite memory layer is scoped by `(user_id, conversation_id)` and stores recent messages, a compact older summary, one unresolved nutrition task, and stable nutrition context such as allergies or measurement preferences. This lets follow-ups like “100 g, fried” resolve against an earlier chicken question without mixing users or chats. Users can run `/privacy` to see the short data note and `/forget` to delete saved conversation memory. Previous assistant estimates are retained for history but excluded from parser evidence; contributor-level details live in [AGENTS.md](AGENTS.md).

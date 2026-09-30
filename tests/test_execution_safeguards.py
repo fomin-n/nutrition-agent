@@ -33,15 +33,29 @@ def test_deadline_stops_new_work_and_restores_context(monkeypatch):
     assert execution.bounded_timeout(8) == 8
 
 
-def test_luna_bounded_configuration_does_not_change_shipped_default(monkeypatch):
-    settings = client.Settings(openai_api_key=SecretStr("unit-test-placeholder"))
+def test_luna_default_is_bounded_and_preserves_other_model_roles(monkeypatch):
+    for name in (
+        "OPENAI_TEXT_MODEL", "OPENAI_VISION_MODEL", "OPENAI_VISION_ESCALATION_MODEL",
+        "OPENAI_CRITIC_MODEL", "OPENAI_REASONING_EFFORT", "OPENAI_TEXT_REASONING_EFFORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    settings = client.Settings(_env_file=None, openai_api_key=SecretStr("unit-test-placeholder"))
     captured = {}
     monkeypatch.setattr(client, "get_settings", lambda: settings)
     monkeypatch.setattr(client, "ChatOpenAI", lambda **kwargs: captured.update(kwargs))
     client.build_chat_model("gpt-6-luna", task="critic")
     assert captured["reasoning_effort"] == "none"
     assert captured["max_tokens"] == settings.openai_critic_max_output_tokens
-    assert settings.openai_text_model == "gpt-4.1-mini"
+    assert settings.openai_text_model == "gpt-6-luna"
+    assert settings.openai_vision_model == "gpt-4.1-mini"
+    assert settings.openai_vision_escalation_model == "gpt-5.4-mini"
+    assert settings.openai_critic_model == "gpt-4.1-mini"
+    for task in ("text", "scope"):
+        client.build_chat_model(settings.openai_text_model, task=task)
+        assert captured["reasoning_effort"] == "none"
+        assert captured["temperature"] == 0
+    client.build_chat_model(settings.openai_critic_model, task="critic")
+    assert captured["reasoning_effort"] is None
     settings.openai_reasoning_effort = "low"
     client.build_chat_model("gpt-6-luna")
     assert captured["temperature"] is None

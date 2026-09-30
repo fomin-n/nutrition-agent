@@ -202,3 +202,14 @@ HTTP liveness rather than Telegram-polling readiness, and no dollar-denominated
 spend ceiling. Conserving stated mass does not prove ingredient recall: allocations
 can still miss unknown composition without annotated components or a validated
 model extraction. Optional other-provider/self-hosted experiments remain deferred.
+
+## Subsequent Release Check: 2026-09-30
+
+After authorization to update model defaults and deploy, a live schema canary and
+two paired 13-case comparisons completed without API errors. Text/scope now defaults
+to GPT-6 Luna with reasoning disabled; vision and critic names are unchanged.
+Both models passed 12/13 in both repeats, with the same fish-and-chips clarification.
+This is bounded compatibility/regression evidence, not a full quality benchmark or
+real-image validation. The [committed milestone](../reports/eval/milestones/model_default_20260930/README.md)
+contains commands, hashes, compressed raw results, costs and latency. The earlier
+offline-only measurement statements above describe the pre-promotion work.

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     fatsecret_client_id: SecretStr | None = None
     fatsecret_client_secret: SecretStr | None = None
 
-    openai_text_model: str = "gpt-4.1-mini"
+    openai_text_model: str = "gpt-6-luna"
     openai_vision_model: str = "gpt-4.1-mini"
     openai_vision_escalation_model: str | None = "gpt-5.4-mini"
     openai_vision_escalation_confidence: Confidence = "low"

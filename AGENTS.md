@@ -82,6 +82,8 @@ The current implementation uses OpenAI models for structured classification/pars
 
 The service supports English and Russian user-facing text for meal estimates, clarification questions, and refusals. The local router/parser includes explicit Russian nutrition vocabulary and common food aliases; image-only requests default to English because no text language signal exists.
 
+The shipped text/scope default is `gpt-6-luna`, explicitly using reasoning `none` in the wrapper. Vision and critic defaults remain `gpt-4.1-mini`; vision escalation remains `gpt-5.4-mini`. Do not apply a global reasoning override to these GPT-4.1 roles. To roll text parsing back, set `OPENAI_TEXT_MODEL=gpt-4.1-mini` and unset `OPENAI_TEXT_REASONING_EFFORT` if configured. See the September 2026 model-default milestone for the bounded release comparison.
+
 ## Memory Design
 
 Conversation and user memory live in `app/memory/service.py`.
